@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: active — #7 VT adapter and #11 static UI dispatched in parallel
+Status: active — #15/#16 independently reviewed; rebase round dispatched; awaiting user merge approval
 
 ## Goal
 
@@ -24,11 +24,11 @@ scope.
 
 | Issue | Slice | Blocked by | Status |
 |---|---|---|---|
-| [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | dispatched: `coord/07-vt-adapter`, Codex Terra/high |
+| [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | PR #15 open; rebase round dispatched |
 | [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | ready |
 | [#9](https://github.com/zo-ll/termdeck/issues/9) | One-terminal native engine | #7, #8 | blocked |
 | [#10](https://github.com/zo-ll/termdeck/issues/10) | Native lifecycle | #9 | blocked |
-| [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | dispatched: `coord/11-ui-master-stack`, `claudep` Opus/high |
+| [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | PR #16 open; fixture cleanup verified; rebase round dispatched |
 | [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | #11 | blocked |
 | [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | #11 | blocked |
 | [#14](https://github.com/zo-ll/termdeck/issues/14) | Modal and input modes | #12, #13 | blocked |
@@ -93,6 +93,10 @@ scope.
 - 2026-08-31: Reviewed design PR #6 squash-merged as `12bd431`. Fresh worktrees
   were created from that `main`; #7 and #11 were dispatched in new visible tmux
   windows `codex-vt` and `claude-ui`. Historical worker panes remain intact.
+
+- 2026-08-31 (evening): Previous coordinator (Codex session in `visura:0`, now out of tokens) opened PR #15 and PR #16 and routed the fixture-cleanup correction to Claude. New coordinator session took over from its written handoff.
+- 2026-08-31 (evening): Independent review from source. PR #15 (`coord/07-vt-adapter`): adapter code verified against alacritty 0.26 sources (`point_to_viewport` semantics match); fmt/clippy clean, 23 tests pass in the worktree. PR #16 (`coord/11-ui-master-stack`): fixture cleanup verified (`pub mod fixture` → `#[cfg(test)] mod fixture`, docs updated, `termdeck::ui` exports only `Deck`, release build clean); fmt/clippy clean, 21 tests pass with cleanup applied. Main checks: fmt/clippy clean, 18 tests pass. No blocking findings in either PR.
+- 2026-08-31 (evening): Found both PR branches one docs commit behind `main` (merge-base `12bd431`, main has `ffe0b2a`), so both PR diffs show a stale revert of COORDINATION.md. Neither worker edited it — a rebase onto `main` resolves cleanly. Rebase + push rounds dispatched to the same workers (`codex-vt`, `claude-ui`). Merges remain blocked on explicit user approval.
 
 ## Durable resumption
 
