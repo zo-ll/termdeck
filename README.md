@@ -34,6 +34,19 @@ rustc 1.98.0
 The existing `/usr/bin/rustc` may remain installed. Ensure `$HOME/.cargo/bin`
 appears before `/usr/bin` in `PATH` so the rustup-managed toolchain is selected.
 
+## Configuration commands
+
+The included Horizon example can be validated and listed without starting any
+terminals:
+
+```bash
+cargo run -- check examples/horizon.yaml
+cargo run -- list examples/horizon.yaml
+```
+
+`check` validates workspace roots, required terminal paths, and command argv
+arrays. Missing optional terminal paths are omitted by `list`.
+
 ## Current checks
 
 Once Rust 1.98.0 is installed:
@@ -47,4 +60,3 @@ cargo test --all-targets
 See [docs/PLAN.md](docs/PLAN.md) and
 [docs/design/termdeck/DESIGN.md](docs/design/termdeck/DESIGN.md) before making
 implementation changes.
-

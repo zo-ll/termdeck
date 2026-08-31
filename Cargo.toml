@@ -8,9 +8,10 @@ license = "MIT"
 repository = ""
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
 
 [profile.release]
 lto = "thin"
 codegen-units = 1
 strip = true
-
