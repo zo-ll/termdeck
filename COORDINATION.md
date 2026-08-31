@@ -38,6 +38,10 @@ live-preview-stack interface.
   handoff requirement.
 - 2026-08-31: Claude received a read-only design preflight. Implementation stays
   blocked until issue 1 freezes the shared contract.
+- 2026-08-31: Issue 1 checkpoint `8fc4b96` was independently verified and
+  pushed through branch tip `3e1b78b`. Format, all-feature tests (5 passed),
+  Clippy with warnings denied, `check`, and `list` passed. Issue 1 remains in
+  progress pending the UI contract gaps found by Claude.
 
 ## Durable resumption
 
