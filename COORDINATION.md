@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: active — issue 1 dispatched; issue 3 design preflight running
+Status: active — review corrections dispatched for issues 1 and 3 preflight
 
 ## Goal
 
@@ -11,10 +11,10 @@ live-preview-stack interface.
 
 | # | Title | Blocked by | Branch | Worker | Skills | PR | Status |
 |---|-------|------------|--------|--------|--------|----|--------|
-| 1 | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | — | in progress |
-| 2 | Native PTY and terminal engine | 1 | — | Codex | Rust | — | pending |
-| 3 | Master-stack interface | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | — | blocked; design preflight running |
-| 4 | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
+| [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | — | corrections required |
+| [2](https://github.com/zo-ll/termdeck/issues/2) | Native PTY and terminal engine | 1 | — | Codex | Rust | — | pending |
+| [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | — | blocked; design gaps being drafted |
+| [4](https://github.com/zo-ll/termdeck/issues/4) | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
 
 ## Waves
 
@@ -38,6 +38,16 @@ live-preview-stack interface.
   handoff requirement.
 - 2026-08-31: Claude received a read-only design preflight. Implementation stays
   blocked until issue 1 freezes the shared contract.
+- 2026-08-31: Issue 1 checkpoint `8fc4b96` was independently verified and
+  pushed through branch tip `3e1b78b`. Format, all-feature tests (5 passed),
+  Clippy with warnings denied, `check`, and `list` passed. Issue 1 remains in
+  progress pending the UI contract gaps found by Claude.
+- 2026-08-31: Independent review blocked issue 1 on CLI/plan mismatch, combining
+  character loss, and duplicate exit-code authority. Claude preflight was
+  blocked on three missing reference states and contradictory access wording.
+  Corrections were routed back to the same workers.
+- 2026-08-31: Migrated the four original local workstream issues to GitHub after
+  the private remote became available; issues #1–#4 are now the visible tracker.
 
 ## Durable resumption
 
