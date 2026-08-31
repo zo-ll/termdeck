@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Termdeck — accepted supplement: help, quit and scrollback states</title>
+<style>
+  body { margin: 0; background: #07080a; }
+  .page { background:#07080a; color:#d7dbe0; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace;
+          padding:56px 56px 96px; display:flex; flex-direction:column; gap:56px; align-items:flex-start; }
+  .frame { width:144ch; height:840px; background:#0e1013; font-size:13px; line-height:20px;
+           box-sizing:border-box; border:1px solid #1b1f25; }
+  .inner { position:relative; height:800px; box-sizing:border-box; }
+  .row2  { display:flex; height:800px; gap:2ch; box-sizing:border-box; }
+  .master  { position:relative; width:98ch; box-sizing:border-box; border:1px solid #2dd4a7; padding:8px 2ch 0; }
+  .stack   { width:44ch; display:flex; flex-direction:column; gap:20px; box-sizing:border-box; }
+  .preview { position:relative; height:240px; box-sizing:border-box; border:1px solid #232830; padding:8px 2ch 0; }
+  .tl { position:absolute; top:-10px; left:2ch;  background:#0e1013; padding:0 1ch; white-space:pre; }
+  .tr { position:absolute; top:-10px; right:2ch; background:#0e1013; padding:0 1ch; white-space:pre; }
+  .body    { height:782px; overflow:hidden; color:#98a0aa; }
+  .pbody   { height:224px; overflow:hidden; color:#7a828c; }
+  .gap     { height:20px; }
+  .status  { height:20px; display:flex; align-items:center; justify-content:space-between;
+             padding:0 2ch; white-space:pre; background:#12151a; }
+  .hint    { height:40px; display:flex; align-items:flex-end; white-space:pre; color:#4d555f; padding-left:1ch; }
+  div[style*="white-space:pre"], .l { white-space:pre; }
+  .l { white-space:pre; }
+  /* dimmed underlay: the UI behind a modal overlay */
+  .under .master, .under .preview { border-color:#232830; }
+  .under .tl, .under .tr { color:#3a424c; }
+  .under .body, .under .pbody { color:#3a424c; }
+  .under .body *, .under .pbody *, .under .tl *, .under .tr * { color:#3a424c !important; background:transparent !important; }
+  .under .hint, .under .hint * { color:#2a3038 !important; }
+  /* modal overlay boxes */
+  .ov { position:absolute; box-sizing:border-box; background:#0e1013; border:1px solid #2dd4a7; padding:0 2ch; }
+  .ov .tl { background:#0e1013; }
+  .cap  { display:flex; align-items:baseline; gap:12px; }
+  .capn { font-size:12px; font-weight:700; color:#2dd4a7; letter-spacing:0.14em; }
+  .capt { font-size:14px; color:#d7dbe0; }
+  .capd { font-size:12px; color:#6d7580; }
+  .sect { display:flex; flex-direction:column; gap:14px; }
+  h1 { font-size:22px; font-weight:700; letter-spacing:0.02em; color:#e8ecf1; margin:0; }
+  .sub { font-size:13px; color:#6d7580; }
+  .warn { font-size:12.5px; line-height:22px; color:#d8a657; }
+  .spec { width:144ch; display:flex; flex-direction:column; gap:20px; padding-top:16px; border-top:1px solid #1b1f25; }
+  .cols { display:flex; gap:48px; flex-wrap:wrap; font-size:12.5px; line-height:22px; }
+  .col  { width:38ch; display:flex; flex-direction:column; gap:10px; }
+  .colh { color:#2dd4a7; font-weight:700; letter-spacing:0.1em; font-size:11px; }
+  .col div { color:#8a929c; }
+  .q { color:#d8a657; }
+  code { color:#d7dbe0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <h1>Termdeck — accepted supplement <span style="color:#98c379">(reviewed · binding for these three states)</span></h1>
+    <div class="sub">Three states required by <code>DESIGN.md</code> that the accepted export does not contain ·
+      derived strictly from the accepted palette, geometry, borders and key-hint language ·
+      144×42 cells</div>
+    <div style="font-size:12.5px;line-height:22px;color:#8a929c">Authoritative for the help overlay, the quit
+      confirmation and scrollback mode only. <code>reference/Termdeck&nbsp;TUI.dc.html</code> remains unchanged and
+      authoritative for every other state. The interaction decisions recorded at the bottom of this page were reviewed
+      and accepted by the coordinator; they are mirrored in <code>DESIGN.md</code>. Nothing here has been written to the
+      remote Claude Design canvas.</div>
+  </div>
+
+  <!-- ============ 05 · HELP OVERLAY ============ -->
+  <div class="sect">
+    <div class="cap">
+      <span class="capn">05</span>
+      <span class="capt">Help overlay — <span style="color:#8a929c">ctrl+g ?</span></span>
+      <span class="capd">modal over a dimmed master &amp; stack; overlay takes the accent border, master gives it up</span>
+    </div>
+
+    <div class="frame">
+      <div class="inner">
+        <div class="row2 under">
+          <div class="master">
+            <div class="tl"><span>&gt; 1 frontend</span><span>  ·  </span><span>~/idp/frontend</span><span>  ·  </span><span>●</span><span> running</span><span>  ·  </span><span>pnpm dev</span></div>
+            <div class="tr">[####··] MASTER</div>
+            <div class="body">
+<div class="l">$ pnpm dev</div>
+<div class="l"> </div>
+<div class="l">  VITE v5.4.8  ready in 412 ms</div>
+<div class="l"> </div>
+<div class="l">  ➜  Local:   http://localhost:5173/</div>
+<div class="l">  ➜  Network: http://192.168.1.24:5173/</div>
+<div class="l"> </div>
+<div class="l">12:05:33 [vite] hmr update /src/components/StatusBar.tsx</div>
+<div class="l">12:05:58 [vite] hmr update /src/routes/Dashboard.tsx</div>
+<div class="l">12:06:04 [vite] page reload src/hooks/useTerminals.ts</div>
+<div class="l">12:06:11 [vite] hmr update /src/routes/Dashboard.tsx</div>
+<div class="l">12:06:34 ✓ type check passed · 0 errors · 1.8s</div>
+<div class="l">12:06:52 [vite] hmr update /src/styles/tokens.css</div>
+<div class="l">12:07:03 [vite] hmr update /src/routes/Dashboard.tsx</div>
+</div>
+          </div>
+          <div class="stack">
+            <div class="preview">
+              <div class="tl"><span>2 backend</span><span> · </span><span>…/backend</span><span> · </span><span>●</span></div>
+              <div class="tr">[##····]</div>
+              <div class="pbody">
+<div class="l">  INFO  Server running on</div>
+<div class="l">        [http://127.0.0.1:8000]</div>
+<div class="l"> </div>
+<div class="l">12:05:58 /api/terminals ······ 11.4ms</div>
+<div class="l">12:06:01 /api/health ········· 3.0ms</div>
+<div class="l">12:06:09 /api/terminals/2/log  8.7ms</div>
+</div>
+            </div>
+            <div class="preview">
+              <div class="tl"><span>3 app</span><span> · </span><span>…/app</span><span> · </span><span>✕ exit 1</span></div>
+              <div class="tr">2m ago</div>
+              <div class="pbody">
+<div class="l">✖ Metro bundler failed to start</div>
+<div class="l">  Error: EADDRINUSE :::8081</div>
+<div class="l"> </div>
+<div class="l">──────────────────────────────────────</div>
+<div class="l">exited · code 1 · 12:04:02 · r restart</div>
+</div>
+            </div>
+            <div class="preview">
+              <div class="tl"><span>4 worker</span><span> · </span><span>…/backend</span><span> · </span><span>○</span></div>
+              <div class="tr">idle 6m</div>
+              <div class="pbody">
+<div class="l">  INFO  Processing jobs from the</div>
+<div class="l">        [default] queue.</div>
+<div class="l"> </div>
+<div class="l">12:00:21 SendDigest ······· DONE</div>
+<div class="l"> </div>
+<div class="l">no output for 6m</div>
+</div>
+            </div>
+            <div class="hint">ctrl+g <span>1-4</span> promote · <span>j/k</span> cycle</div>
+          </div>
+        </div>
+
+        <!-- help overlay: 60 cols × 21 rows, centred (col 42, row 10) -->
+        <div class="ov" style="left:42ch;top:200px;width:60ch;height:420px">
+          <div class="tl" style="color:#2dd4a7">help</div>
+          <div class="tr" style="color:#4d555f">^g ?</div>
+          <div style="height:398px;overflow:hidden">
+<div class="l"> </div>
+<div class="l"><span style="color:#2dd4a7;font-weight:700">NAVIGATE</span></div>
+<div class="l"><span style="color:#8a929c">^g j  ^g k       </span><span style="color:#6d7580">promote next / previous</span></div>
+<div class="l"><span style="color:#8a929c">^g ↓  ^g ↑       </span><span style="color:#6d7580">same, with arrow keys</span></div>
+<div class="l"><span style="color:#8a929c">^g 1 … ^g 4      </span><span style="color:#6d7580">promote by configured position</span></div>
+<div class="l"> </div>
+<div class="l"><span style="color:#2dd4a7;font-weight:700">VIEW</span></div>
+<div class="l"><span style="color:#8a929c">^g z             </span><span style="color:#6d7580">toggle zoom</span></div>
+<div class="l"><span style="color:#8a929c">^g [             </span><span style="color:#6d7580">enter scrollback mode</span></div>
+<div class="l"> </div>
+<div class="l"><span style="color:#2dd4a7;font-weight:700">TERMINAL</span></div>
+<div class="l"><span style="color:#8a929c">^g r             </span><span style="color:#6d7580">respawn active terminal</span></div>
+<div class="l"><span style="color:#8a929c">^g ^g            </span><span style="color:#6d7580">send a literal ^g</span></div>
+<div class="l"> </div>
+<div class="l"><span style="color:#2dd4a7;font-weight:700">SESSION</span></div>
+<div class="l"><span style="color:#8a929c">^g ?             </span><span style="color:#6d7580">this help</span></div>
+<div class="l"><span style="color:#8a929c">^g q             </span><span style="color:#6d7580">quit termdeck</span></div>
+<div class="l"> </div>
+<div class="l"><span style="color:#8a929c">esc  </span><span style="color:#4d555f">close</span></div>
+</div>
+        </div>
+      </div>
+
+      <div class="gap"></div>
+      <div class="status"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  4 terminals   </span><span style="color:#8a929c">&gt; 1 frontend</span><span style="color:#4d555f">  ·  3 stacked  ·  </span><span style="color:#e06c6c">1 exited</span></span><span style="color:#4d555f"><span style="color:#2dd4a7">^g ?</span><span style="color:#8a929c"> help open</span>  ·  <span style="color:#8a929c">esc</span> close</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 06 · QUIT CONFIRMATION ============ -->
+  <div class="sect">
+    <div class="cap">
+      <span class="capn">06</span>
+      <span class="capt">Quit confirmation — <span style="color:#8a929c">ctrl+g q</span></span>
+      <span class="capd">same modal treatment, smaller box; consequence line carries the warning hue</span>
+    </div>
+
+    <div class="frame">
+      <div class="inner">
+        <div class="row2 under">
+          <div class="master">
+            <div class="tl"><span>&gt; 1 frontend</span><span>  ·  </span><span>~/idp/frontend</span><span>  ·  </span><span>●</span><span> running</span><span>  ·  </span><span>pnpm dev</span></div>
+            <div class="tr">[####··] MASTER</div>
+            <div class="body">
+<div class="l">$ pnpm dev</div>
+<div class="l"> </div>
+<div class="l">  VITE v5.4.8  ready in 412 ms</div>
+<div class="l"> </div>
+<div class="l">  ➜  Local:   http://localhost:5173/</div>
+<div class="l">  ➜  Network: http://192.168.1.24:5173/</div>
+<div class="l"> </div>
+<div class="l">12:05:33 [vite] hmr update /src/components/StatusBar.tsx</div>
+<div class="l">12:05:58 [vite] hmr update /src/routes/Dashboard.tsx</div>
+<div class="l">12:06:04 [vite] page reload src/hooks/useTerminals.ts</div>
+<div class="l">12:06:11 [vite] hmr update /src/routes/Dashboard.tsx</div>
+<div class="l">12:06:34 ✓ type check passed · 0 errors · 1.8s</div>
+<div class="l">12:06:52 [vite] hmr update /src/styles/tokens.css</div>
+<div class="l">12:07:03 [vite] hmr update /src/routes/Dashboard.tsx</div>
+</div>
+          </div>
+          <div class="stack">
+            <div class="preview">
+              <div class="tl"><span>2 backend</span><span> · </span><span>…/backend</span><span> · </span><span>●</span></div>
+              <div class="tr">[##····]</div>
+              <div class="pbody">
+<div class="l">  INFO  Server running on</div>
+<div class="l">        [http://127.0.0.1:8000]</div>
+<div class="l"> </div>
+<div class="l">12:05:58 /api/terminals ······ 11.4ms</div>
+<div class="l">12:06:01 /api/health ········· 3.0ms</div>
+<div class="l">12:06:09 /api/terminals/2/log  8.7ms</div>
+</div>
+            </div>
+            <div class="preview">
+              <div class="tl"><span>3 app</span><span> · </span><span>…/app</span><span> · </span><span>✕ exit 1</span></div>
+              <div class="tr">2m ago</div>
+              <div class="pbody">
+<div class="l">✖ Metro bundler failed to start</div>
+<div class="l">  Error: EADDRINUSE :::8081</div>
+<div class="l"> </div>
+<div class="l">──────────────────────────────────────</div>
+<div class="l">exited · code 1 · 12:04:02 · r restart</div>
+</div>
+            </div>
+            <div class="preview">
+              <div class="tl"><span>4 worker</span><span> · </span><span>…/backend</span><span> · </span><span>○</span></div>
+              <div class="tr">idle 6m</div>
+              <div class="pbody">
+<div class="l">  INFO  Processing jobs from the</div>
+<div class="l">        [default] queue.</div>
+<div class="l"> </div>
+<div class="l">12:00:21 SendDigest ······· DONE</div>
+<div class="l"> </div>
+<div class="l">no output for 6m</div>
+</div>
+            </div>
+            <div class="hint">ctrl+g <span>1-4</span> promote · <span>j/k</span> cycle</div>
+          </div>
+        </div>
+
+        <!-- quit confirmation: 52 cols × 10 rows, centred (col 46, row 16) -->
+        <div class="ov" style="left:46ch;top:320px;width:52ch;height:200px">
+          <div class="tl" style="color:#2dd4a7">quit</div>
+          <div style="height:178px;overflow:hidden">
+<div class="l"> </div>
+<div class="l"><span style="color:#d7dbe0">quit termdeck?</span></div>
+<div class="l"> </div>
+<div class="l"><span style="color:#8a929c">4 terminals will be closed.</span></div>
+<div class="l"><span style="color:#d8a657">SIGTERM, then SIGKILL after 2s.</span></div>
+<div class="l"> </div>
+<div class="l"><span style="color:#8a929c">y  </span><span style="color:#6d7580">quit</span><span style="color:#4d555f">          </span><span style="color:#8a929c">n  </span><span style="color:#6d7580">cancel</span><span style="color:#4d555f">          </span><span style="color:#8a929c">esc  </span><span style="color:#6d7580">cancel</span></div>
+</div>
+        </div>
+      </div>
+
+      <div class="gap"></div>
+      <div class="status"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  4 terminals   </span><span style="color:#8a929c">&gt; 1 frontend</span><span style="color:#4d555f">  ·  3 stacked  ·  </span><span style="color:#e06c6c">1 exited</span></span><span style="color:#4d555f"><span style="color:#d8a657">confirm quit</span>  ·  <span style="color:#8a929c">y</span> quit  <span style="color:#8a929c">n</span> cancel</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 07 · SCROLLBACK MODE ============ -->
+  <div class="sect">
+    <div class="cap">
+      <span class="capn">07</span>
+      <span class="capt">Scrollback mode — <span style="color:#8a929c">ctrl+g [</span></span>
+      <span class="capd">a mode of the master pane, not an overlay; previews stay live; no cursor is drawn</span>
+    </div>
+
+    <div class="frame">
+      <div class="inner">
+        <div class="row2">
+          <div class="master">
+            <div class="tl" style="font-weight:500"><span style="color:#2dd4a7">&gt; 1 frontend</span><span style="color:#3a424c">  ·  </span><span style="color:#8a929c">~/idp/frontend</span><span style="color:#3a424c">  ·  </span><span style="color:#2dd4a7">●</span><span style="color:#98c379"> running</span><span style="color:#3a424c">  ·  </span><span style="color:#6d7580">pnpm dev</span></div>
+            <div class="tr"><span style="color:#0e1013;background:#d8a657;font-weight:700"> SCROLL </span></div>
+            <div class="body">
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">11:58:02</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/WorkspaceList.tsx</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">11:58:14</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/styles/tokens.css</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa">  <span style="color:#c898e0;font-weight:700">VITE v5.4.8</span>  <span style="color:#98c379">ready in 268 ms</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">11:58:41</span> <span style="color:#d8a657">warning</span>  <span style="color:#8a929c">src/hooks/useTerminals.ts:52:6</span></div>
+<div class="l" style="color:#98a0aa">         <span style="color:#6d7580">React Hook useEffect has a missing dependency: 'refresh'.</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">11:59:03</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/main.tsx</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">11:59:18</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PaneTitle.tsx</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">11:59:44</span> <span style="color:#e06c6c">error</span> <span style="color:#8a929c">src/components/StatusBar.tsx:28:19</span></div>
+<div class="l" style="color:#98a0aa">  <span style="color:#e06c6c">TS2554</span><span style="color:#6d7580">: Expected 2 arguments, but got 1.</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa">    <span style="color:#4d555f">26 │</span> <span style="color:#6d7580">const label = formatHint(</span></div>
+<div class="l" style="color:#98a0aa">    <span style="color:#4d555f">27 │</span> <span style="color:#6d7580">  bindings.promote,</span></div>
+<div class="l" style="color:#98a0aa">    <span style="color:#4d555f">28 │</span> <span style="color:#6d7580">)</span></div>
+<div class="l" style="color:#98a0aa">    <span style="color:#4d555f">   │</span>  <span style="color:#e06c6c">^</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:00:07</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/StatusBar.tsx</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:00:07</span> <span style="color:#98c379">✓</span> <span style="color:#6d7580">type check passed · 0 errors · 2.1s</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:00:52</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashboard.tsx</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:01:19</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/hooks/useTerminals.ts</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:01:19</span> <span style="color:#c898e0">[vite]</span> hmr invalidate <span style="color:#8a929c">/src/hooks/useTerminals.ts</span> <span style="color:#6d7580">— could not Fast Refresh</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:01:20</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/hooks/useTerminals.ts</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa">  <span style="color:#c898e0;font-weight:700">VITE v5.4.8</span>  <span style="color:#98c379">ready in 301 ms</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Local:</span>   <span style="color:#7aa2f7">http://localhost:5173/</span></div>
+<div class="l" style="color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Network:</span> <span style="color:#7aa2f7">http://192.168.1.24:5173/</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:02:33</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PreviewStack.tsx</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:03:11</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/styles/tokens.css</span></div>
+<div class="l" style="color:#98a0aa"><span style="color:#4d555f">12:03:58</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/main.tsx</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#3a424c">────────────────────────────────────────────────────────────────────────────────────────────</div>
+<div class="l"><span style="color:#8a929c">j/k ↑↓</span><span style="color:#4d555f"> line · </span><span style="color:#8a929c">pgup/pgdn</span><span style="color:#4d555f"> page · </span><span style="color:#8a929c">g/G</span><span style="color:#4d555f"> ends · </span><span style="color:#8a929c">esc</span><span style="color:#4d555f"> live</span></div>
+</div>
+          </div>
+          <div class="stack">
+            <div class="preview">
+              <div class="tl"><span style="color:#8a929c">2 backend</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/backend</span><span style="color:#3a424c"> · </span><span style="color:#98c379">●</span></div>
+              <div class="tr" style="color:#4d555f">[##····]</div>
+              <div class="pbody">
+<div class="l" style="color:#7a828c">  <span style="color:#98c379">INFO</span>  Server running on</div>
+<div class="l" style="color:#7a828c">        <span style="color:#6d7580">[http://127.0.0.1:8000]</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#7a828c"><span style="color:#4d555f">12:05:52</span> /api/workspaces ····· <span style="color:#7a828c">42.1ms</span></div>
+<div class="l" style="color:#7a828c"><span style="color:#4d555f">12:05:58</span> /api/terminals ······ <span style="color:#7a828c">11.4ms</span></div>
+<div class="l" style="color:#7a828c"><span style="color:#4d555f">12:06:01</span> /api/health ········· <span style="color:#7a828c"> 3.0ms</span></div>
+<div class="l" style="color:#7a828c"><span style="color:#4d555f">12:06:09</span> /api/terminals/2/log <span style="color:#7a828c"> 8.7ms</span></div>
+</div>
+            </div>
+            <div class="preview">
+              <div class="tl"><span style="color:#8a929c">3 app</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/app</span><span style="color:#3a424c"> · </span><span style="color:#e06c6c">✕ exit 1</span></div>
+              <div class="tr" style="color:#4d555f">2m ago</div>
+              <div class="pbody" style="color:#6d7580">
+<div class="l" style="color:#6d7580"><span style="color:#4d555f">&gt; idp-app@0.2.1 dev</span></div>
+<div class="l" style="color:#6d7580"><span style="color:#4d555f">&gt; expo start --dev-client</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#6d7580"><span style="color:#e06c6c">✖</span> Metro bundler failed to start</div>
+<div class="l" style="color:#6d7580">  <span style="color:#e06c6c">Error: EADDRINUSE</span> :::8081</div>
+<div class="l"> </div>
+<div class="l" style="color:#6d7580"><span style="color:#e06c6c">──────────────────────────────────────</span></div>
+<div class="l" style="color:#6d7580"><span style="color:#e06c6c">exited · code 1</span><span style="color:#4d555f"> · 12:04:02 · </span><span style="color:#8a929c">r restart</span></div>
+</div>
+            </div>
+            <div class="preview">
+              <div class="tl"><span style="color:#8a929c">4 worker</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/backend</span><span style="color:#3a424c"> · </span><span style="color:#4d555f">○</span></div>
+              <div class="tr" style="color:#4d555f">idle 6m</div>
+              <div class="pbody" style="color:#6d7580">
+<div class="l" style="color:#6d7580">  <span style="color:#7a828c">INFO</span>  Processing jobs from the</div>
+<div class="l" style="color:#6d7580">        [default] queue.</div>
+<div class="l"> </div>
+<div class="l" style="color:#6d7580"><span style="color:#4d555f">12:00:14</span> SyncRepos ········ <span style="color:#7a828c">DONE</span></div>
+<div class="l" style="color:#6d7580"><span style="color:#4d555f">12:00:19</span> IndexWorkspace ··· <span style="color:#7a828c">DONE</span></div>
+<div class="l" style="color:#6d7580"><span style="color:#4d555f">12:00:21</span> SendDigest ······· <span style="color:#7a828c">DONE</span></div>
+<div class="l"> </div>
+<div class="l" style="color:#6d7580"><span style="color:#4d555f">no output for 6m</span></div>
+</div>
+            </div>
+            <div class="hint"><span style="color:#d8a657">scrollback</span> · <span style="color:#8a929c">esc</span> returns to live</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gap"></div>
+      <div class="status"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  4 terminals   </span><span style="color:#8a929c">&gt; 1 frontend</span><span style="color:#4d555f">  ·  </span><span style="color:#d8a657">SCROLLBACK</span><span style="color:#4d555f">  ·  line 2217/2431</span></span><span style="color:#4d555f"><span style="color:#8a929c">j/k ↑↓</span> line  <span style="color:#8a929c">pgup/pgdn</span> page  <span style="color:#8a929c">g/G</span> ends  <span style="color:#8a929c">esc</span> live  <span style="color:#8a929c">^g ?</span> help</span></div>
+    </div>
+  </div>
+
+  <!-- ============ DERIVATION & REVIEWED DECISIONS ============ -->
+  <div class="spec">
+    <div style="font-size:16px;font-weight:700;color:#e8ecf1">Derivation &amp; reviewed decisions</div>
+    <div class="cols">
+
+      <div class="col">
+        <div class="colh">TAKEN FROM THE ACCEPTED EXPORT</div>
+        <div>Palette: accepted tokens only, no new colours. Accent <code>#2dd4a7</code>, idle border
+          <code>#232830</code>, warning <code>#d8a657</code>, hints <code>#4d555f</code>, keys
+          <code>#8a929c</code>, labels <code>#6d7580</code>, backgrounds <code>#0e1013</code> /
+          <code>#12151a</code>.</div>
+        <div>Geometry: 144×42, master 98 / gutter 2 / stack 44, content rows 40, blank row 41,
+          status row 42, previews 12 rows with 1 blank between, 2-col pane padding.</div>
+        <div>Chrome: titles inside the top border 2 cols from the left, right-aligned slot for the
+          mode tag, reverse-video tag styled exactly like the accepted <code>ZOOM</code> tag,
+          single-weight box drawing, <code>^g</code> key notation from the status bar.</div>
+        <div>The scrollback footer reuses the accepted exited-pane pattern verbatim — a rule line
+          followed by a status line, here carrying the navigation keys alone.</div>
+      </div>
+
+      <div class="col">
+        <div class="colh">05 · HELP OVERLAY</div>
+        <div>60 cols × 21 rows, centred at col 42 / row 10. The primary bindings and their wording
+          come from <code>PLAN.md</code>. The <code>esc</code> close is not in the plan; it follows the
+          reviewed modal behaviour, matching <code>Escape</code> cancelling the quit confirmation and
+          leaving scrollback.</div>
+        <div><span style="color:#98c379">Q1 accepted.</span> Focus stays singular: the overlay takes
+          the accent border and the master gives its own up.</div>
+        <div><span style="color:#98c379">Q2 accepted.</span> The underlay recedes by foreground-only
+          dimming to <code>#3a424c</code>. The two accepted background values are never supplemented
+          with a scrim.</div>
+        <div><span style="color:#98c379">Q3 accepted.</span> Letter spacing in the export is
+          illustrative web chrome; the TUI does not emulate it. Section headings are accent and
+          uppercase only.</div>
+      </div>
+
+      <div class="col">
+        <div class="colh">06 · QUIT CONFIRMATION</div>
+        <div>52 cols × 10 rows, centred at col 46 / row 16. The consequence text is the lifecycle
+          contract from <code>PLAN.md</code>: SIGTERM, two seconds, then SIGKILL.</div>
+        <div><span style="color:#98c379">Q4 accepted.</span> The accent border is kept and the warning
+          hue is confined to the consequence line.</div>
+        <div><span style="color:#98c379">Q5 accepted.</span> <code>y</code> confirms;
+          <code>n</code> and <code>Escape</code> cancel.</div>
+        <div><span style="color:#98c379">Q6 accepted.</span> The box states the number of terminals to
+          be closed, not their names.</div>
+      </div>
+
+      <div class="col">
+        <div class="colh">07 · SCROLLBACK MODE</div>
+        <div>A mode of the master pane, not an overlay: previews stay live and the stack is not
+          hidden, because <code>PLAN.md</code> ties hiding the stack to zoom alone. No block cursor is
+          drawn — the viewport is detached from the live tail.</div>
+        <div><span style="color:#98c379">Q7 accepted.</span> <code>Escape</code> exits scrollback and
+          returns to live output.</div>
+        <div><span style="color:#98c379">Q8 accepted.</span> While scrollback is active Termdeck
+          captures <code>j/k</code>, the arrow keys, <code>PageUp</code>, <code>PageDown</code>,
+          <code>g</code>, <code>G</code> and <code>Escape</code>, and must not forward other input to
+          the hidden live shell. This is an explicit exception to ordinary input forwarding while a
+          modal or mode is active.</div>
+        <div><span style="color:#98c379">Q9 accepted.</span> The mode tag keeps the warning colour, so
+          it does not read as ordinary accent focus.</div>
+        <div><span style="color:#98c379">Q10 accepted.</span> Scroll position is stated once. The pane
+          title carries the mode tag alone, the pane footer carries the navigation keys alone, and the
+          absolute position appears in the status line.</div>
+      </div>
+
+      <div class="col">
+        <div class="colh">FIDELITY LIMITS OF THIS FILE</div>
+        <div>Self-contained static HTML with no external resources: no fonts, scripts, styles or
+          images are fetched. It deliberately does not use the <code>x-dc</code> canvas format,
+          because the export's <code>support.js</code> fetches React from <code>unpkg.com</code> at
+          load time and so will not render offline. This file opens from <code>file://</code> with no
+          network.</div>
+        <div>Type is the platform monospace stack, so glyph metrics differ slightly from the export's
+          JetBrains Mono. Cell counts, not the rendering, are the spec.</div>
+        <div>Overlay boxes are positioned in <code>ch</code> and 20px row units so the cell grid is
+          exact, but browser sub-pixel rounding may shift a border by a pixel.</div>
+        <div>Body text is illustrative filler in the style of the accepted screens. Only the chrome —
+          borders, titles, tags, footers, status bar, key hints — is specified here.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
