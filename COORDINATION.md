@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: active — review corrections dispatched for issues 1 and 3 preflight
+Status: active — issue 1 review passed; issue 3 design corrections in review
 
 ## Goal
 
@@ -11,7 +11,7 @@ live-preview-stack interface.
 
 | # | Title | Blocked by | Branch | Worker | Skills | PR | Status |
 |---|-------|------------|--------|--------|--------|----|--------|
-| [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | — | corrections required |
+| [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | — | reviewed; awaiting merge approval |
 | [2](https://github.com/zo-ll/termdeck/issues/2) | Native PTY and terminal engine | 1 | — | Codex | Rust | — | pending |
 | [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | — | blocked; design gaps being drafted |
 | [4](https://github.com/zo-ll/termdeck/issues/4) | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
@@ -48,6 +48,9 @@ live-preview-stack interface.
   Corrections were routed back to the same workers.
 - 2026-08-31: Migrated the four original local workstream issues to GitHub after
   the private remote became available; issues #1–#4 are now the visible tracker.
+- 2026-08-31: Issue 1 corrections committed as `52fa845` and pushed through
+  branch tip `8d0b12a`. Independent format, Clippy, 17-test, `check`, and `list`
+  verification passed with no remaining blocking findings.
 
 ## Durable resumption
 
