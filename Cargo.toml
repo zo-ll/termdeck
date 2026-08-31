@@ -1,0 +1,16 @@
+[package]
+name = "termdeck"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+description = "A configurable terminal workspace with a master-and-preview-stack interface"
+license = "MIT"
+repository = ""
+
+[dependencies]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+

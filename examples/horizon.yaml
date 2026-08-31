@@ -1,0 +1,19 @@
+version: 1
+
+defaults:
+  command: ["/bin/bash", "-l"]
+  scrollback: 10000
+  master_ratio: 0.70
+
+workspaces:
+  idp:
+    root: /home/andrea/helper-horizonweb/projects
+    terminals:
+      - name: frontend
+        cwd: frontends/idp
+      - name: backend
+        cwd: backends/idp
+      - name: app
+        cwd: apps/idp
+        optional: true
+
