@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #07080a; }
+  a { color: #2dd4a7; }
+  a:hover { color: #7fefd6; }
+</style>
+</helmet>
+
+<div style="background:#07080a;color:#d7dbe0;font-family:'JetBrains Mono',ui-monospace,monospace;padding:56px 56px 96px;display:flex;flex-direction:column;gap:56px;align-items:flex-start">
+
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="font-size:22px;font-weight:700;letter-spacing:0.02em;color:#e8ecf1">Termdeck — master &amp; stack terminal workspace</div>
+    <div style="font-size:13px;color:#6d7580">Workspace <span style="color:#2dd4a7">idp</span> · 144×42 cells · three states + narrow degradation + spec</div>
+  </div>
+
+  <!-- ============ SCREEN 1 ============ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:12px">
+      <span style="font-size:12px;font-weight:700;color:#2dd4a7;letter-spacing:0.14em">01</span>
+      <span style="font-size:14px;color:#d7dbe0">Master &amp; stack — frontend active</span>
+      <span style="font-size:12px;color:#6d7580">backend, app, worker previewed live at 30% width</span>
+    </div>
+
+    <div style="width:144ch;height:840px;background:#0e1013;font-size:13px;line-height:20px;padding:0;box-sizing:border-box;border:1px solid #1b1f25">
+      <div style="display:flex;height:800px;gap:2ch;box-sizing:border-box">
+
+        <!-- MASTER: frontend -->
+        <div style="position:relative;width:98ch;box-sizing:border-box;border:1px solid #2dd4a7;padding:8px 2ch 0">
+          <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre;font-weight:500"><span style="color:#2dd4a7">> 1 frontend</span><span style="color:#3a424c">  ·  </span><span style="color:#8a929c">~/idp/frontend</span><span style="color:#3a424c">  ·  </span><span style="color:#2dd4a7">●</span><span style="color:#98c379"> running</span><span style="color:#3a424c">  ·  </span><span style="color:#6d7580">pnpm dev</span></div>
+          <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;white-space:pre;color:#2dd4a7">[####··] MASTER</div>
+          <div style="color:#98a0aa;height:782px;overflow:hidden">
+<div style="white-space:pre;color:#98a0aa">$ <span style="color:#d7dbe0">pnpm dev</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#6d7580">> idp-frontend@0.4.2 dev</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#6d7580">> vite --host</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#c898e0;font-weight:700">VITE v5.4.8</span>  <span style="color:#98c379">ready in 412 ms</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Local:</span>   <span style="color:#7aa2f7">http://localhost:5173/</span></div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Network:</span> <span style="color:#7aa2f7">http://192.168.1.24:5173/</span></div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#3a424c">➜</span>  <span style="color:#6d7580">press h + enter to show help</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:03:58</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/main.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:04:12</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/WorkspaceList.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:04:12</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/styles/tokens.css</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:04:29</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/WorkspaceList.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:04:41</span> <span style="color:#c898e0">[vite]</span> optimized dependencies changed, reloading</div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#c898e0;font-weight:700">VITE v5.4.8</span>  <span style="color:#98c379">ready in 268 ms</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:02</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PaneTitle.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:09</span> <span style="color:#d8a657">warning</span>  <span style="color:#8a929c">src/components/PaneTitle.tsx:17:8</span></div>
+<div style="white-space:pre;color:#98a0aa">         <span style="color:#6d7580">'status' is declared but its value is never read.</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:17</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PaneTitle.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:33</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/StatusBar.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:58</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashboard.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:04</span> <span style="color:#c898e0">[vite]</span> hmr invalidate <span style="color:#8a929c">/src/hooks/useTerminals.ts</span> <span style="color:#6d7580">— could not Fast Refresh</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:04</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/hooks/useTerminals.ts</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:11</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashboard.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="background:#2dd4a7;color:#0e1013"> </span></div>
+</div>
+        </div>
+
+        <!-- STACK -->
+        <div style="width:44ch;display:flex;flex-direction:column;gap:20px;box-sizing:border-box">
+
+          <div style="position:relative;height:240px;box-sizing:border-box;border:1px solid #232830;padding:8px 2ch 0">
+            <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#8a929c">2 backend</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/backend</span><span style="color:#3a424c"> · </span><span style="color:#98c379">●</span></div>
+            <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;color:#4d555f;white-space:pre">[##····]</div>
+            <div style="color:#7a828c;height:224px;overflow:hidden">
+<div style="white-space:pre;color:#7a828c">  <span style="color:#98c379">INFO</span>  Server running on</div>
+<div style="white-space:pre;color:#7a828c">        <span style="color:#6d7580">[http://127.0.0.1:8000]</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:05:52</span> /api/workspaces ····· <span style="color:#7a828c">42.1ms</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:05:53</span> /api/workspaces/idp/… <span style="color:#d8a657">118ms</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:05:58</span> /api/terminals ······ <span style="color:#7a828c">11.4ms</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:06:01</span> /api/health ········· <span style="color:#7a828c"> 3.0ms</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:06:07</span> <span style="color:#c898e0">queue</span> ProcessLog ··· <span style="color:#98c379">done</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:06:09</span> /api/terminals/2/log <span style="color:#7a828c"> 8.7ms</span></div>
+</div>
+          </div>
+
+          <div style="position:relative;height:240px;box-sizing:border-box;border:1px solid #232830;padding:8px 2ch 0">
+            <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#8a929c">3 app</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/app</span><span style="color:#3a424c"> · </span><span style="color:#e06c6c">✕ exit 1</span></div>
+            <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;color:#4d555f;white-space:pre">2m ago</div>
+            <div style="color:#6d7580;height:224px;overflow:hidden">
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">> idp-app@0.2.1 dev</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">> expo start --dev-client</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#e06c6c">✖</span> Metro bundler failed to start</div>
+<div style="white-space:pre;color:#6d7580">  <span style="color:#e06c6c">Error: EADDRINUSE</span> :::8081</div>
+<div style="white-space:pre;color:#6d7580">  another process is bound to</div>
+<div style="white-space:pre;color:#6d7580">  port 8081</div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#e06c6c">──────────────────────────────────────</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#e06c6c">exited · code 1</span><span style="color:#4d555f"> · 12:04:02 · </span><span style="color:#8a929c">r restart</span></div>
+</div>
+          </div>
+
+          <div style="position:relative;height:240px;box-sizing:border-box;border:1px solid #232830;padding:8px 2ch 0">
+            <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#8a929c">4 worker</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/backend</span><span style="color:#3a424c"> · </span><span style="color:#4d555f">○</span></div>
+            <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;color:#4d555f;white-space:pre">idle 6m</div>
+            <div style="color:#6d7580;height:224px;overflow:hidden">
+<div style="white-space:pre;color:#6d7580">  <span style="color:#7a828c">INFO</span>  Processing jobs from the</div>
+<div style="white-space:pre;color:#6d7580">        [default] queue.</div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:00:14</span> SyncRepos ········ <span style="color:#7a828c">DONE</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:00:19</span> IndexWorkspace ··· <span style="color:#7a828c">DONE</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:00:21</span> SendDigest ······· <span style="color:#7a828c">DONE</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">no output for 6m</span></div>
+</div>
+          </div>
+
+          <div style="height:40px;display:flex;align-items:flex-end;white-space:pre;color:#4d555f;padding-left:1ch">ctrl+g <span style="color:#8a929c">1-4</span> promote · <span style="color:#8a929c">j/k</span> cycle</div>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+      <div style="height:20px;display:flex;align-items:center;justify-content:space-between;padding:0 2ch;white-space:pre;background:#12151a"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  4 terminals   </span><span style="color:#8a929c">> 1 frontend</span><span style="color:#4d555f">  ·  3 stacked  ·  </span><span style="color:#e06c6c">1 exited</span></span><span style="color:#4d555f"><span style="color:#8a929c">^g j/k</span> switch  <span style="color:#8a929c">^g 1-4</span> select  <span style="color:#8a929c">^g z</span> zoom  <span style="color:#8a929c">^g [</span> scroll  <span style="color:#8a929c">^g ?</span> help  <span style="color:#8a929c">^g q</span> quit</span></div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 2 ============ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:12px">
+      <span style="font-size:12px;font-weight:700;color:#2dd4a7;letter-spacing:0.14em">02</span>
+      <span style="font-size:14px;color:#d7dbe0">After <span style="color:#8a929c">ctrl+g 2</span> — backend promoted</span>
+      <span style="font-size:12px;color:#6d7580">frontend swaps into the top preview slot; scroll position is preserved</span>
+    </div>
+
+    <div style="width:144ch;height:840px;background:#0e1013;font-size:13px;line-height:20px;box-sizing:border-box;border:1px solid #1b1f25">
+      <div style="display:flex;height:800px;gap:2ch;box-sizing:border-box">
+
+        <div style="position:relative;width:98ch;box-sizing:border-box;border:1px solid #2dd4a7;padding:8px 2ch 0">
+          <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre;font-weight:500"><span style="color:#2dd4a7">> 2 backend</span><span style="color:#3a424c">  ·  </span><span style="color:#8a929c">~/idp/backend</span><span style="color:#3a424c">  ·  </span><span style="color:#2dd4a7">●</span><span style="color:#98c379"> running</span><span style="color:#3a424c">  ·  </span><span style="color:#6d7580">php artisan serve</span></div>
+          <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;white-space:pre;color:#2dd4a7">[###···] MASTER</div>
+          <div style="color:#98a0aa;height:782px;overflow:hidden">
+<div style="white-space:pre;color:#98a0aa">$ <span style="color:#d7dbe0">php artisan serve --port=8000</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#98c379">INFO</span>  Server running on [<span style="color:#7aa2f7">http://127.0.0.1:8000</span>].</div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#6d7580">Press Ctrl+C to stop the server</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:41</span> <span style="color:#98c379">GET</span>  /api/workspaces <span style="color:#2a3038">·······················</span> ~ <span style="color:#7a828c"> 42.11 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:52</span> <span style="color:#98c379">GET</span>  /api/workspaces/idp/terminals <span style="color:#2a3038">·············</span> ~ <span style="color:#7a828c"> 18.04 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:53</span> <span style="color:#98c379">GET</span>  /api/workspaces/idp/terminals/3/log <span style="color:#2a3038">·······</span> ~ <span style="color:#d8a657">118.42 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:55</span> <span style="color:#7aa2f7">POST</span> /api/terminals/3/restart <span style="color:#2a3038">··················</span> ~ <span style="color:#7a828c"> 61.90 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:55</span> <span style="color:#c898e0">queue</span> App\Jobs\ProcessLog <span style="color:#2a3038">·······················</span> <span style="color:#98c379">DONE</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:58</span> <span style="color:#98c379">GET</span>  /api/health <span style="color:#2a3038">···························</span> ~ <span style="color:#7a828c">  3.02 ms</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:02</span> <span style="color:#d8a657">local.WARNING</span>: Slow query detected (1.42s)</div>
+<div style="white-space:pre;color:#98a0aa">           <span style="color:#6d7580">select * from `terminal_logs` where `terminal_id` = ? order by `id` desc</span></div>
+<div style="white-space:pre;color:#98a0aa">           <span style="color:#6d7580">app/Repositories/LogRepository.php:88</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:04</span> <span style="color:#98c379">GET</span>  /api/terminals/2/log?tail=200 <span style="color:#2a3038">·············</span> ~ <span style="color:#7a828c">  8.71 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:07</span> <span style="color:#e06c6c">PUT</span>  /api/terminals/3 <span style="color:#2a3038">··························</span> ~ <span style="color:#e06c6c">422</span></div>
+<div style="white-space:pre;color:#98a0aa">           <span style="color:#e06c6c">ValidationException</span><span style="color:#6d7580">: The command field is required.</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:09</span> <span style="color:#98c379">GET</span>  /api/workspaces/idp <span style="color:#2a3038">·······················</span> ~ <span style="color:#7a828c"> 12.66 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:14</span> <span style="color:#98c379">GET</span>  /api/workspaces/idp/terminals <span style="color:#2a3038">·············</span> ~ <span style="color:#7a828c"> 16.30 ms</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="background:#2dd4a7;color:#0e1013"> </span></div>
+</div>
+        </div>
+
+        <div style="width:44ch;display:flex;flex-direction:column;gap:20px;box-sizing:border-box">
+
+          <div style="position:relative;height:240px;box-sizing:border-box;border:1px solid #2a3038;padding:8px 2ch 0;background:#101317">
+            <div style="position:absolute;top:-10px;left:2ch;background:#101317;padding:0 1ch;white-space:pre"><span style="color:#a8b0ba">1 frontend</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/frontend</span><span style="color:#3a424c"> · </span><span style="color:#98c379">●</span></div>
+            <div style="position:absolute;top:-10px;right:2ch;background:#101317;padding:0 1ch;color:#6d7580;white-space:pre">[####··]</div>
+            <div style="color:#7a828c;height:224px;overflow:hidden">
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:05:33</span> <span style="color:#8a7ba0">[vite]</span> hmr update</div>
+<div style="white-space:pre;color:#7a828c">  <span style="color:#6d7580">/src/components/StatusB…</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:05:58</span> <span style="color:#8a7ba0">[vite]</span> hmr update</div>
+<div style="white-space:pre;color:#7a828c">  <span style="color:#6d7580">/src/routes/Dashboard.t…</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:06:04</span> <span style="color:#8a7ba0">[vite]</span> page reload</div>
+<div style="white-space:pre;color:#7a828c">  <span style="color:#6d7580">src/hooks/useTerminals.…</span></div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">12:06:11</span> <span style="color:#8a7ba0">[vite]</span> hmr update</div>
+<div style="white-space:pre;color:#7a828c">  <span style="color:#6d7580">/src/routes/Dashboard.t…</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#7a828c"><span style="color:#4d555f">↑ 214 lines above · ^g [</span></div>
+</div>
+          </div>
+
+          <div style="position:relative;height:240px;box-sizing:border-box;border:1px solid #232830;padding:8px 2ch 0">
+            <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#8a929c">3 app</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/app</span><span style="color:#3a424c"> · </span><span style="color:#98c379">●</span></div>
+            <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;color:#4d555f;white-space:pre">restarted</div>
+            <div style="color:#6d7580;height:224px;overflow:hidden">
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">exited · code 1 · 12:04:02</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">restarted 12:05:55</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">> idp-app@0.2.1 dev</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">> expo start --dev-client</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#98c379">✔</span> Metro waiting on</div>
+<div style="white-space:pre;color:#6d7580">  <span style="color:#7a828c">exp://192.168.1.24:8081</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:06:08</span> bundling <span style="color:#7a828c">98%</span> <span style="color:#2dd4a7">=</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:06:13</span> <span style="color:#98c379">bundled 1.2s</span> 842 mods</div>
+</div>
+          </div>
+
+          <div style="position:relative;height:240px;box-sizing:border-box;border:1px solid #232830;padding:8px 2ch 0">
+            <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#8a929c">4 worker</span><span style="color:#3a424c"> · </span><span style="color:#6d7580">…/backend</span><span style="color:#3a424c"> · </span><span style="color:#4d555f">○</span></div>
+            <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;color:#4d555f;white-space:pre">idle 6m</div>
+            <div style="color:#6d7580;height:224px;overflow:hidden">
+<div style="white-space:pre;color:#6d7580">  <span style="color:#7a828c">INFO</span>  Processing jobs from the</div>
+<div style="white-space:pre;color:#6d7580">        [default] queue.</div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:00:14</span> SyncRepos ········ <span style="color:#7a828c">DONE</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:00:19</span> IndexWorkspace ··· <span style="color:#7a828c">DONE</span></div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">12:00:21</span> SendDigest ······· <span style="color:#7a828c">DONE</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#6d7580"><span style="color:#4d555f">no output for 6m</span></div>
+</div>
+          </div>
+
+          <div style="height:40px;display:flex;align-items:flex-end;white-space:pre;color:#4d555f;padding-left:1ch">promoted <span style="color:#2dd4a7">backend</span> · <span style="color:#8a929c">^g 1</span> back</div>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+      <div style="height:20px;display:flex;align-items:center;justify-content:space-between;padding:0 2ch;white-space:pre;background:#12151a"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  4 terminals   </span><span style="color:#8a929c">> 2 backend</span><span style="color:#4d555f">  ·  3 stacked  ·  all running</span></span><span style="color:#4d555f"><span style="color:#8a929c">^g j/k</span> switch  <span style="color:#8a929c">^g 1-4</span> select  <span style="color:#8a929c">^g z</span> zoom  <span style="color:#8a929c">^g [</span> scroll  <span style="color:#8a929c">^g ?</span> help  <span style="color:#8a929c">^g q</span> quit</span></div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 3 ============ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:12px">
+      <span style="font-size:12px;font-weight:700;color:#2dd4a7;letter-spacing:0.14em">03</span>
+      <span style="font-size:14px;color:#d7dbe0">Zoom — <span style="color:#8a929c">ctrl+g z</span></span>
+      <span style="font-size:12px;color:#6d7580">stack hidden, master fullscreen, hidden panes summarised in the status bar</span>
+    </div>
+
+    <div style="width:144ch;height:840px;background:#0e1013;font-size:13px;line-height:20px;box-sizing:border-box;border:1px solid #1b1f25">
+      <div style="height:800px;box-sizing:border-box">
+        <div style="position:relative;height:800px;box-sizing:border-box;border:1px solid #2dd4a7;padding:8px 2ch 0">
+          <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre;font-weight:500"><span style="color:#2dd4a7">> 1 frontend</span><span style="color:#3a424c">  ·  </span><span style="color:#8a929c">~/idp/frontend</span><span style="color:#3a424c">  ·  </span><span style="color:#2dd4a7">●</span><span style="color:#98c379"> running</span><span style="color:#3a424c">  ·  </span><span style="color:#6d7580">pnpm dev · pid 48213 · up 14m</span></div>
+          <div style="position:absolute;top:-10px;right:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> ZOOM </span><span style="color:#2dd4a7"> [####··]</span></div>
+          <div style="color:#98a0aa;height:782px;overflow:hidden">
+<div style="white-space:pre;color:#98a0aa">$ <span style="color:#d7dbe0">pnpm dev</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#6d7580">> idp-frontend@0.4.2 dev</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#6d7580">> vite --host</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#c898e0;font-weight:700">VITE v5.4.8</span>  <span style="color:#98c379">ready in 412 ms</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Local:</span>   <span style="color:#7aa2f7">http://localhost:5173/</span></div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Network:</span> <span style="color:#7aa2f7">http://192.168.1.24:5173/</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:02</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PaneTitle.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:33</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/StatusBar.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:58</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashboard.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:04</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/hooks/useTerminals.ts</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:11</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashboard.tsx</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:22</span> <span style="color:#e06c6c">error</span> <span style="color:#8a929c">src/components/PreviewStack.tsx:41:12</span></div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#e06c6c">TS2322</span><span style="color:#6d7580">: Type 'Terminal | undefined' is not assignable to type 'Terminal'.</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">    <span style="color:#4d555f">39 │</span> <span style="color:#6d7580">  {stack.map((t, i) => (</span></div>
+<div style="white-space:pre;color:#98a0aa">    <span style="color:#4d555f">40 │</span> <span style="color:#6d7580">    &lt;PreviewPane</span></div>
+<div style="white-space:pre;color:#98a0aa">    <span style="color:#4d555f">41 │</span> <span style="color:#6d7580">      terminal={</span><span style="color:#e06c6c">terminals[t.id]</span><span style="color:#6d7580">}</span></div>
+<div style="white-space:pre;color:#98a0aa">    <span style="color:#4d555f">   │</span>                <span style="color:#e06c6c">^^^^^^^^^^^^^^</span></div>
+<div style="white-space:pre;color:#98a0aa">    <span style="color:#4d555f">42 │</span> <span style="color:#6d7580">      index={i + 2}</span></div>
+<div style="white-space:pre;color:#98a0aa">    <span style="color:#4d555f">43 │</span> <span style="color:#6d7580">    /&gt;</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:34</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PreviewStack.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:34</span> <span style="color:#98c379">✓</span> <span style="color:#6d7580">type check passed · 0 errors · 1.8s</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:41</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/components/PreviewStack.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:52</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/styles/tokens.css</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:07:03</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashboard.tsx</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="background:#2dd4a7;color:#0e1013"> </span></div>
+</div>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+      <div style="height:20px;display:flex;align-items:center;justify-content:space-between;padding:0 2ch;white-space:pre;background:#12151a"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  4 terminals   </span><span style="color:#8a929c">> 1 frontend</span><span style="color:#4d555f">  ·  hidden: </span><span style="color:#98c379">2●</span><span style="color:#4d555f"> </span><span style="color:#98c379">3●</span><span style="color:#4d555f"> </span><span style="color:#4d555f">4○</span></span><span style="color:#4d555f"><span style="color:#8a929c">^g j/k</span> switch  <span style="color:#8a929c">^g 1-4</span> select  <span style="color:#2dd4a7">^g z</span> <span style="color:#8a929c">unzoom</span>  <span style="color:#8a929c">^g [</span> scroll  <span style="color:#8a929c">^g ?</span> help  <span style="color:#8a929c">^g q</span> quit</span></div>
+    </div>
+  </div>
+
+  <!-- ============ NARROW ============ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:12px">
+      <span style="font-size:12px;font-weight:700;color:#2dd4a7;letter-spacing:0.14em">04</span>
+      <span style="font-size:14px;color:#d7dbe0">Degradation — below 100 columns</span>
+      <span style="font-size:12px;color:#6d7580">the stack collapses to a one-line pane strip; shortcuts abbreviate</span>
+    </div>
+
+    <div style="width:84ch;height:440px;background:#0e1013;font-size:13px;line-height:20px;box-sizing:border-box;border:1px solid #1b1f25">
+      <div style="height:400px;box-sizing:border-box">
+        <div style="height:20px;display:flex;align-items:center;padding:0 1ch;white-space:pre;color:#4d555f"><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> 1 frontend </span><span style="background:#181c22;color:#8a929c"> 2 backend </span><span style="color:#4d555f">·</span><span style="background:#181c22;color:#e06c6c"> 3 app ✕1 </span><span style="color:#4d555f">·</span><span style="background:#181c22;color:#6d7580"> 4 worker ○ </span></div>
+        <div style="height:20px"></div>
+        <div style="position:relative;height:360px;box-sizing:border-box;border:1px solid #2dd4a7;padding:8px 2ch 0">
+          <div style="position:absolute;top:-10px;left:2ch;background:#0e1013;padding:0 1ch;white-space:pre"><span style="color:#2dd4a7">> 1 frontend</span><span style="color:#3a424c"> · </span><span style="color:#8a929c">…/frontend</span><span style="color:#3a424c"> · </span><span style="color:#2dd4a7">●</span></div>
+          <div style="color:#98a0aa;height:342px;overflow:hidden">
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#c898e0;font-weight:700">VITE v5.4.8</span>  <span style="color:#98c379">ready in 412 ms</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa">  <span style="color:#2dd4a7">➜</span>  <span style="color:#d7dbe0">Local:</span>   <span style="color:#7aa2f7">http://localhost:5173/</span></div>
+<div style="white-space:pre"> </div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:05:58</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashb…</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:04</span> <span style="color:#c898e0">[vite]</span> page reload <span style="color:#8a929c">src/hooks/useTerm…</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:11</span> <span style="color:#c898e0">[vite]</span> hmr update <span style="color:#8a929c">/src/routes/Dashb…</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="color:#4d555f">12:06:34</span> <span style="color:#98c379">✓</span> <span style="color:#6d7580">type check passed · 0 errors</span></div>
+<div style="white-space:pre;color:#98a0aa"><span style="background:#2dd4a7;color:#0e1013"> </span></div>
+</div>
+        </div>
+      </div>
+      <div style="height:20px;display:flex;align-items:center;justify-content:space-between;padding:0 2ch;white-space:pre;background:#12151a"><span><span style="color:#0e1013;background:#2dd4a7;font-weight:700"> idp </span><span style="color:#4d555f">  84×22  </span><span style="color:#d8a657">stack hidden</span></span><span style="color:#4d555f"><span style="color:#8a929c">^g</span> j/k · 1-4 · z · [ · ? · q</span></span></div>
+    </div>
+  </div>
+
+  <!-- ============ SPEC ============ -->
+  <div style="width:144ch;display:flex;flex-direction:column;gap:20px;padding-top:16px;border-top:1px solid #1b1f25">
+    <div style="font-size:16px;font-weight:700;color:#e8ecf1">Design specification</div>
+
+    <div style="display:flex;gap:48px;flex-wrap:wrap;font-size:12.5px;line-height:22px">
+
+      <div style="width:38ch;display:flex;flex-direction:column;gap:10px">
+        <div style="color:#2dd4a7;font-weight:700;letter-spacing:0.1em;font-size:11px">PALETTE — 16-COLOR SAFE</div>
+        <div style="display:flex;flex-direction:column;gap:4px;color:#8a929c;white-space:pre"><span><span style="display:inline-block;width:11px;height:11px;background:#0e1013;border:1px solid #2a3038;vertical-align:middle;margin-right:8px"></span>#0e1013  canvas / pane bg</span><span><span style="display:inline-block;width:11px;height:11px;background:#12151a;vertical-align:middle;margin-right:8px"></span>#12151a  status bar bg</span><span><span style="display:inline-block;width:11px;height:11px;background:#232830;vertical-align:middle;margin-right:8px"></span>#232830  idle border</span><span><span style="display:inline-block;width:11px;height:11px;background:#2dd4a7;vertical-align:middle;margin-right:8px"></span>#2dd4a7  master border / accent</span><span><span style="display:inline-block;width:11px;height:11px;background:#d7dbe0;vertical-align:middle;margin-right:8px"></span>#d7dbe0  master foreground</span><span><span style="display:inline-block;width:11px;height:11px;background:#8a929c;vertical-align:middle;margin-right:8px"></span>#8a929c  preview foreground</span><span><span style="display:inline-block;width:11px;height:11px;background:#4d555f;vertical-align:middle;margin-right:8px"></span>#4d555f  timestamps, hints</span><span><span style="display:inline-block;width:11px;height:11px;background:#98c379;vertical-align:middle;margin-right:8px"></span>#98c379  running / success</span><span><span style="display:inline-block;width:11px;height:11px;background:#d8a657;vertical-align:middle;margin-right:8px"></span>#d8a657  warning / slow</span><span><span style="display:inline-block;width:11px;height:11px;background:#e06c6c;vertical-align:middle;margin-right:8px"></span>#e06c6c  error / non-zero exit</span><span><span style="display:inline-block;width:11px;height:11px;background:#7aa2f7;vertical-align:middle;margin-right:8px"></span>#7aa2f7  URLs</span><span><span style="display:inline-block;width:11px;height:11px;background:#c898e0;vertical-align:middle;margin-right:8px"></span>#c898e0  tool prefixes ([vite], queue)</span></div>
+        <div style="color:#6d7580">Only two background values in the whole UI. Hue carries meaning; nothing is coloured for decoration.</div>
+      </div>
+
+      <div style="width:38ch;display:flex;flex-direction:column;gap:10px">
+        <div style="color:#2dd4a7;font-weight:700;letter-spacing:0.1em;font-size:11px">BORDERS &amp; SPACING</div>
+        <div style="color:#8a929c">Single-weight box drawing throughout: <span style="color:#d7dbe0">─ │ ┌ ┐ └ ┘</span>. No double lines, no rounded corners, no shadows.</div>
+        <div style="color:#8a929c">Master: <span style="color:#2dd4a7">#2dd4a7</span> border. Previews: <span style="color:#d7dbe0">#232830</span>; the pane that was just demoted holds <span style="color:#d7dbe0">#2a3038</span> plus a 1-shade lighter bg for ~1.5s, then settles.</div>
+        <div style="color:#8a929c">Grid 144×42. Master 98 cols, gutter 2, stack 44. Content rows 40, blank row 41, status row 42. Pane padding 2 cols horizontal, 0 rows vertical. Previews 12 rows each, 1 blank row between.</div>
+      </div>
+
+      <div style="width:38ch;display:flex;flex-direction:column;gap:10px">
+        <div style="color:#2dd4a7;font-weight:700;letter-spacing:0.1em;font-size:11px">TITLE FORMAT</div>
+        <div style="color:#8a929c;white-space:pre-wrap">Master  <span style="color:#d7dbe0">> {n} {name} · {cwd} · {dot} {state} · {cmd}</span></div>
+        <div style="color:#8a929c;white-space:pre-wrap">Preview <span style="color:#d7dbe0">{n} {name} · {cwd} · {dot}</span></div>
+        <div style="color:#8a929c">Titles sit inside the top border, 2 cols from the left. Right-aligned slot carries the activity meter and the MASTER / ZOOM tag.</div>
+        <div style="color:#8a929c">Paths shorten left-first: <span style="color:#d7dbe0">~/idp/frontend</span> → <span style="color:#d7dbe0">…/frontend</span> → <span style="color:#d7dbe0">…/frontend</span>. Output lines truncate right-first with <span style="color:#d7dbe0">…</span>; a wrapped continuation indents 2 cols.</div>
+      </div>
+
+      <div style="width:38ch;display:flex;flex-direction:column;gap:10px">
+        <div style="color:#2dd4a7;font-weight:700;letter-spacing:0.1em;font-size:11px">STATUS &amp; ACTIVITY</div>
+        <div style="color:#8a929c;white-space:pre-wrap"><span style="color:#98c379">●</span>  running, output within 30s
+<span style="color:#4d555f">○</span>  running, idle (age shown: <span style="color:#d7dbe0">idle 6m</span>)
+<span style="color:#e06c6c">✕</span>  exited non-zero — <span style="color:#e06c6c">✕ exit 1</span>
+<span style="color:#7a828c">✓</span>  exited zero — <span style="color:#7a828c">✓ exit 0</span></div>
+        <div style="color:#8a929c">Activity is a 6-cell bracket meter, <span style="color:#d7dbe0">[####··]</span> to <span style="color:#d7dbe0">[······]</span>, redrawn once per second from bytes written. It fills and empties, never blinks, and never moves the cursor.</div>
+        <div style="color:#8a929c">An exited pane keeps its last output, dims to <span style="color:#d7dbe0">#6d7580</span>, and gains a footer rule with <span style="color:#e06c6c">exited · code 1</span>, the timestamp, and the restart key.</div>
+      </div>
+
+      <div style="width:38ch;display:flex;flex-direction:column;gap:10px">
+        <div style="color:#2dd4a7;font-weight:700;letter-spacing:0.1em;font-size:11px">FOCUS &amp; PROMOTION</div>
+        <div style="color:#8a929c">Four cues fire together so focus never depends on one: teal border, a <span style="color:#d7dbe0">></span> caret before the pane number, full-contrast foreground, and the status-bar <span style="color:#d7dbe0">></span> pointer.</div>
+        <div style="color:#8a929c">Promotion is an instant swap — no slide or fade. The selected preview takes the master frame; the old master drops into the slot it vacated so positions stay learnable. Both panes keep scroll position and scrollback.</div>
+      </div>
+
+      <div style="width:38ch;display:flex;flex-direction:column;gap:10px">
+        <div style="color:#2dd4a7;font-weight:700;letter-spacing:0.1em;font-size:11px">RESPONSIVE</div>
+        <div style="color:#8a929c;white-space:pre-wrap"><span style="color:#d7dbe0">≥120 cols</span>  master 70% / stack 30%
+<span style="color:#d7dbe0">100–119</span>    stack fixed at 34 cols, previews drop to 9 rows
+<span style="color:#d7dbe0">&lt;100</span>       stack hidden, one-line pane strip on row 1
+<span style="color:#d7dbe0">&lt;30 rows</span>   previews reduce to 2, then to the strip</div>
+        <div style="color:#8a929c">The status bar drops shortcut labels before keys, then collapses to <span style="color:#d7dbe0">^g j/k · 1-4 · z · [ · ? · q</span>. Workspace name is the last thing to go.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:1000}}"></script>
+</body>
+</html>

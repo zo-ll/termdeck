@@ -1,5 +1,23 @@
 # Termdeck design contract
 
+## Authoritative design source
+
+The accepted Claude Design export is committed under `reference/`:
+
+- `Termdeck TUI.dc.html` — complete design canvas and specification
+- `support.js` — runtime required to render the exported design
+- `thumbnail.webp` — exported project thumbnail
+
+The original project is available through Claude Design at:
+
+```text
+https://claude.ai/design/p/8aa66d51-e314-4df7-8b93-fcfadbb60c36?file=Termdeck+TUI.dc.html
+```
+
+Claude Code may use the `claude_design` MCP to inspect that project after
+authenticating with `/design-login`. The committed export remains authoritative
+for review and must not be regenerated from an older prose prompt.
+
 ## Layout
 
 - Design canvas: 144 columns by 42 rows.
@@ -39,13 +57,5 @@ UI snapshots must cover:
 5. Narrow-terminal fallback.
 6. Help and quit-confirmation overlays.
 
-Export final Claude Design images into this directory before the UI task begins:
-
-```text
-master-stack.png
-backend-active.png
-zoomed.png
-```
-
-Until those images are present, this document is authoritative.
-
+The HTML export contains the frontend-active, backend-active, zoomed, narrow,
+status, palette, and responsive reference states required for implementation.
