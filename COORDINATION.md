@@ -47,5 +47,5 @@ live-preview-stack interface.
   active `coord/*` branch.
 - On a fresh machine, follow `docs/RESUME.md`, read the relevant workstream, and
   give it to a new agent. Do not rely on an old conversation for context.
-- No Git remote is configured yet. Cross-machine synchronization remains
-  blocked until a remote is selected and the branches are pushed.
+- Private remote: `https://github.com/zo-ll/termdeck`. `main` and the active
+  `coord/*` branches were first pushed on 2026-08-31.

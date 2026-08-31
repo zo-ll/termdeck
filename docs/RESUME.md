@@ -32,7 +32,7 @@ alias claudep='claude --dangerously-skip-permissions'
 Persist that alias in the shell startup file used on the new machine. Then:
 
 ```bash
-git clone <termdeck-remote-url> termdeck
+git clone https://github.com/zo-ll/termdeck.git termdeck
 cd termdeck
 git fetch origin '+refs/heads/coord/*:refs/remotes/origin/coord/*'
 rustup show
@@ -90,10 +90,10 @@ run the required checks, commit on this branch, and do not merge or push.
 The coordinator reviews worker commits and updates `COORDINATION.md`. Workers
 never merge their own branches.
 
-## Current limitation
+## Verify synchronization
 
-This procedure becomes cross-machine only after an `origin` remote exists and
-the active branches have been pushed. Check with:
+The private remote is `https://github.com/zo-ll/termdeck`. The new machine must
+authenticate to GitHub as an account with access. Check synchronization with:
 
 ```bash
 git remote -v
