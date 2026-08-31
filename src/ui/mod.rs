@@ -3,8 +3,12 @@
 //! This module renders one static screen from owned application types. It has
 //! no event loop, no input handling, and no terminal backend of its own: the
 //! caller supplies a Ratatui [`Frame`] and a [`TerminalEngine`] to read from.
+//!
+//! The public surface is the renderer and the frozen contracts only. Reference
+//! fixtures and `FakeEngine` are test-only and never reach a release build.
 
-pub mod fixture;
+#[cfg(test)]
+mod fixture;
 
 use std::path::Path;
 

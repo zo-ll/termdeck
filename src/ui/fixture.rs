@@ -1,5 +1,8 @@
 //! The frontend-active reference state from the accepted design export.
 //!
+//! Test-only: this module is compiled under `cfg(test)` and is not part of the
+//! library's public surface.
+//!
 //! Fixtures build real [`FakeEngine`] state so the renderer only ever reads
 //! terminal cells, cursor, status, and metadata through the frozen contracts.
 
