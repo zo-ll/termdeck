@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: active — issue 1 merged; small engine/UI slices published
+Status: active — #7 VT adapter and #11 static UI dispatched in parallel
 
 ## Goal
 
@@ -13,7 +13,7 @@ live-preview-stack interface.
 |---|-------|------------|--------|--------|--------|----|--------|
 | [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | [#5](https://github.com/zo-ll/termdeck/pull/5) | merged (`b880b60`) |
 | [2](https://github.com/zo-ll/termdeck/issues/2) | Native PTY and terminal engine epic | 1 | — | Codex | ponytail | — | split into #7–#10 |
-| [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface epic | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | [draft #6](https://github.com/zo-ll/termdeck/pull/6) | split into #11–#14; design merge pending |
+| [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface epic | 1 | — | Claude Code via `claudep` (Opus/high) | ponytail | [#6](https://github.com/zo-ll/termdeck/pull/6) | design merged; #11 active |
 | [4](https://github.com/zo-ll/termdeck/issues/4) | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
 
 ## Small tasks
@@ -24,11 +24,11 @@ scope.
 
 | Issue | Slice | Blocked by | Status |
 |---|---|---|---|
-| [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | ready |
+| [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | dispatched: `coord/07-vt-adapter`, Codex Terra/high |
 | [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | ready |
 | [#9](https://github.com/zo-ll/termdeck/issues/9) | One-terminal native engine | #7, #8 | blocked |
 | [#10](https://github.com/zo-ll/termdeck/issues/10) | Native lifecycle | #9 | blocked |
-| [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | draft PR #6 | blocked |
+| [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | dispatched: `coord/11-ui-master-stack`, `claudep` Opus/high |
 | [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | #11 | blocked |
 | [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | #11 | blocked |
 | [#14](https://github.com/zo-ll/termdeck/issues/14) | Modal and input modes | #12, #13 | blocked |
@@ -90,6 +90,9 @@ scope.
   tests passed. Issue #1 remains open for user-controlled closure.
 - 2026-08-31: Replaced broad next-wave implementation with GitHub slices #7–#14.
   #7 and #8 are ready; UI slice #11 waits only for draft PR #6 approval/merge.
+- 2026-08-31: Reviewed design PR #6 squash-merged as `12bd431`. Fresh worktrees
+  were created from that `main`; #7 and #11 were dispatched in new visible tmux
+  windows `codex-vt` and `claude-ui`. Historical worker panes remain intact.
 
 ## Durable resumption
 
