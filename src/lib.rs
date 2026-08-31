@@ -4,3 +4,4 @@ pub mod cli;
 pub mod config;
 pub mod contracts;
 pub mod engine;
+pub mod ui;
