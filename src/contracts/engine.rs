@@ -45,9 +45,11 @@ pub enum EngineEvent {
 }
 
 /// The narrow UI-to-engine seam. Implementations retain state and emit changes
-/// after each UI command.
+/// after each UI command or while draining asynchronous engine work.
 pub trait TerminalEngine {
     fn dispatch(&mut self, command: EngineCommand) -> Vec<EngineEvent>;
+    /// Drains output and lifecycle events produced without a UI command.
+    fn drain_events(&mut self) -> Vec<EngineEvent>;
     fn frame(&self, terminal: &TerminalId) -> Option<&TerminalFrame>;
     fn status(&self, terminal: &TerminalId) -> Option<&TerminalStatus>;
     fn metadata(&self, terminal: &TerminalId) -> Option<&TerminalMetadata>;

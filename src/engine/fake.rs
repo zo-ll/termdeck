@@ -5,46 +5,48 @@ use crate::contracts::{
     TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
 };
 
+#[derive(Debug)]
+struct FakeTerminalState {
+    frame: TerminalFrame,
+    metadata: TerminalMetadata,
+    status: TerminalStatus,
+}
+
 /// Deterministic in-memory engine for UI development and tests.
 #[derive(Debug)]
 pub struct FakeEngine {
-    frames: BTreeMap<TerminalId, TerminalFrame>,
     input: Vec<(TerminalId, Vec<u8>)>,
-    metadata: BTreeMap<TerminalId, TerminalMetadata>,
     now: Timestamp,
-    statuses: BTreeMap<TerminalId, TerminalStatus>,
+    terminals: BTreeMap<TerminalId, FakeTerminalState>,
 }
 
 impl FakeEngine {
     pub fn new(terminals: impl IntoIterator<Item = TerminalId>) -> Self {
-        let mut engine = Self {
-            frames: BTreeMap::new(),
+        Self {
             input: Vec::new(),
-            metadata: BTreeMap::new(),
             now: Timestamp::default(),
-            statuses: BTreeMap::new(),
-        };
-        for terminal in terminals {
-            engine.frames.insert(
-                terminal.clone(),
-                TerminalFrame::blank(terminal.clone(), ScreenSize::new(80, 24), 0),
-            );
-            engine
-                .metadata
-                .insert(terminal.clone(), TerminalMetadata::default());
-            engine.statuses.insert(terminal, TerminalStatus::Starting);
+            terminals: terminals
+                .into_iter()
+                .map(|terminal| {
+                    let frame = TerminalFrame::blank(terminal.clone(), ScreenSize::new(80, 24), 0);
+                    (
+                        terminal,
+                        FakeTerminalState {
+                            frame,
+                            metadata: TerminalMetadata::default(),
+                            status: TerminalStatus::Starting,
+                        },
+                    )
+                })
+                .collect(),
         }
-        engine
     }
 
     /// Supplies a known frame to fixtures without simulating a terminal parser.
     pub fn set_frame(&mut self, frame: TerminalFrame) -> Option<EngineEvent> {
-        if self.frames.contains_key(&frame.terminal) {
-            self.frames.insert(frame.terminal.clone(), frame.clone());
-            Some(EngineEvent::FrameReady(frame))
-        } else {
-            None
-        }
+        let terminal = frame.terminal.clone();
+        self.terminals.get_mut(&terminal)?.frame = frame.clone();
+        Some(EngineEvent::FrameReady(frame))
     }
 
     pub fn set_status(
@@ -52,10 +54,10 @@ impl FakeEngine {
         terminal: &TerminalId,
         status: TerminalStatus,
     ) -> Vec<EngineEvent> {
-        if !self.statuses.contains_key(terminal) {
+        let Some(state) = self.terminals.get_mut(terminal) else {
             return Vec::new();
-        }
-        self.statuses.insert(terminal.clone(), status.clone());
+        };
+        state.status = status.clone();
         let mut events = vec![EngineEvent::StatusChanged {
             terminal: terminal.clone(),
             status: status.clone(),
@@ -64,15 +66,11 @@ impl FakeEngine {
             status,
             TerminalStatus::Exited { .. } | TerminalStatus::Failed { .. }
         ) {
-            let metadata = self
-                .metadata
-                .get_mut(terminal)
-                .expect("terminal metadata exists");
-            metadata.last_exit_at = Some(self.now);
-            metadata.process = None;
+            state.metadata.last_exit_at = Some(self.now);
+            state.metadata.process = None;
             events.push(EngineEvent::MetadataChanged {
                 terminal: terminal.clone(),
-                metadata: metadata.clone(),
+                metadata: state.metadata.clone(),
             });
         }
         events
@@ -83,46 +81,42 @@ impl FakeEngine {
         terminal: &TerminalId,
         metadata: TerminalMetadata,
     ) -> Option<EngineEvent> {
-        if self.metadata.contains_key(terminal) {
-            self.metadata.insert(terminal.clone(), metadata.clone());
-            Some(EngineEvent::MetadataChanged {
-                terminal: terminal.clone(),
-                metadata,
-            })
-        } else {
-            None
-        }
+        self.terminals.get_mut(terminal)?.metadata = metadata.clone();
+        Some(EngineEvent::MetadataChanged {
+            terminal: terminal.clone(),
+            metadata,
+        })
     }
 
     /// Records output without pretending to emulate terminal parsing.
     pub fn record_output(&mut self, terminal: &TerminalId, bytes: usize) -> Option<EngineEvent> {
-        let metadata = self.metadata.get_mut(terminal)?;
-        metadata.bytes_written = metadata.bytes_written.saturating_add(bytes as u64);
-        metadata.output_idle = Some(Elapsed::default());
+        let state = self.terminals.get_mut(terminal)?;
+        state.metadata.bytes_written = state.metadata.bytes_written.saturating_add(bytes as u64);
+        state.metadata.output_idle = Some(Elapsed::default());
         Some(EngineEvent::MetadataChanged {
             terminal: terminal.clone(),
-            metadata: metadata.clone(),
+            metadata: state.metadata.clone(),
         })
     }
 
     /// Advances fake time and refreshes elapsed activity/process metadata.
     pub fn advance_time(&mut self, elapsed: Elapsed) -> Vec<EngineEvent> {
         self.now.unix_millis = self.now.unix_millis.saturating_add(elapsed.millis);
-        self.metadata
+        self.terminals
             .iter_mut()
-            .filter_map(|(terminal, metadata)| {
+            .filter_map(|(terminal, state)| {
                 let mut changed = false;
-                if let Some(idle) = &mut metadata.output_idle {
+                if let Some(idle) = &mut state.metadata.output_idle {
                     idle.millis = idle.millis.saturating_add(elapsed.millis);
                     changed = true;
                 }
-                if let Some(process) = &mut metadata.process {
+                if let Some(process) = &mut state.metadata.process {
                     process.uptime.millis = process.uptime.millis.saturating_add(elapsed.millis);
                     changed = true;
                 }
                 changed.then(|| EngineEvent::MetadataChanged {
                     terminal: terminal.clone(),
-                    metadata: metadata.clone(),
+                    metadata: state.metadata.clone(),
                 })
             })
             .collect()
@@ -137,117 +131,113 @@ impl TerminalEngine for FakeEngine {
     fn dispatch(&mut self, command: EngineCommand) -> Vec<EngineEvent> {
         match command {
             EngineCommand::Input { terminal, bytes } => {
-                if self.frames.contains_key(&terminal) {
+                if self.terminals.contains_key(&terminal) {
                     self.input.push((terminal, bytes));
                 }
                 Vec::new()
             }
-            EngineCommand::Resize { terminal, size } => self
-                .frames
-                .get_mut(&terminal)
-                .map(|frame| {
-                    *frame = TerminalFrame::blank(terminal, size, frame.revision + 1);
-                    vec![EngineEvent::FrameReady(frame.clone())]
-                })
-                .unwrap_or_default(),
+            EngineCommand::Resize { terminal, size } => {
+                let Some(state) = self.terminals.get_mut(&terminal) else {
+                    return Vec::new();
+                };
+                state.frame = TerminalFrame::blank(terminal, size, state.frame.revision + 1);
+                vec![EngineEvent::FrameReady(state.frame.clone())]
+            }
             EngineCommand::Scroll { terminal, command } => {
-                let Some(metadata) = self.metadata.get_mut(&terminal) else {
+                let Some(state) = self.terminals.get_mut(&terminal) else {
                     return Vec::new();
                 };
                 match command {
                     ScrollCommand::Up(lines) => {
-                        let moved = metadata.scrollback.lines_above.min(u32::from(lines));
-                        metadata.scrollback.lines_above -= moved;
-                        metadata.scrollback.lines_below += moved;
+                        let moved = state.metadata.scrollback.lines_above.min(u32::from(lines));
+                        state.metadata.scrollback.lines_above -= moved;
+                        state.metadata.scrollback.lines_below += moved;
                     }
                     ScrollCommand::Down(lines) => {
-                        let moved = metadata.scrollback.lines_below.min(u32::from(lines));
-                        metadata.scrollback.lines_above += moved;
-                        metadata.scrollback.lines_below -= moved;
+                        let moved = state.metadata.scrollback.lines_below.min(u32::from(lines));
+                        state.metadata.scrollback.lines_above += moved;
+                        state.metadata.scrollback.lines_below -= moved;
                     }
                     ScrollCommand::Bottom => {
-                        metadata.scrollback.lines_above += metadata.scrollback.lines_below;
-                        metadata.scrollback.lines_below = 0;
+                        state.metadata.scrollback.lines_above +=
+                            state.metadata.scrollback.lines_below;
+                        state.metadata.scrollback.lines_below = 0;
                     }
                 }
-                let event = EngineEvent::MetadataChanged {
-                    terminal: terminal.clone(),
-                    metadata: metadata.clone(),
-                };
-                self.frames
-                    .get(&terminal)
-                    .map(|frame| vec![event, EngineEvent::FrameReady(frame.clone())])
-                    .unwrap_or_default()
+                vec![
+                    EngineEvent::MetadataChanged {
+                        terminal,
+                        metadata: state.metadata.clone(),
+                    },
+                    EngineEvent::FrameReady(state.frame.clone()),
+                ]
             }
             EngineCommand::Respawn { terminal } => {
-                let Some(frame) = self.frames.get_mut(&terminal) else {
+                let Some(state) = self.terminals.get_mut(&terminal) else {
                     return Vec::new();
                 };
-                *frame = TerminalFrame::blank(terminal.clone(), frame.size, frame.revision + 1);
-                let status = TerminalStatus::Starting;
-                self.statuses.insert(terminal.clone(), status.clone());
-                let metadata = self
-                    .metadata
-                    .get_mut(&terminal)
-                    .expect("frame and metadata match");
-                let last_exit_at = metadata.last_exit_at;
-                *metadata = TerminalMetadata {
-                    last_exit_at,
+                state.frame = TerminalFrame::blank(
+                    terminal.clone(),
+                    state.frame.size,
+                    state.frame.revision + 1,
+                );
+                state.status = TerminalStatus::Starting;
+                state.metadata = TerminalMetadata {
+                    last_exit_at: state.metadata.last_exit_at,
                     restarted_at: Some(self.now),
                     ..TerminalMetadata::default()
                 };
                 vec![
-                    EngineEvent::StatusChanged { terminal, status },
-                    EngineEvent::MetadataChanged {
-                        terminal: frame.terminal.clone(),
-                        metadata: metadata.clone(),
+                    EngineEvent::StatusChanged {
+                        terminal: terminal.clone(),
+                        status: state.status.clone(),
                     },
-                    EngineEvent::FrameReady(frame.clone()),
+                    EngineEvent::MetadataChanged {
+                        terminal,
+                        metadata: state.metadata.clone(),
+                    },
+                    EngineEvent::FrameReady(state.frame.clone()),
                 ]
             }
             EngineCommand::Shutdown => {
-                let terminals: Vec<_> = self
-                    .statuses
-                    .iter()
-                    .filter(|(_, status)| {
-                        matches!(status, TerminalStatus::Starting | TerminalStatus::Running)
-                    })
-                    .map(|(terminal, _)| terminal.clone())
-                    .collect();
                 let mut events = Vec::new();
-                for terminal in terminals {
-                    let status = TerminalStatus::Exited { code: None };
-                    self.statuses.insert(terminal.clone(), status.clone());
-                    events.push(EngineEvent::StatusChanged {
-                        terminal: terminal.clone(),
-                        status,
-                    });
-                    let metadata = self
-                        .metadata
-                        .get_mut(&terminal)
-                        .expect("terminal metadata exists");
-                    metadata.last_exit_at = Some(self.now);
-                    metadata.process = None;
-                    events.push(EngineEvent::MetadataChanged {
-                        terminal,
-                        metadata: metadata.clone(),
-                    });
+                for (terminal, state) in &mut self.terminals {
+                    if matches!(
+                        state.status,
+                        TerminalStatus::Starting | TerminalStatus::Running
+                    ) {
+                        state.status = TerminalStatus::Exited { code: None };
+                        state.metadata.last_exit_at = Some(self.now);
+                        state.metadata.process = None;
+                        events.push(EngineEvent::StatusChanged {
+                            terminal: terminal.clone(),
+                            status: state.status.clone(),
+                        });
+                        events.push(EngineEvent::MetadataChanged {
+                            terminal: terminal.clone(),
+                            metadata: state.metadata.clone(),
+                        });
+                    }
                 }
                 events
             }
         }
     }
 
+    fn drain_events(&mut self) -> Vec<EngineEvent> {
+        Vec::new()
+    }
+
     fn frame(&self, terminal: &TerminalId) -> Option<&TerminalFrame> {
-        self.frames.get(terminal)
+        self.terminals.get(terminal).map(|state| &state.frame)
     }
 
     fn status(&self, terminal: &TerminalId) -> Option<&TerminalStatus> {
-        self.statuses.get(terminal)
+        self.terminals.get(terminal).map(|state| &state.status)
     }
 
     fn metadata(&self, terminal: &TerminalId) -> Option<&TerminalMetadata> {
-        self.metadata.get(terminal)
+        self.terminals.get(terminal).map(|state| &state.metadata)
     }
 }
 
@@ -392,5 +382,12 @@ mod tests {
             Some(Timestamp { unix_millis: 500 })
         );
         assert!(matches!(events[1], EngineEvent::MetadataChanged { .. }));
+    }
+
+    #[test]
+    fn fake_has_no_unsolicited_events() {
+        let mut engine = FakeEngine::new([TerminalId::new("frontend")]);
+
+        assert!(engine.drain_events().is_empty());
     }
 }
