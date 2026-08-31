@@ -60,3 +60,7 @@ cargo test --all-targets
 See [docs/PLAN.md](docs/PLAN.md) and
 [docs/design/termdeck/DESIGN.md](docs/design/termdeck/DESIGN.md) before making
 implementation changes.
+
+To continue this coordinated build from a fresh machine or fresh agent
+sessions, follow [docs/RESUME.md](docs/RESUME.md). Current ownership and branch
+status live in [COORDINATION.md](COORDINATION.md).

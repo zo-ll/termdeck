@@ -1,6 +1,8 @@
 # Agent Instructions
 
 Read `docs/PLAN.md` and `docs/design/termdeck/DESIGN.md` before changing code.
+Read `COORDINATION.md` for current workstream status and `docs/RESUME.md` when
+adopting work from a new machine or agent session.
 
 ## Architecture boundaries
 
@@ -31,4 +33,3 @@ cargo test --all-targets
 
 Workers must not merge their own branches. Report changed files, verification
 results, risks, and deviations in the final handoff.
-
