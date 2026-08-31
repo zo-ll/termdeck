@@ -13,7 +13,7 @@ live-preview-stack interface.
 |---|-------|------------|--------|--------|--------|----|--------|
 | [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | [#5](https://github.com/zo-ll/termdeck/pull/5) | reviewed; awaiting merge approval |
 | [2](https://github.com/zo-ll/termdeck/issues/2) | Native PTY and terminal engine | 1 | — | Codex | Rust | — | pending |
-| [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | — | blocked by 1; design preflight reviewed |
+| [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | [draft #6](https://github.com/zo-ll/termdeck/pull/6) | blocked by 1; design preflight reviewed |
 | [4](https://github.com/zo-ll/termdeck/issues/4) | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
 
 ## Waves
@@ -56,6 +56,8 @@ live-preview-stack interface.
   pushed through `9364643`. Source/structural review passed: three artboards,
   no external resources, accepted palette only, clean HTML structure, original
   export untouched. Human browser inspection remains available before UI work.
+- 2026-08-31: Draft PR #6 opened for issue 3 so design and later UI work remain
+  visible on the same branch and review thread.
 
 ## Durable resumption
 
