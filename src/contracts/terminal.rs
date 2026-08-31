@@ -24,3 +24,48 @@ pub enum TerminalStatus {
     Exited { code: Option<i32> },
     Failed { message: String },
 }
+
+/// A wall-clock time represented as milliseconds since the Unix epoch.
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Timestamp {
+    pub unix_millis: u64,
+}
+
+/// A non-negative elapsed duration in milliseconds.
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Elapsed {
+    pub millis: u64,
+}
+
+/// Information available while a terminal process is alive.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProcessInfo {
+    pub pid: u32,
+    pub uptime: Elapsed,
+}
+
+/// The selected engine-owned scrollback viewport.
+///
+/// `lines_above` and `lines_below` count retained lines outside the current
+/// frame. The UI displays the frame it receives and asks the engine to move
+/// this viewport; it never indexes or mutates a terminal history buffer.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ScrollbackPosition {
+    pub lines_above: u32,
+    pub lines_below: u32,
+}
+
+/// Chrome data that changes independently of terminal pixels.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TerminalMetadata {
+    /// Cumulative output bytes written by the terminal process.
+    pub bytes_written: u64,
+    /// Elapsed time since the most recent output, or `None` before any output.
+    pub output_idle: Option<Elapsed>,
+    /// Timestamp of the most recent process exit. The exit code lives only in
+    /// [`TerminalStatus::Exited`].
+    pub last_exit_at: Option<Timestamp>,
+    pub restarted_at: Option<Timestamp>,
+    pub process: Option<ProcessInfo>,
+    pub scrollback: ScrollbackPosition,
+}

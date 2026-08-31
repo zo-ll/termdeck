@@ -40,9 +40,13 @@ The included Horizon example can be validated and listed without starting any
 terminals:
 
 ```bash
-cargo run -- check examples/horizon.yaml
-cargo run -- list examples/horizon.yaml
+cargo run -- --config examples/horizon.yaml check
+cargo run -- --config examples/horizon.yaml list
 ```
+
+The command shape is `termdeck [--config PATH] [WORKSPACE|check|list]`. Without
+`--config`, Termdeck loads `$XDG_CONFIG_HOME/termdeck/config.yaml`, falling
+back to `$HOME/.config/termdeck/config.yaml`.
 
 `check` validates workspace roots, required terminal paths, and command argv
 arrays. Missing optional terminal paths are omitted by `list`.
