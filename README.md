@@ -34,6 +34,23 @@ rustc 1.98.0
 The existing `/usr/bin/rustc` may remain installed. Ensure `$HOME/.cargo/bin`
 appears before `/usr/bin` in `PATH` so the rustup-managed toolchain is selected.
 
+## Configuration commands
+
+The included Horizon example can be validated and listed without starting any
+terminals:
+
+```bash
+cargo run -- --config examples/horizon.yaml check
+cargo run -- --config examples/horizon.yaml list
+```
+
+The command shape is `termdeck [--config PATH] [WORKSPACE|check|list]`. Without
+`--config`, Termdeck loads `$XDG_CONFIG_HOME/termdeck/config.yaml`, falling
+back to `$HOME/.config/termdeck/config.yaml`.
+
+`check` validates workspace roots, required terminal paths, and command argv
+arrays. Missing optional terminal paths are omitted by `list`.
+
 ## Current checks
 
 Once Rust 1.98.0 is installed:
