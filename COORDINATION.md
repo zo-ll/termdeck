@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: active — issue 1 ponytail correction running; issue 3 design preflight reviewed
+Status: active — issue 1 merged; decomposing the engine and UI wave
 
 ## Goal
 
@@ -11,7 +11,7 @@ live-preview-stack interface.
 
 | # | Title | Blocked by | Branch | Worker | Skills | PR | Status |
 |---|-------|------------|--------|--------|--------|----|--------|
-| [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | [#5](https://github.com/zo-ll/termdeck/pull/5) | ponytail correction in progress |
+| [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | [#5](https://github.com/zo-ll/termdeck/pull/5) | merged (`b880b60`) |
 | [2](https://github.com/zo-ll/termdeck/issues/2) | Native PTY and terminal engine | 1 | — | Codex | Rust | — | pending |
 | [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface | 1 | `coord/03-ui` | Claude Code via `claudep` (Opus/high) | ponytail | [draft #6](https://github.com/zo-ll/termdeck/pull/6) | blocked by 1; design preflight reviewed |
 | [4](https://github.com/zo-ll/termdeck/issues/4) | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
@@ -62,6 +62,10 @@ live-preview-stack interface.
   FakeEngine's three parallel state maps. Normal seam tracing also found no
   native-output drain method. Both narrow corrections were returned to Codex;
   PR #5 remains unmerged.
+- 2026-08-31: Ponytail re-review passed after `0691fd7` reduced FakeEngine by
+  three net lines and added the neutral event-drain seam. PR #5 was squash-
+  merged as `b880b60` under the user's conditional approval; 18 post-merge
+  tests passed. Issue #1 remains open for user-controlled closure.
 
 ## Durable resumption
 
