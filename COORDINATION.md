@@ -458,3 +458,7 @@ scope.
   renderer, ^g c + marker click, status/footer, collapsed-stack.txt fixture;
   screens 01-04 byte-identical; commit local, no push). R3 responsive
   follow-on explicitly NOT included.
+- 2026-09-01: #27 implementation committed by claude `eb28a42` (gate 106
+  tests, clean tree). NOTED: marker/chevron-click deferred (pending #26 which
+  has merged) — critic asked to rule blocking vs non-blocking against the
+  accepted spec. In critic review.
