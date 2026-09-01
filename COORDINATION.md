@@ -462,3 +462,8 @@ scope.
   tests, clean tree). NOTED: marker/chevron-click deferred (pending #26 which
   has merged) — critic asked to rule blocking vs non-blocking against the
   accepted spec. In critic review.
+- 2026-09-01: #27 critic verdict: BLOCK — geometry+snapshots land; marker/
+  chevron-click (spec H2 control) deferred despite #26 merged. Correction
+  routed to claude: integrate merged #26 into coord/27-collapse-stack (merge
+  origin/main, resolve conflicts), implement the marker-click per spec §2 on
+  the #26 mouse infra, gate green, commit local. Claude working.
