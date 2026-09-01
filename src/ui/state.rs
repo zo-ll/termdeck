@@ -30,6 +30,11 @@ pub enum Modal {
 /// `collapsed` is indexed by configured position rather than by slot, so a
 /// fold travels with its terminal: the export's "collapse state persists per
 /// workspace and survives promotion".
+///
+/// `stack_offset` is the index into `stack()` of the first preview the stack
+/// column draws. The list can hold more previews than the column has rows, so
+/// the column is a window onto it; the renderer clamps this to whatever the
+/// current geometry can reach, and nothing here needs to know the geometry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeckState {
     order: Vec<usize>,
@@ -39,6 +44,7 @@ pub struct DeckState {
     modal: Option<Modal>,
     demotion: Option<(usize, Timestamp)>,
     drag: Option<(usize, Option<usize>)>,
+    stack_offset: usize,
 }
 
 impl DeckState {
@@ -52,6 +58,7 @@ impl DeckState {
             modal: None,
             demotion: None,
             drag: None,
+            stack_offset: 0,
         }
     }
 
@@ -67,6 +74,22 @@ impl DeckState {
 
     pub fn zoomed(&self) -> bool {
         self.zoomed
+    }
+
+    /// Index into [`DeckState::stack`] of the first preview the stack column
+    /// draws.
+    pub fn stack_offset(&self) -> usize {
+        self.stack_offset
+    }
+
+    /// Scrolls the stack column's window to start at `offset`. The caller has
+    /// the rendered geometry and so owns the clamping; this only refuses an
+    /// offset with no preview left to show. Returns whether anything moved.
+    pub fn set_stack_offset(&mut self, offset: usize) -> bool {
+        let offset = offset.min(self.stack().len().saturating_sub(1));
+        let moved = offset != self.stack_offset;
+        self.stack_offset = offset;
+        moved
     }
 
     /// Whether the preview at this configured position is folded to a single
@@ -566,6 +589,30 @@ mod tests {
         apply(&mut state, ActionCommand::ToggleZoom);
 
         assert!(state.collapsed(2));
+    }
+
+    /// The window onto the preview list is state; how far it can travel is
+    /// geometry, so the renderer clamps it and this only refuses an offset
+    /// with no preview left to show.
+    #[test]
+    fn the_stack_window_starts_at_the_head_of_the_list_and_moves_by_offset() {
+        let mut state = DeckState::new(8);
+
+        assert_eq!(state.stack_offset(), 0);
+        assert!(state.set_stack_offset(3));
+        assert_eq!(state.stack_offset(), 3);
+        assert!(!state.set_stack_offset(3), "nothing moved");
+
+        assert!(state.set_stack_offset(99));
+        assert_eq!(state.stack_offset(), 6, "7 previews, so 6 is the last one");
+    }
+
+    #[test]
+    fn a_deck_with_no_stack_has_no_window_to_move() {
+        let mut state = DeckState::new(1);
+
+        assert!(!state.set_stack_offset(4));
+        assert_eq!(state.stack_offset(), 0);
     }
 
     #[test]

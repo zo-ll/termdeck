@@ -116,6 +116,23 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 });
                             }
                         }
+                        // One page of the preview list is rendered geometry,
+                        // so the window the renderer just drew answers it.
+                        Some(Reaction::PageStack(pages)) => {
+                            let window =
+                                Deck {
+                                    workspace: &workspace.name,
+                                    projects: &workspace.projects,
+                                    state: &deck,
+                                    home: None,
+                                    master_ratio: workspace.master_ratio.get(),
+                                    now: now(),
+                                }
+                                .stack_window(
+                                    ratatui::layout::Rect::new(0, 0, size.columns, size.rows),
+                                );
+                            deck.set_stack_offset(window.paged(pages));
+                        }
                         Some(Reaction::Respawn) => {
                             if let Some(active) = deck.active() {
                                 engine.dispatch(EngineCommand::Respawn {
@@ -132,25 +149,37 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     last_click = None;
                     marker_press = None;
                     if deck.modal().is_none() {
-                        let terminal = Deck {
-                            workspace: &workspace.name,
-                            projects: &workspace.projects,
-                            state: &deck,
-                            home: None,
-                            master_ratio: workspace.master_ratio.get(),
-                            now: now(),
-                        }
-                        .position_at(
-                            ratatui::layout::Rect::new(0, 0, size.columns, size.rows),
-                            pointer,
-                        )
-                        // A collapsed preview has no viewport, so there is
-                        // nothing under the pointer to scroll.
-                        .filter(|position| !deck.collapsed(*position))
-                        .and_then(|position| workspace.projects.get(position))
-                        .map(|project| project.terminal.clone());
+                        let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
+                        let (terminal, list) = {
+                            let pane = Deck {
+                                workspace: &workspace.name,
+                                projects: &workspace.projects,
+                                state: &deck,
+                                home: None,
+                                master_ratio: workspace.master_ratio.get(),
+                                now: now(),
+                            };
+                            let pointed = pane.position_at(area, pointer);
+                            let terminal = pointed
+                                // A collapsed preview has no viewport, so there
+                                // is nothing under the pointer to scroll.
+                                .filter(|position| !deck.collapsed(*position))
+                                .and_then(|position| workspace.projects.get(position))
+                                .map(|project| project.terminal.clone());
+                            // Off the previews, the wheel belongs to the list:
+                            // the gutter, the gaps and the footer page it.
+                            let list = (pointed.is_none() && pane.stack_scroll_at(area, pointer))
+                                .then(|| pane.stack_window(area));
+                            (terminal, list)
+                        };
                         if let Some(terminal) = terminal {
                             engine.dispatch(EngineCommand::Scroll { terminal, command });
+                        } else if let Some(window) = list {
+                            let items = match command {
+                                ScrollCommand::Up(_) => -1,
+                                _ => 1,
+                            };
+                            deck.set_stack_offset(window.scrolled(items));
                         }
                     }
                 }
