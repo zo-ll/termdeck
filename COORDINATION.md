@@ -239,3 +239,12 @@ scope.
   Protocol stands: worker/critic prompts the coordinator directly (primary) +
   marker file (record/sandbox fallback) + coordinator reads markers first
   thing every turn.
+- 2026-09-01: ALL MERGED (user authorization: merge when the critic passes —
+  all three passed). #17 squash-merged → `27375f2` (#8), #18 → `f732714`
+  (#12), #19 → `d81eaff` (#13; branch first rebased onto post-#18 main —
+  git dropped the duplicated 9606976 automatically — gate re-verified:
+  fmt/clippy clean, 59 tests). Post-merge main: fmt/clippy `-D warnings`
+  clean, 59 tests pass. Worker branches kept on the remote (user preference).
+  Issues #8/#12/#13 remain open for user-controlled closure; #9/#10 (native
+  engine) unblocked now (#8 in main); #14 (modal/input) unblocked (#12/#13 in
+  main); next wave: #9/#10 (codex) + #14 (claude).
