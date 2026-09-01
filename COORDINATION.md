@@ -372,3 +372,9 @@ scope.
   dispatched to codex (branch `coord/flaky-test`, worktree
   ~/.worktrees/termdeck/flaky-test): audit fixed sleeps → deadline-polls,
   comfortable real-shell deadlines, no assertion weakening, gate ×3.
+- 2026-09-01: Flaky-test hardening PASS (critic re-review; gate green 88 ×3,
+  parent re-verified). Committed `700b38d` → pushed `coord/flaky-test` → PR
+  #24 — ALL LOOSE ENDS CLOSED (scroll_marker kept by decision; deps
+  pre-warm fallback documented; flake hardened). Tracker DONE + loose ends
+  closed; only remaining actions are the user's PR approvals/merges (#23
+  awaiting? no — #23 merged; #24 new).
