@@ -177,6 +177,18 @@ scope.
   in `/tmp/shipwright/termdeck/events.log` (smoke-tested). Clauide adopted
   it while idle; codex/critic adopt from their next turn (in-flight turns not
   interrupted). `.scratch/` already gitignored — no repo change needed.
+- 2026-09-01: Critic verdicts: **#12 pass** (3 non-blocking) — already pushed,
+  PR #18 mergeable per user authorization. **#13 BLOCK** — one blocking
+  finding: the Starting lifecycle state is never rendered/asserted (only 4 of
+  5 states covered). Correction dispatched to claude (same session,
+  `correction-13.md`): add a focused Starting render+color test. Two
+  non-blocking #13 notes: `scroll_marker` chrome is not traceable to the
+  accepted supplement (user decides keep-vs-drop — it also edited the
+  already-reviewed `backend-promoted.txt`), and footer rule-row duplication
+  (cosmetic). #8 delta re-review in progress (critic, re-review mode on the
+  allow-removal + public-exposure change). Finish protocol WORKING live:
+  watcher logged claude's retroactive 13-ui-chrome marker (11:37:07, tagged
+  + timestamped).
 
 ## Durable resumption
 
