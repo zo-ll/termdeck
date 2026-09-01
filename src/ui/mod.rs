@@ -270,6 +270,14 @@ impl Deck<'_> {
     /// The stack footer names the promotion that just happened and the key
     /// that undoes it; otherwise it states the promotion keys.
     fn stack_hints(&self, demoted: Option<usize>) -> Vec<Span<'static>> {
+        if self.state.scrollback() {
+            return vec![
+                Span::styled("scrollback", Style::new().fg(WARNING)),
+                Span::styled(" · ", Style::new().fg(HINT)),
+                Span::styled("esc", Style::new().fg(PREVIEW_FG)),
+                Span::styled(" returns to live", Style::new().fg(HINT)),
+            ];
+        }
         let promoted = self
             .state
             .active()
@@ -417,9 +425,16 @@ impl Deck<'_> {
             PREVIEW_FG
         };
         let mut viewport = content;
-        if exited {
+        if pane.master() && self.state.scrollback() {
+            // The mode owns the pane foot while it is active.
+            viewport.height = content.height.saturating_sub(2);
+            self.scroll_footer(buffer, content, background);
+        } else if exited {
             viewport.height = content.height.saturating_sub(2);
             self.exit_footer(buffer, content, &status, &metadata, background);
+        } else if !pane.master() && metadata.scrollback.lines_above > 0 {
+            viewport.height = content.height.saturating_sub(1);
+            self.scroll_marker(buffer, content, &metadata, background);
         }
         if let Some(terminal) = engine.frame(id) {
             draw_terminal(buffer, viewport, terminal, default_fg, background);
@@ -528,6 +543,15 @@ impl Deck<'_> {
         metadata: &TerminalMetadata,
         pane: Pane,
     ) -> Vec<Span<'static>> {
+        if pane.master() && self.state.scrollback() {
+            return vec![Span::styled(
+                " SCROLL ",
+                Style::new()
+                    .fg(CANVAS)
+                    .bg(WARNING)
+                    .add_modifier(Modifier::BOLD),
+            )];
+        }
         if pane == Pane::Compact {
             return Vec::new();
         }
@@ -569,6 +593,62 @@ impl Deck<'_> {
             ],
             _ => vec![Span::styled(text, Style::new().fg(colour))],
         }
+    }
+
+    /// Rule plus the navigation keys at the pane foot, reusing the accepted
+    /// exited-pane pattern. Scroll position is stated once, in the status row,
+    /// so the footer carries the keys alone.
+    fn scroll_footer(&self, buffer: &mut Buffer, content: Rect, background: Color) {
+        if content.height < 2 {
+            return;
+        }
+        buffer.set_line(
+            content.x,
+            content.y + content.height - 2,
+            &Line::styled(
+                "─".repeat(content.width as usize),
+                Style::new().fg(SEPARATOR).bg(background),
+            ),
+            content.width,
+        );
+        let hint = Style::new().fg(HINT).bg(background);
+        let key = Style::new().fg(PREVIEW_FG).bg(background);
+        let mut spans = Vec::new();
+        // The last entry is help, which stays in the status bar.
+        for (index, (name, label)) in SCROLLBACK_HINTS[..4].iter().enumerate() {
+            if index > 0 {
+                spans.push(Span::styled(" · ", hint));
+            }
+            spans.push(Span::styled(*name, key));
+            spans.push(Span::styled(format!(" {label}"), hint));
+        }
+        buffer.set_line(
+            content.x,
+            content.y + content.height - 1,
+            &Line::from(spans),
+            content.width,
+        );
+    }
+
+    /// `↑ 214 lines above · ^g [` on a pane holding a detached viewport. A
+    /// promoted terminal keeps its scroll position, so a demoted preview says
+    /// how far back it is sitting.
+    fn scroll_marker(
+        &self,
+        buffer: &mut Buffer,
+        content: Rect,
+        metadata: &TerminalMetadata,
+        background: Color,
+    ) {
+        buffer.set_line(
+            content.x,
+            content.y + content.height - 1,
+            &Line::styled(
+                format!("↑ {} lines above · ^g [", metadata.scrollback.lines_above),
+                Style::new().fg(HINT).bg(background),
+            ),
+            content.width,
+        );
     }
 
     /// Rule plus `exited · code 1 · {time} · r restart` at the pane foot.
@@ -657,7 +737,16 @@ impl Deck<'_> {
                 Span::styled(format!("  {total} terminal{}   ", plural(total)), hint),
                 Span::styled(active, Style::new().fg(PREVIEW_FG).bg(STATUS_BG)),
             ];
-            if layout == Layout::Zoom {
+            if self.state.scrollback() {
+                spans.push(Span::styled("  ·  ", hint));
+                spans.push(Span::styled(
+                    "SCROLLBACK",
+                    Style::new().fg(WARNING).bg(STATUS_BG),
+                ));
+                if let Some((line, total)) = self.scroll_position(engine) {
+                    spans.push(Span::styled(format!("  ·  line {line}/{total}"), hint));
+                }
+            } else if layout == Layout::Zoom {
                 spans.push(Span::styled("  ·  hidden: ", hint));
                 spans.extend(self.hidden_summary(engine));
             } else {
@@ -669,13 +758,30 @@ impl Deck<'_> {
             }
             Line::from(spans)
         };
+        let taken = left.width() as u16;
         buffer.set_line(area.x + PADDING, area.y, &left, area.width);
 
-        let right = self.key_hints(layout);
-        let width = right.width() as u16;
-        if width + PADDING <= area.width {
-            buffer.set_line(area.x + area.width - PADDING - width, area.y, &right, width);
+        // Keys outlive their labels: take the widest form that still clears
+        // the left text by a two-column gap.
+        for right in self.key_hints(layout) {
+            let width = right.width() as u16;
+            if taken + width + 2 * PADDING + 2 <= area.width {
+                buffer.set_line(area.x + area.width - PADDING - width, area.y, &right, width);
+                break;
+            }
         }
+    }
+
+    /// `line 2217/2431`: the last visible line, and every retained line.
+    fn scroll_position(&self, engine: &dyn TerminalEngine) -> Option<(u32, u32)> {
+        let project = self
+            .state
+            .active()
+            .and_then(|position| self.projects.get(position))?;
+        let frame = engine.frame(&project.terminal)?;
+        let scrollback = self.metadata(engine, project).scrollback;
+        let line = scrollback.lines_above + u32::from(frame.size.rows);
+        Some((line, line + scrollback.lines_below))
     }
 
     /// `1 exited`, or `all running` when every terminal is alive.
@@ -725,41 +831,68 @@ impl Deck<'_> {
         spans
     }
 
-    /// The status bar drops shortcut labels before keys, per the export's
-    /// responsive rule.
-    fn key_hints(&self, layout: Layout) -> Line<'static> {
+    /// Candidate hint rows, widest first. The status bar drops shortcut
+    /// labels before keys and then collapses, per the export's responsive
+    /// rule; the caller takes the first one that fits.
+    fn key_hints(&self, layout: Layout) -> Vec<Line<'static>> {
+        // A mode states its own keys: nothing else is reachable while it runs.
+        if self.state.scrollback() {
+            return vec![
+                self.hints(&SCROLLBACK_HINTS, layout, true),
+                self.hints(&SCROLLBACK_HINTS, layout, false),
+            ];
+        }
+        let collapsed = Line::from(vec![
+            Span::styled("^g", Style::new().fg(PREVIEW_FG).bg(STATUS_BG)),
+            Span::styled(
+                " j/k · 1-4 · z · [ · ? · q",
+                Style::new().fg(HINT).bg(STATUS_BG),
+            ),
+        ]);
+        if layout == Layout::Narrow {
+            return vec![collapsed];
+        }
+        vec![
+            self.hints(&KEY_HINTS, layout, true),
+            self.hints(&KEY_HINTS, layout, false),
+            collapsed,
+        ]
+    }
+
+    fn hints(&self, entries: &[(&str, &str)], layout: Layout, labels: bool) -> Line<'static> {
         let hint = Style::new().fg(HINT).bg(STATUS_BG);
         let key = Style::new().fg(PREVIEW_FG).bg(STATUS_BG);
-        if layout == Layout::Narrow {
-            return Line::from(vec![
-                Span::styled("^g", key),
-                Span::styled(" j/k · 1-4 · z · [ · ? · q", hint),
-            ]);
-        }
         let mut spans = Vec::new();
-        for (index, (name, label)) in KEY_HINTS.iter().enumerate() {
+        for (index, (name, label)) in entries.iter().enumerate() {
             if index > 0 {
                 spans.push(Span::styled("  ", hint));
             }
             // Zoom names its own exit and takes the accent while it is on.
             let zoom = layout == Layout::Zoom && *name == "^g z";
             spans.push(Span::styled(
-                *name,
+                (*name).to_owned(),
                 if zoom {
                     Style::new().fg(ACCENT).bg(STATUS_BG)
                 } else {
                     key
                 },
             ));
-            spans.push(Span::styled(
-                format!(" {}", if zoom { "unzoom" } else { *label }),
-                if zoom { key } else { hint },
-            ));
+            if labels {
+                spans.push(Span::styled(
+                    format!(" {}", if zoom { "unzoom" } else { *label }),
+                    if zoom { key } else { hint },
+                ));
+            }
         }
         Line::from(spans)
     }
 
     fn place_cursor(&self, engine: &dyn TerminalEngine, frame: &mut Frame, master: Rect) {
+        // The scrollback viewport is detached from the live tail, so there is
+        // no cursor to draw.
+        if self.state.scrollback() {
+            return;
+        }
         let Some(project) = self
             .state
             .active()
@@ -807,6 +940,16 @@ fn clear_around(spans: Vec<Span<'static>>, style: Style) -> Vec<Span<'static>> {
     padded.push(Span::styled(" ", style));
     padded
 }
+
+/// Navigation keys captured while scrollback mode is active. The first four
+/// are the pane footer; the whole list is the status bar.
+const SCROLLBACK_HINTS: [(&str, &str); 5] = [
+    ("j/k ↑↓", "line"),
+    ("pgup/pgdn", "page"),
+    ("g/G", "ends"),
+    ("esc", "live"),
+    ("^g ?", "help"),
+];
 
 const KEY_HINTS: [(&str, &str); 6] = [
     ("^g j/k", "switch"),
@@ -1200,6 +1343,128 @@ mod tests {
         let (buffer, _) = render(&engine, &DeckState::new(4), (144, 42));
 
         assert!(text(&buffer).contains("3 stacked  ·  all running"));
+    }
+
+    fn scrolling() -> DeckState {
+        let mut state = DeckState::new(4);
+        state.apply(
+            &ActionCommand::ToggleScrollback,
+            &fixture::projects(),
+            fixture::NOW,
+        );
+        state
+    }
+
+    #[test]
+    fn scrollback_matches_the_supplement_canvas() {
+        let (buffer, cursor) = render(&fixture::scrolled(), &scrolling(), (144, 42));
+
+        assert_snapshot("scrollback", &buffer);
+        // The viewport is detached from the live tail, so no cursor is drawn:
+        // the backend keeps the origin it started at.
+        assert_eq!(cursor, Some(Position::new(0, 0)));
+    }
+
+    #[test]
+    fn scrollback_is_a_mode_of_the_master_pane_only() {
+        let (buffer, _) = render(&fixture::scrolled(), &scrolling(), (144, 42));
+        let screen = text(&buffer);
+
+        // The stack stays visible and live: only zoom hides it.
+        assert_eq!(screen.matches('┌').count(), 4, "{screen}");
+        assert!(screen.contains(" SCROLL "), "{screen}");
+        assert!(
+            screen.contains("j/k ↑↓ line · pgup/pgdn page · g/G ends · esc live"),
+            "{screen}"
+        );
+        assert!(
+            screen.contains("scrollback · esc returns to live"),
+            "{screen}"
+        );
+        // Stated once: the mode tag in the title, the keys in the footer, and
+        // the absolute position in the status row.
+        assert!(screen.contains("SCROLLBACK  ·  line 2217/2431"), "{screen}");
+        assert_eq!(screen.matches("2217/2431").count(), 1, "{screen}");
+        // The mode tag is warning, not accent, so it does not read as focus.
+        assert_eq!(buffer[(88u16, 0u16)].bg, WARNING);
+    }
+
+    #[test]
+    fn leaving_scrollback_returns_to_live_output() {
+        let mut state = scrolling();
+        state.apply(
+            &ActionCommand::ToggleScrollback,
+            &fixture::projects(),
+            fixture::NOW,
+        );
+
+        let (live, cursor) = render(&fixture::scrolled(), &state, (144, 42));
+
+        assert!(!text(&live).contains(" SCROLL "));
+        assert_eq!(cursor, Some(Position::new(3, 29)));
+    }
+
+    #[test]
+    fn a_starting_terminal_renders_the_warning_ring_and_its_label() {
+        let mut engine = fixture::frontend_active();
+        engine.set_status(&TerminalId::new("frontend"), TerminalStatus::Starting);
+
+        let (buffer, _) = render(&engine, &DeckState::new(4), (144, 42));
+        let screen = text(&buffer);
+
+        // A wide master names the state it is in.
+        assert!(
+            screen.contains("> 1 frontend  ·  ~/idp/frontend  ·  ○ starting"),
+            "{screen}"
+        );
+        // The ring is warning, not the accent a running master takes, and the
+        // label follows the glyph's colour.
+        let ring = (0..144u16)
+            .find(|column| buffer[(*column, 0u16)].symbol() == "○")
+            .expect("the master title carries the starting ring");
+        assert_eq!(buffer[(ring, 0u16)].fg, WARNING);
+        assert_eq!(buffer[(ring + 2, 0u16)].fg, WARNING);
+        assert_eq!(buffer[(ring + 2, 0u16)].symbol(), "s");
+
+        // A preview shows the ring alone: the border resumes right after it.
+        let mut engine = fixture::frontend_active();
+        engine.set_status(&TerminalId::new("backend"), TerminalStatus::Starting);
+        let screen = text(&render(&engine, &DeckState::new(4), (144, 42)).0);
+
+        assert!(screen.contains("2 backend · …/backend · ○ ───"), "{screen}");
+    }
+
+    #[test]
+    fn a_preview_holding_history_says_how_far_back_it_is() {
+        let (buffer, _) = render(&fixture::backend_promoted(), &promote(1), (144, 42));
+
+        assert!(
+            text(&buffer).contains("↑ 214 lines above · ^g ["),
+            "{}",
+            text(&buffer)
+        );
+    }
+
+    #[test]
+    fn the_status_bar_drops_labels_before_keys_then_collapses() {
+        let state = DeckState::new(4);
+
+        let labelled = render(&fixture::frontend_active(), &state, (144, 42)).0;
+        let keys_only = render(&fixture::frontend_active(), &state, (128, 42)).0;
+        let collapsed = render(&fixture::frontend_active(), &state, (100, 42)).0;
+
+        assert!(text(&labelled).contains("^g j/k switch  ^g 1-4 select"));
+        let keys = text(&keys_only);
+        assert!(
+            keys.contains("^g j/k  ^g 1-4  ^g z  ^g [  ^g ?  ^g q"),
+            "{keys}"
+        );
+        assert!(!keys.contains("switch"), "{keys}");
+        assert!(
+            text(&collapsed).contains("^g j/k · 1-4 · z · [ · ? · q"),
+            "{}",
+            text(&collapsed)
+        );
     }
 
     #[test]

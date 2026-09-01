@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use crate::{
     contracts::{
         CellContent, CellStyle, CellWidth, Elapsed, ProcessInfo, Project, Rgb, ScreenCell,
-        ScreenSize, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
+        ScreenSize, ScrollbackPosition, TerminalFrame, TerminalId, TerminalMetadata,
+        TerminalStatus, Timestamp,
     },
     engine::FakeEngine,
 };
@@ -135,7 +136,14 @@ fn engine(master: &str) -> FakeEngine {
     paint(&mut frame, 7, 13, 22, plain(0x7a, 0xa2, 0xf7));
     engine.set_frame(frame);
     engine.set_status(&frontend, TerminalStatus::Running);
-    engine.set_metadata(&frontend, running(12_000, 4_207_331, 41_233));
+    engine.set_metadata(
+        &frontend,
+        frontend_metadata(ScrollbackPosition {
+            // The export's demoted preview: history above, sitting at the tail.
+            lines_above: 214,
+            lines_below: 0,
+        }),
+    );
 
     let backend = TerminalId::new("backend");
     engine.set_frame(screen(&backend, size(&backend), BACKEND));
@@ -164,6 +172,27 @@ fn engine(master: &str) -> FakeEngine {
     engine.set_metadata(&worker, running(384_000, 2_044, 41_255));
 
     engine
+}
+
+/// Reference screen 07: the master pane detached at line 2217 of 2431. The
+/// frame is 38 rows, so 2179 retained lines sit above it and 214 below.
+pub fn scrolled() -> FakeEngine {
+    let mut engine = frontend_active();
+    engine.set_metadata(
+        &TerminalId::new("frontend"),
+        frontend_metadata(ScrollbackPosition {
+            lines_above: 2_179,
+            lines_below: 214,
+        }),
+    );
+    engine
+}
+
+fn frontend_metadata(scrollback: ScrollbackPosition) -> TerminalMetadata {
+    TerminalMetadata {
+        scrollback,
+        ..running(12_000, 4_207_331, 41_233)
+    }
 }
 
 pub fn home() -> &'static Path {
