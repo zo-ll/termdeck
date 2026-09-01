@@ -1,4 +1,4 @@
-┌─ > 2 backend  ·  ~/idp/backend  ·  ● running  ·  uv run api ───────────────── [##····] MASTER ─┐  ┌─ 1 frontend · …/frontend · ● ─ [####··] ─┐
+┌─ > 2 backend  ·  ~/idp/backend  ·  ● running  ·  uv run api ───────────────── [##····] MASTER ─┐  ┌─ ▾ 1 frontend · …/fronte… · ●  [####··] ─┐
 │    INFO  Server running on                                                                     │  │  $ pnpm dev                              │
 │          [http://127.0.0.1:8000]                                                               │  │                                          │
 │                                                                                                │  │  > idp-frontend@0.4.2 dev                │
@@ -11,7 +11,7 @@
 │                                                                                                │  │  ↑ 214 lines above · ^g [                │
 │                                                                                                │  └──────────────────────────────────────────┘
 │                                                                                                │                                              
-│                                                                                                │  ┌─ 3 app · …/app · ✕ exit 1 ────── 2m ago ─┐
+│                                                                                                │  ┌─ ▾ 3 app · …/app · ✕ exit 1 ──── 2m ago ─┐
 │                                                                                                │  │  > idp-app@0.2.1 dev                     │
 │                                                                                                │  │  > expo start --dev-client               │
 │                                                                                                │  │                                          │
@@ -24,7 +24,7 @@
 │                                                                                                │  │  exited · code 1 · 12:04:02 · r restart  │
 │                                                                                                │  └──────────────────────────────────────────┘
 │                                                                                                │                                              
-│                                                                                                │  ┌─ 4 worker · …/backend · ○ ───── idle 6m ─┐
+│                                                                                                │  ┌─ ▾ 4 worker · …/backend · ○ ─── idle 6m ─┐
 │                                                                                                │  │    INFO  Processing jobs from the        │
 │                                                                                                │  │          [default] queue.                │
 │                                                                                                │  │                                          │

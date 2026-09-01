@@ -1,4 +1,4 @@
-┌─ > 1 frontend  ·  ~/idp/frontend  ·  ● running  ·  pnpm dev ───────────────── [####··] MASTER ─┐  ┌─ 2 backend · …/backend · ● ─── [##····] ─┐
+┌─ > 1 frontend  ·  ~/idp/frontend  ·  ● running  ·  pnpm dev ───────────────── [####··] MASTER ─┐  ┌─ ▾ 2 backend · …/backend · ● ─ [##····] ─┐
 │  $ pnpm dev                                                                                    │  │    INFO  Server running on               │
 │                                                                                                │  │          [http://127.0.0.1:8000]         │
 │  > idp-frontend@0.4.2 dev                                                                      │  │                                          │
@@ -11,7 +11,7 @@
 │    ➜  press h + enter to show help      ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                         │
 │                                         │                                                          │─────────────────────────────────────────┘
 │  12:03:58 [vite] page reload src/main.ts│  NAVIGATE                                                │                                          
-│  12:04:12 [vite] hmr update /src/routes/│  ^g j  ^g k       promote next / previous                │ 3 app · …/app · ✕ exit 1 ────── 2m ago ─┐
+│  12:04:12 [vite] hmr update /src/routes/│  ^g j  ^g k       promote next / previous                │ ▾ 3 app · …/app · ✕ exit 1 ──── 2m ago ─┐
 │  12:04:12 [vite] hmr update /src/styles/│  ^g ↓  ^g ↑       same, with arrow keys                  │ > idp-app@0.2.1 dev                     │
 │  12:04:29 [vite] hmr update /src/routes/│  ^g 1 … ^g 4      promote by configured position         │ > expo start --dev-client               │
 │  12:04:41 [vite] optimized dependencies │                                                          │                                         │
@@ -24,7 +24,7 @@
 │  12:05:17 [vite] hmr update /src/compone│  ^g r             respawn active terminal                │ exited · code 1 · 12:04:02 · r restart  │
 │  12:05:33 [vite] hmr update /src/compone│  ^g ^g            send a literal ^g                      │─────────────────────────────────────────┘
 │  12:05:58 [vite] hmr update /src/routes/│                                                          │                                          
-│  12:06:04 [vite] hmr invalidate /src/hoo│  SESSION                                                 │ 4 worker · …/backend · ○ ───── idle 6m ─┐
+│  12:06:04 [vite] hmr invalidate /src/hoo│  SESSION                                                 │ ▾ 4 worker · …/backend · ○ ─── idle 6m ─┐
 │  12:06:04 [vite] page reload src/hooks/u│  ^g ?             this help                              │   INFO  Processing jobs from the        │
 │  12:06:11 [vite] hmr update /src/routes/│  ^g q             quit termdeck                          │         [default] queue.                │
 │                                         │                                                          │                                         │
