@@ -159,6 +159,13 @@ scope.
   #17. Claude was told to HOLD and not start #14 (unauthorized; #14 waits for
   #12/#13 passes → merges). #13 handed to the critic for local review
   (`/tmp/shipwright/termdeck/critic/review-13.md`).
+- 2026-09-01: USER: once the critic passes the pushed PRs, they may be
+  merged; and the `#[allow(dead_code)]` on `pub(crate) mod pty` must be
+  removed. Correction forwarded to codex (same session,
+  `correction-allow-dead-code.md`): remove the attribute, keep the gate green
+  with the smallest real resolution, commit locally, no push. After codex
+  hands back, the critic re-checks ONLY the delta (re-review mode), then the
+  coordinator pushes the amended `coord/08-pty-transport` (PR #17).
 
 ## Durable resumption
 
