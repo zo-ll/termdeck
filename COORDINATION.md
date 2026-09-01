@@ -338,3 +338,9 @@ scope.
   hint at a newer `permissions`/`PermissionProfile` model — re-investigate
   when codex is idle (or fallback: pre-warm new deps into the shared cargo
   cache from the coordinator shell so sandboxed builds resolve offline).
+- 2026-09-01: Critic verdict on #4: BLOCK (handback) — composition and
+  signal-safe shutdown sound, gate 88 tests, but WSL_ACCEPTANCE.md lacks the
+  required idle-CPU (<2%) acceptance step from PLAN.md. Correction routed to
+  codex (same session, correction-4.md): add ONLY the idle-CPU step, keep gate
+  green, real marker timestamp this time. Final slice; on re-review pass →
+  commit → push → PR → then #2/#3 epics close.
