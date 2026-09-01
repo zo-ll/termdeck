@@ -322,3 +322,11 @@ scope.
   `coord/10-native-lifecycle` → PR #22, awaiting user approval. #4 (production
   integration) is the only remaining slice — both epics' slices now merged
   (#1/#7/#8/#9/#10 engine; #11/#12/#13/#14 UI); once #22 merges, #4 unblocks.
+- 2026-09-01: #22 merged (`d0e4a0c`, gate 87 tests) — #10 CLOSED. #4
+  (production integration, FINAL slice) dispatched to codex: worktree
+  ~/.worktrees/termdeck/04-production-integration, branch
+  `coord/04-production-integration` off main `d0e4a0c`; brief covers
+  composition-root wiring (real session: master + live previews), e2e
+  promotion/zoom/scrollback/resize/Ctrl+C/respawn, invalid-config-fails-
+  before-partial-startup, terminal restoration on exit/signals/panics,
+  documented WSL manual acceptance. Codex window replaced and working.
