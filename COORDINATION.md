@@ -473,3 +473,10 @@ scope.
 - 2026-09-01: #27 re-review PASS (marker click landed; gate 114). Pushed
   coord/27-collapse-stack → PR #30, awaiting user approval. Close of the
   mouse/collapse feature set once merged.
+- 2026-09-01: User test findings — 4 issues opened: #31 wheel-scroll no live
+  prompt (→ codex, coord/31-scroll-live, dispatched); #32 collapse control
+  undiscoverable (→ claude, coord/32-collapse-discoverability, dispatched,
+  always-visible markers + help hint); #33 animations (feature/design-first,
+  needs user decision); #34 open ALL projects at once (config scope + the v1
+  1-4 terminal cap — needs user decision on how many). #31/#32 workers
+  working.
