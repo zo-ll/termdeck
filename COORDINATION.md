@@ -380,3 +380,12 @@ scope.
   awaiting? no — #23 merged; #24 new).
 - 2026-09-01: FINAL. #24 merged (`f456508`) — final main: fmt/clippy clean,
   88 tests. Zero open issues, zero loose ends. Coordinated run complete.
+- 2026-09-01: Post-delivery finding ("screens not scrollable") investigated
+  live (smoke window). VERIFIED: scrolling WORKS on the active/master
+  terminal via `Ctrl+g [` then j/k/arrows/PgUp/PgDn/g/G — content pans and
+  the `line N/M` position label tracks correctly (122→119). Stacked PREVIEWS
+  are read-only (only an "↑ N lines above" tag) — by design. Mouse wheel is
+  intentionally NOT forwarded (v1 scope). Live-mode PgUp does nothing outside
+  scrollback mode. Clean quit (`Ctrl+g q` → y) closed the app with NO orphaned
+  shells. No code bug confirmed; awaiting user's expected behavior to decide
+  if a UX/enhancement slice is wanted.
