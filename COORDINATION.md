@@ -220,3 +220,9 @@ scope.
   critic pass covers them (both #8 commits reviewed pass). #13 correction
   (claude `678a4dc`, Starting-state test, 57 tests) re-review dispatched to
   the critic; merge of #13 PR follows its pass.
+- 2026-09-01: DIRECT PING PROVEN live — the critic's mini-prompt
+  (`critic: finished 13-ui-chrome-critic-rereview pass …`) arrived in the
+  coordinator conversation and was acted on without polling. #13 re-review
+  PASS (Starting asserted in 678a4dc; gate 57 tests, parent re-verified).
+  Pushed `coord/13-ui-chrome` → PR #19. All three slices now review-passed:
+  #8 (PR #17), #12 (PR #18), #13 (PR #19) — each mergeable on user approval.
