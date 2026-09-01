@@ -494,3 +494,7 @@ scope.
   approval. #32 in flight (claude).
 - 2026-09-01: #32 done (claude, `48ab5d3`: always-visible markers + help ^g c;
   gate 116) — in critic review.
+- 2026-09-01: #32 critic PASS → pushed → PR #36 R awaiting approval. #34a
+  (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
+  #34b (scrollable stack list, UI) next — awaiting user choice (design-first
+  vs direct) but queued to claude.
