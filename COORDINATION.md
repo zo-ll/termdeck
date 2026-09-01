@@ -317,3 +317,8 @@ scope.
   script + detached-mode docs in the coordinator skill (scripts/relay.sh,
   pushed). Detached delivery verified. Tmux layout: coordinator, codex,
   claude, critic only.
+- 2026-09-01: #10 critic review PASS (ping landed; gate 87 tests). Delta
+  committed `3355b12` (codex sandbox cannot commit) → pushed
+  `coord/10-native-lifecycle` → PR #22, awaiting user approval. #4 (production
+  integration) is the only remaining slice — both epics' slices now merged
+  (#1/#7/#8/#9/#10 engine; #11/#12/#13/#14 UI); once #22 merges, #4 unblocks.
