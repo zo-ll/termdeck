@@ -402,3 +402,9 @@ scope.
   loop (codex's lane). #25 already dispatched to codex; #26 queued to codex
   after #25 (same worker; codex will flag any UI-rendering piece for Claude).
   Notes left on #25 (wheel behavior decided: all panes).
+- 2026-09-01: #25 investigation done (codex: no bug — keyboard scrollback works
+  as designed; the gap is the absent mouse). User DECIDED wheel-scroll on all
+  panes → dispatched to codex as a feature (followup-wheel.md): crossterm
+  mouse capture (torn down on exit), session dispatches engine Scroll to the
+  hit-tested pane, renderer hit-testing, keyboard scrollback unchanged. #26
+  (drag-drop) queues after. codex working.
