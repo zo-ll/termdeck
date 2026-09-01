@@ -488,3 +488,5 @@ scope.
 - 2026-09-01: #33 (animations) parked by user (library answer given: tweening +
   render tick, no full ratatui animation framework). Focus: #31/#32 in flight;
   #34a/#34b queued.
+- 2026-09-01: #31 done (codex; wheel input returns live viewport to tail;
+  gate 115) — in critic review. #32 still in flight (claude).
