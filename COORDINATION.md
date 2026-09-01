@@ -277,3 +277,12 @@ scope.
   re-fires or multiline injection). Self-test verified (DELIVER logged);
   codex onboarded and confirmed. FINISH-PROTOCOL.md + coordinator skill Phase
   5b updated. PRs #20/#21 remain open awaiting user merge approval.
+- 2026-09-01: WORKFLOW RELOCATION (user: the workflow is not termdeck-specific
+  — the shared machinery must not live under the repo-scoped state dir).
+  Moved into the coordinator skill (home: ~/.pi/agent/skills/coordinator →
+  /home/andrea/personal/skills/coordinator, committed there):
+  `references/finish-protocol.md` (authoritative protocol), `scripts/relay.sh`
+  (inbox relay), global inbox `/tmp/shipwright/inbox/`, relay log
+  `/tmp/shipwright/relay.log`. Repo-scoped copies deleted; codex re-onboarded
+  with the global path (confirmed). Per-task state stays per shipwright
+  convention under /tmp/shipwright/termdeck/<task>/.
