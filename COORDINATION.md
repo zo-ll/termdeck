@@ -427,3 +427,6 @@ scope.
   #27 collapse remains parked (no claude dispatch). Codex window replaced.
 - 2026-09-01: #26 done (codex; drag-drop swap + double-click promote via frozen
   actions; gate 92 tests). Handed to the critic for local review.
+- 2026-09-01: #26 critic PASS (gate 92 tests). Committed `112b1a5` → pushed
+  `coord/26-mouse-actions` → PR #29, awaiting user approval. #27 collapse
+  parked pending user's Claude design step.
