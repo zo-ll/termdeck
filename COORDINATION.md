@@ -417,3 +417,7 @@ scope.
   mean reducing the stack's height, master taller, not hiding previews) is
   PARKED (not dispatched to anyone). #25 (codex wheel, 89 tests green) handed
   to the critic for local review.
+- 2026-09-01: #25 critic PASS (wheel + mouse teardown, 89 tests). Committed
+  `39935bc` → pushed `coord/25-scrollback` → PR #28, awaiting user approval.
+  #26 (mouse gestures: drag-drop + double-click) still queued to codex;
+  #27 (collapse stack height) parked (no claude dispatch).
