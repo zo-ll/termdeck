@@ -248,3 +248,10 @@ scope.
   Issues #8/#12/#13 remain open for user-controlled closure; #9/#10 (native
   engine) unblocked now (#8 in main); #14 (modal/input) unblocked (#12/#13 in
   main); next wave: #9/#10 (codex) + #14 (claude).
+- 2026-09-01: Issues #1, #8, #12, #13 CLOSED (user request; comments reference
+  their merges). Next wave dispatched: #9 (one-terminal native engine) →
+  codex in `~/.worktrees/termdeck/09-native-engine` (`coord/09-native-engine`),
+  #14 (modal + input modes) → claude in `~/.worktrees/termdeck/14-modal-input`
+  (`coord/14-modal-input`); both worktrees off `origin/main` (`30d6eb7`), both
+  briefs carry the finish protocol v4 (direct ping + marker + commit-local
+  no-push). Old worker windows replaced; critic pane retained for reviews.
