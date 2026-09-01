@@ -523,3 +523,8 @@ scope.
 - 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
   once: cap lift + scrollable stack live). Release binary rebuilt +
   reinstalled. Open tracker: only #33 (animations, parked).
+- 2026-09-01 (end of day): USER change — stack previews COLLAPSED BY DEFAULT,
+  expand via marker click (inverts #27/#32). Issue #39 opened; dispatched to
+  claude (coord/35-collapsed-default): default folded strips, markers show ▸
+  from frame one, ^g c = toggle-all/expand-all, deliberate snapshot
+  re-blessing per fixture (honesty enforced by the critic).
