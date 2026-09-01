@@ -311,3 +311,9 @@ scope.
   frame/scrollback preservation + respawn, SIGTERM→2s→SIGKILL shutdown, no
   owned processes/threads after shutdown. Codex window replaced (was #9) and
   working.
+- 2026-09-01: Relay moved to DETACHED background process (user: no visible
+  window needed as long as logs are inspectable). pid recorded at
+  /tmp/shipwright/relay.pid; activity logged at /tmp/shipwright/relay.log;
+  script + detached-mode docs in the coordinator skill (scripts/relay.sh,
+  pushed). Detached delivery verified. Tmux layout: coordinator, codex,
+  claude, critic only.
