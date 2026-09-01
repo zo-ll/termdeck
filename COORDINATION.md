@@ -430,3 +430,11 @@ scope.
 - 2026-09-01: #26 critic PASS (gate 92 tests). Committed `112b1a5` → pushed
   `coord/26-mouse-actions` → PR #29, awaiting user approval. #27 collapse
   parked pending user's Claude design step.
+- 2026-09-01: User replaced the design mockups (Windows Desktop zip →
+  repo reference) with collapsed-stack states; reference synced into
+  docs/design/termdeck/reference/ (commit 438bff8) — the updated visual
+  authority. #27 DESIGN phase dispatched to CLAUDE (supersedes the earlier
+  "no claude dispatch" hold for this task): study the new reference, produce
+  docs/design/termdeck/collapse-stack.md spec (geometry/control/states/
+  interplay/edges/what-to-implement), design-only. Claude working in
+  coord/27-collapse-stack. #29 (mouse actions) pending merge approval.
