@@ -408,3 +408,7 @@ scope.
   mouse capture (torn down on exit), session dispatches engine Scroll to the
   hit-tested pane, renderer hit-testing, keyboard scrollback unchanged. #26
   (drag-drop) queues after. codex working.
+- 2026-09-01: #26 retitled/expanded (user): "Mouse pane actions — drag-drop
+  swap + double-click promote". Folds double-click-to-promote into the same
+  mouse slice (shared capture + hit-testing with #25); gestures dispatch the
+  existing frozen SelectPosition/Promote actions. Queues to codex after #25.
