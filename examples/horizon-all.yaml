@@ -1,0 +1,45 @@
+version: 1
+
+defaults:
+  command: ["/bin/bash", "-l"]
+  scrollback: 10000
+  master_ratio: 0.70
+
+workspaces:
+  horizon:
+    root: /home/andrea/helper-horizonweb/projects
+    terminals:
+      - name: fr-car
+        cwd: frontends/car
+      - name: fr-cmf
+        cwd: frontends/cmf
+      - name: fr-doc
+        cwd: frontends/doc
+      - name: fr-euv
+        cwd: frontends/euv
+      - name: fr-ibs
+        cwd: frontends/ibs
+      - name: fr-idp
+        cwd: frontends/idp
+      - name: fr-iqc
+        cwd: frontends/iqc
+      - name: fr-pdf
+        cwd: frontends/pdf
+      - name: ba-car
+        cwd: backends/car
+      - name: ba-cmf
+        cwd: backends/cmf
+      - name: ba-doc
+        cwd: backends/doc
+      - name: ba-euv
+        cwd: backends/euv
+      - name: ba-ibs
+        cwd: backends/ibs
+      - name: ba-idp
+        cwd: backends/idp
+      - name: ba-iqc
+        cwd: backends/iqc
+      - name: ba-pdf
+        cwd: backends/pdf
+      - name: ba-test
+        cwd: backends/test
