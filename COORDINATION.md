@@ -421,3 +421,7 @@ scope.
   `39935bc` → pushed `coord/25-scrollback` → PR #28, awaiting user approval.
   #26 (mouse gestures: drag-drop + double-click) still queued to codex;
   #27 (collapse stack height) parked (no claude dispatch).
+- 2026-09-01: #26 (drag-drop swap + double-click promote) DISPATCHED to codex
+  (coord/26-mouse-actions off main 43f2f48). Builds on #25's mouse capture +
+  hit-testing; dispatches existing frozen actions; no contracts changes.
+  #27 collapse remains parked (no claude dispatch). Codex window replaced.
