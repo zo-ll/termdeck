@@ -156,9 +156,9 @@ fn validate(raw: RawConfig, source: &Path) -> Result<Config, ConfigError> {
                 workspace.root.display()
             )));
         }
-        if workspace.terminals.is_empty() || workspace.terminals.len() > 4 {
+        if workspace.terminals.is_empty() {
             return Err(ConfigError::new(format!(
-                "{}: workspace '{name}' must define between 1 and 4 terminals",
+                "{}: workspace '{name}' must define at least one terminal",
                 source.display()
             )));
         }
@@ -307,6 +307,40 @@ mod tests {
             error
                 .to_string()
                 .contains("terminal 'frontend' path does not exist")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepts_more_than_four_terminals() {
+        let root = test_root();
+        let terminals = (0..8)
+            .map(|index| {
+                let name = format!("terminal-{index}");
+                fs::create_dir_all(root.join(&name)).unwrap();
+                format!("      - name: {name}\n        cwd: {name}\n")
+            })
+            .collect::<String>();
+        let config = write_config(&root, &terminals);
+
+        let loaded = load(config).unwrap();
+
+        assert_eq!(loaded.workspaces["test"].projects.len(), 8);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_an_empty_workspace() {
+        let root = test_root();
+        fs::create_dir(&root).unwrap();
+        let config = write_config(&root, "      []\n");
+
+        let error = load(config).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("workspace 'test' must define at least one terminal")
         );
         fs::remove_dir_all(root).unwrap();
     }

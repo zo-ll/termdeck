@@ -11,7 +11,6 @@ use crate::{
     engine::{PtyEvent, PtyTransport, VtFrameAdapter},
 };
 
-const MAX_TERMINALS: usize = 4;
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
 struct NativeTerminal {
@@ -158,12 +157,10 @@ pub struct NativeEngine {
 }
 
 impl NativeEngine {
-    /// Starts one to four configured terminals at the requested cell dimensions.
+    /// Starts one or more configured terminals at the requested cell dimensions.
     pub fn spawn(projects: &[Project], size: ScreenSize) -> Result<Self, String> {
-        if projects.is_empty() || projects.len() > MAX_TERMINALS {
-            return Err(format!(
-                "native engine requires between 1 and {MAX_TERMINALS} terminals"
-            ));
+        if projects.is_empty() {
+            return Err("native engine requires at least one terminal".to_owned());
         }
         let mut ids = BTreeSet::new();
         if projects
@@ -447,6 +444,53 @@ mod tests {
         let transport = engine.terminals[0].transport.as_ref().unwrap();
         assert!(!transport.is_process_group_alive());
         assert!(transport.has_joined_threads());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn eight_terminals_spawn_and_shutdown() {
+        let projects = (0..8)
+            .map(|index| {
+                let terminal = TerminalId::new(format!("terminal-{index}"));
+                project(terminal, &format!("printf READY-{index}; sleep 30"))
+            })
+            .collect::<Vec<_>>();
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+
+        for (index, project) in projects.iter().enumerate() {
+            wait_for_frame(&mut engine, &project.terminal, &format!("READY-{index}"));
+        }
+        assert!(
+            projects.iter().all(|project| {
+                engine.status(&project.terminal) == Some(&TerminalStatus::Running)
+            })
+        );
+
+        let events = engine.dispatch(EngineCommand::Shutdown);
+
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event, EngineEvent::StatusChanged { .. }))
+                .count(),
+            projects.len()
+        );
+        assert!(engine.terminals.iter().all(|terminal| {
+            terminal
+                .transport
+                .as_ref()
+                .is_some_and(|transport| transport.has_joined_threads())
+        }));
+    }
+
+    #[test]
+    fn requires_at_least_one_terminal() {
+        assert_eq!(
+            NativeEngine::spawn(&[], ScreenSize::new(80, 24))
+                .err()
+                .as_deref(),
+            Some("native engine requires at least one terminal")
+        );
     }
 
     #[cfg(target_os = "linux")]
