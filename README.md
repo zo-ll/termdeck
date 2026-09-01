@@ -9,8 +9,9 @@ not through Horizon-specific source code or changes to the Horizon CLI.
 
 ## Status
 
-The repository contains the agreed product plan and design contract. Terminal
-engine and interface implementation have not started.
+The configured workspace opens as an interactive master-and-preview terminal
+deck. See [the WSL manual acceptance pass](docs/WSL_ACCEPTANCE.md) for the
+end-to-end check.
 
 ## Toolchain
 
