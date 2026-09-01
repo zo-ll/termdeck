@@ -438,3 +438,8 @@ scope.
   docs/design/termdeck/collapse-stack.md spec (geometry/control/states/
   interplay/edges/what-to-implement), design-only. Claude working in
   coord/27-collapse-stack. #29 (mouse actions) pending merge approval.
+- 2026-09-01: QUEUED for delivery to claude (after its #27 design turn settles —
+  no mid-turn interruption): the claude_design MCP prompt (import project
+  8aa66d51-…, focus Termdeck TUI.dc.html, read support.js, "Implement:
+  Termdeck TUI.dc.html"). Staged at
+  /tmp/shipwright/termdeck/27-collapse-stack/mcp-prompt.md.
