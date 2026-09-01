@@ -200,3 +200,23 @@ scope.
   give it to a new agent. Do not rely on an old conversation for context.
 - Private remote: `https://github.com/zo-ll/termdeck`. `main` and the active
   `coord/*` branches were first pushed on 2026-08-31.
+- 2026-09-01: FINISH PROTOCOL v3 (user-corrected): the watcher's auto-inject
+  into the coordinator pane was REMOVED (it re-fired old markers on restart
+  and typed TERMDECK-EVENT lines into the active coordinator session — broke
+  the conversation; tmux panes themselves stayed healthy). Watcher is now
+  RECORD-ONLY (events.log + banner/bell). PRIMARY ping is now direct: on
+  finishing, the worker/critic PROMPTS the coordinator the same way the
+  coordinator prompts them — one-line mini prompt
+  `<role>: finished <task> <summary>` via `tmux-agent.sh prompt-target
+  personal:coordinator.0 <ping.txt> pi` (lands in the coordinator's
+  conversation = cannot be missed). Sandboxed workers without tmux degrade to
+  marker-only; coordinator reads events.log first thing every turn (standing
+  order, now in the coordinator skill Phase 5b). claude, codex, and the
+  critic all onboarded. Stray TERMDECK-EVENT lines from the broken v2 watcher
+  may appear in the coordinator session historically; they are artifacts.
+- 2026-09-01: #8 re-review PASSED (critic, delta = allow-removal + public
+  exposure; gate green 28 tests) — delta committed `61ecf96` and pushed;
+  PR #17 now contains both commits, mergeable per user authorization once a
+  critic pass covers them (both #8 commits reviewed pass). #13 correction
+  (claude `678a4dc`, Starting-state test, 57 tests) re-review dispatched to
+  the critic; merge of #13 PR follows its pass.
