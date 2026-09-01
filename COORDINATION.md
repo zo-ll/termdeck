@@ -503,3 +503,5 @@ scope.
   defined carefully vs #25 wheel; hit-testing by list offset; scroll
   indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
   working (#34a codex, #34b claude).
+- 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
+  critic review.
