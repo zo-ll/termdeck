@@ -226,3 +226,10 @@ scope.
   PASS (Starting asserted in 678a4dc; gate 57 tests, parent re-verified).
   Pushed `coord/13-ui-chrome` → PR #19. All three slices now review-passed:
   #8 (PR #17), #12 (PR #18), #13 (PR #19) — each mergeable on user approval.
+- 2026-09-01: FINISH PROTOCOL v4 (ponytail, user-driven): watcher REMOVED
+  entirely. The ping chain is now just: (1) worker/reviewer PROMPTS the
+  coordinator pane directly with a one-line mini prompt (primary — landed in
+  conversation, proven), (2) marker file `.scratch/status/<task>.done` always
+  written as the durable record + sandbox fallback (codex cannot reach tmux),
+  (3) coordinator's standing order: read markers/events.log first thing every
+  turn. Coordinator skill Phase 5b + FINISH-PROTOCOL.md updated accordingly.
