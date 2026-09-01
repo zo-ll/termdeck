@@ -25,12 +25,12 @@ scope.
 | Issue | Slice | Blocked by | Status |
 |---|---|---|---|
 | [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | PR #15 merged (`4b4fec4`) |
-| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | dispatched (`coord/08-pty-transport`) |
+| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | done — local only (uncommitted), critic reviewing |
 | [#9](https://github.com/zo-ll/termdeck/issues/9) | One-terminal native engine | #7, #8 | blocked |
 | [#10](https://github.com/zo-ll/termdeck/issues/10) | Native lifecycle | #9 | blocked |
 | [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | PR #16 merged (`ddb45f4`) |
-| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | dispatched (`coord/12-ui-master-stack`) |
-| [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | — | ready |
+| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | done — commit `9606976` local, awaiting critic |
+| [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | #12 | in progress (claude window) |
 | [#14](https://github.com/zo-ll/termdeck/issues/14) | Modal and input modes | #12, #13 | blocked |
 
 ## Waves
@@ -134,6 +134,20 @@ scope.
   its log kept (`/tmp/shipwright/termdeck/critic/boot.log`) and the
   diagnostic transcript retained at
   `~/.pi/agent/sessions/--home-andrea-personal-termdeck--/...01a05bf3*.jsonl`.
+- 2026-09-01: POLICY (user): workers never get full access; workers may
+  commit locally when their sandbox allows, but must STOP before pushing and
+  wait for review; ALL critic reviews run on LOCAL changes (never remote/PR);
+  the coordinator is the only one who pushes, and only after the critic
+  passes. Applied: codex Full-Access relaunch revoked (interrupted, resumed
+  `workspace-write`), claude go-ahead for #13 given. Codex then re-verified
+  the gate green (fmt, clippy `-D warnings`, 28 tests) and stopped without
+  committing (gitdir outside sandbox — expected); deliverable is the local
+  working tree on `coord/08-pty-transport` (Cargo.toml/Cargo.lock/
+  src/engine/mod.rs + untracked src/engine/pty.rs). Critic received its first
+  assignment — complete local review of #8 at
+  `/tmp/shipwright/termdeck/critic/review-8.md` (single-line pointer, no
+  paste fragmentation). Claude is implementing #13 with instructions to
+  commit locally and stop for review.
 
 ## Durable resumption
 
