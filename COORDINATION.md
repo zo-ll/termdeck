@@ -425,3 +425,5 @@ scope.
   (coord/26-mouse-actions off main 43f2f48). Builds on #25's mouse capture +
   hit-testing; dispatches existing frozen actions; no contracts changes.
   #27 collapse remains parked (no claude dispatch). Codex window replaced.
+- 2026-09-01: #26 done (codex; drag-drop swap + double-click promote via frozen
+  actions; gate 92 tests). Handed to the critic for local review.
