@@ -470,3 +470,6 @@ scope.
 - 2026-09-01: #27 correction done (claude merged origin/main/#26 + marker click
   `71233cc`, gate 114 tests, screens 01-04 byte-identical) — re-review handed
   to the critic.
+- 2026-09-01: #27 re-review PASS (marker click landed; gate 114). Pushed
+  coord/27-collapse-stack → PR #30, awaiting user approval. Close of the
+  mouse/collapse feature set once merged.
