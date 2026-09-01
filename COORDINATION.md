@@ -255,3 +255,11 @@ scope.
   (`coord/14-modal-input`); both worktrees off `origin/main` (`30d6eb7`), both
   briefs carry the finish protocol v4 (direct ping + marker + commit-local
   no-push). Old worker windows replaced; critic pane retained for reviews.
+- 2026-09-01: #9 critic review PASS (direct ping landed in conversation;
+  1 non-blocking resize-scrollback note). Parent gate re-verified (fmt,
+  clippy, 60 tests). Delta committed by coordinator `eecd958` (codex sandbox
+  cannot commit/push/tmux) → pushed → PR #20. Codex ping channel: sandbox
+  blocks tmux (probed from outside: Operation not permitted on the socket;
+  `unix-socket:`/`ipc:any`/`network:host` permission keys also fail, keys not
+  documented in the installed binary) — marker-only unless the user picks the
+  minimal inbox relay. #14 still in flight (claude).
