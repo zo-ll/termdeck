@@ -488,11 +488,11 @@ responsive follow-on and can land second.
 ### Control wiring
 
 - **H1.** `Input::command`: `Key::Char('c')` → `deck.toggle_collapse_all()`.
-- **H2.** *(blocked — see Implementation status.)* Mouse: a press-and-release
-  inside the two cells the marker actually occupies toggles that preview and
-  consumes the gesture — no drag begins, no double-click timer arms. Per A11
-  those cells are `stack.x + 3 .. stack.x + 4` on an open pane's top border
-  row, and `stack.x + 2 .. stack.x + 3` on a collapsed strip's row.
+- **H2.** Mouse: a press-and-release inside the two cells the marker actually
+  occupies toggles that preview and consumes the gesture — no drag begins, no
+  double-click timer arms. Per A11 those cells are
+  `stack.x + 3 .. stack.x + 4` on an open pane's top border row, and
+  `stack.x + 2 .. stack.x + 3` on a collapsed strip's row.
 - **H3.** Wheel: suppress the `EngineCommand::Scroll` dispatch when the hit pane
   is collapsed. Simplest plumbing: have the hit test yield the configured
   position (it already walks the stack) and let the session consult
@@ -573,30 +573,38 @@ responsive follow-on and can land second.
 
 ## 8. Implementation status
 
-Screen 05 was implemented on `coord/27-collapse-stack` after this spec was
-written. Gate: **106 tests pass, `cargo fmt --check` clean, `cargo clippy
---all-targets -D warnings` clean.**
+Implemented on `coord/27-collapse-stack`. Gate: **114 tests pass, `cargo fmt
+--check` clean, `cargo clippy --all-targets -D warnings` clean.**
 
-**Landed:** S1–S4, C1–C5, H1, H3, H4, F1–F3.
+**Landed: S1–S4, C1–C5, H1–H4, F1–F3.** `origin/main` (carrying #26's mouse
+capture, drag-to-swap and double-click-to-promote) is merged into the branch,
+and screens 01–04 plus `scrollback` and `quit` remain byte-identical to
+`origin/main`; only `help.txt` changes, by the added `^g c` row and the
+one-row-taller overlay.
 
-**Not landed — H2 (marker click).** The per-preview pointer toggle needs mouse
-press/release events, and this branch only decodes the wheel. The press/move/up
-state machine, drag-to-swap and double-click-to-promote all live in issue #26
-(`coord/26-mouse-actions`, PR #29), which is not merged into `main` yet. H2
-should land as a small follow-on once #26 merges; everything it needs is
-already in place:
+**H2 — the marker click.** `Deck::marker_at` resolves the two cells the export
+draws the marker in, and the session's mouse arm consumes the gesture: a press
+there cancels any drag, arms no double-click, and the matching release calls
+`DeckState::toggle_collapse`. Pressing the marker and releasing elsewhere does
+nothing, and `marker_press` is reset alongside the drag on every other event.
 
-- `DeckState::toggle_collapse(position)` is implemented, tested, and currently
-  reachable only from tests and `toggle_collapse_all`;
-- `Deck::position_at` resolves a collapsed strip to its configured position, so
-  the marker's two cells can be range-checked against the slot rectangle;
-- the geometry engine already renders any mix of folded and open previews, so
-  no layout work remains.
+Two consequences of A3 worth stating plainly, because they are load-bearing:
 
-Until then the reachable controls are `^g c` (fold or unfold the whole stack)
-and `^g 2-4` / `^g j` / `^g k` (promoting a folded preview expands it). The
-mixed state screen 05 depicts is therefore reachable in tests and by promotion,
-but not yet by a single pointer gesture.
+- **The marker is only clickable while a fold is in play.** Markers are not
+  drawn with nothing collapsed (that is what keeps screens 01/02 byte-identical),
+  and `marker_at` returns `None` in that state, so those cells keep their
+  ordinary drag and double-click behaviour. `^g c` is therefore how a stack
+  enters the folded state; the marker is how you adjust it afterwards. If that
+  bootstrapping is judged wrong, the fix is a design decision — draw the markers
+  unconditionally — and it would change the two committed screen fixtures.
+- **The marker cells sit inside their pane**, so `marker_at` and `position_at`
+  both match there. Consuming the gesture is what stops one click from also
+  starting a drag or arming a promotion; `the_marker_overlaps_the_pane_it_belongs_to`
+  pins that overlap so the precedence cannot be dropped silently.
+
+**Drag and demotion highlights on a folded pane:** a strip has no border and
+already sits on the demoted background, so it takes neither the drag-source nor
+the drag-target dressing. Consistent with §3.3's demotion rule.
 
 **Two corrections this document absorbed from implementation:**
 

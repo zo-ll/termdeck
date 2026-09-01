@@ -49,6 +49,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut input = Input::new(size.rows.saturating_sub(4));
     let mut keys = KeyReader::default();
     let mut last_click = None;
+    // The preview whose disclosure marker is being pressed, if any.
+    let mut marker_press: Option<usize> = None;
 
     let mut dirty = true;
     'session: loop {
@@ -76,6 +78,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 InputEvent::Key(key) => {
                     deck.cancel_drag();
                     last_click = None;
+                    marker_press = None;
                     let was_scrollback = deck.scrollback();
                     let reaction = input.press(key, &mut deck, &workspace.projects, now());
                     if was_scrollback
@@ -126,6 +129,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 InputEvent::Wheel { pointer, command } => {
                     deck.cancel_drag();
                     last_click = None;
+                    marker_press = None;
                     if deck.modal().is_none() {
                         let terminal = Deck {
                             workspace: &workspace.name,
@@ -165,29 +169,61 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 }
                 InputEvent::Mouse { pointer, action } => {
                     if deck.modal().is_none() {
-                        let pane = Deck {
-                            workspace: &workspace.name,
-                            projects: &workspace.projects,
-                            state: &deck,
-                            home: None,
-                            master_ratio: workspace.master_ratio.get(),
-                            now: now(),
-                        };
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
-                        let position = match action {
-                            MouseAction::Down => pane.swap_position_at(area, pointer),
-                            MouseAction::Move | MouseAction::Up => pane.position_at(area, pointer),
+                        let (marker, position) = {
+                            let pane = Deck {
+                                workspace: &workspace.name,
+                                projects: &workspace.projects,
+                                state: &deck,
+                                home: None,
+                                master_ratio: workspace.master_ratio.get(),
+                                now: now(),
+                            };
+                            (
+                                pane.marker_at(area, pointer),
+                                match action {
+                                    MouseAction::Down => pane.swap_position_at(area, pointer),
+                                    MouseAction::Move | MouseAction::Up => {
+                                        pane.position_at(area, pointer)
+                                    }
+                                },
+                            )
                         };
-                        if let Some(action) =
-                            mouse_action(&mut deck, position, action, now(), &mut last_click)
-                        {
-                            deck.apply(&action, &workspace.projects, now());
+                        // The disclosure marker owns its two cells: pressing
+                        // there starts no drag and arms no promotion, and the
+                        // release folds or unfolds that preview.
+                        match (action, marker, marker_press) {
+                            (MouseAction::Down, Some(pressed), _) => {
+                                deck.cancel_drag();
+                                last_click = None;
+                                marker_press = Some(pressed);
+                            }
+                            (MouseAction::Move, _, Some(_)) => {}
+                            (MouseAction::Up, _, Some(pressed)) => {
+                                marker_press = None;
+                                if marker == Some(pressed) {
+                                    deck.toggle_collapse(pressed);
+                                }
+                            }
+                            _ => {
+                                marker_press = None;
+                                if let Some(action) = mouse_action(
+                                    &mut deck,
+                                    position,
+                                    action,
+                                    now(),
+                                    &mut last_click,
+                                ) {
+                                    deck.apply(&action, &workspace.projects, now());
+                                }
+                            }
                         }
                     }
                 }
                 InputEvent::Paste(text) => {
                     deck.cancel_drag();
                     last_click = None;
+                    marker_press = None;
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()
                         && !deck.scrollback()

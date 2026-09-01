@@ -312,6 +312,49 @@ impl Deck<'_> {
         }
     }
 
+    /// The configured position whose disclosure marker sits under `pointer`.
+    ///
+    /// The marker owns two cells at the head of a stack pane's title: the
+    /// export draws `▾ ` inside an open preview's top border and `▸ ` at the
+    /// head of a collapsed strip, one column further left because the strip
+    /// has no border to inset past.
+    ///
+    /// Markers exist only while a fold is in play, so with nothing collapsed
+    /// this never matches and those cells keep their ordinary drag and
+    /// double-click behaviour.
+    pub fn marker_at(&self, area: Rect, pointer: Position) -> Option<usize> {
+        if self.state.collapsed_count() == 0
+            || !area.contains(pointer)
+            || area.width < GUTTER + 4
+            || area.height < 4
+        {
+            return None;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let Layout::Stacked { stack, preview } = self.layout(body) else {
+            return None;
+        };
+        let master = body.width - GUTTER - stack;
+        self.stack_layout(
+            Rect {
+                x: master + GUTTER,
+                width: stack,
+                ..body
+            },
+            preview,
+        )
+        .into_iter()
+        .find(|slot| {
+            // An open pane insets its title past the border; a strip does not.
+            let head = slot.rect.x + if slot.collapsed { PADDING } else { PADDING + 1 };
+            pointer.y == slot.rect.y && (pointer.x == head || pointer.x == head + 1)
+        })
+        .map(|slot| slot.position)
+    }
+
     /// A draggable pane must have a visible master-and-stack counterpart.
     pub fn swap_position_at(&self, area: Rect, pointer: Position) -> Option<usize> {
         let body = Rect {
@@ -1687,7 +1730,7 @@ mod tests {
         STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
     };
     use crate::{
-        contracts::{ActionCommand, TerminalEngine, TerminalId, TerminalStatus},
+        contracts::{ActionCommand, Project, TerminalEngine, TerminalId, TerminalStatus},
         engine::FakeEngine,
     };
 
@@ -1979,6 +2022,111 @@ mod tests {
         assert!(state.collapsed(2), "so the wheel skips it");
         assert_eq!(deck.position_at(area, Position::new(110, 10)), Some(1));
         assert!(!state.collapsed(1), "the open preview still scrolls");
+    }
+
+    fn deck_for<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
+        Deck {
+            workspace: "idp",
+            projects,
+            state,
+            home: Some(fixture::home()),
+            master_ratio: 0.70,
+            now: fixture::NOW,
+        }
+    }
+
+    /// The two cells the export draws the disclosure marker in, on an open
+    /// preview's top border and at the head of each strip.
+    #[test]
+    fn the_disclosure_marker_is_hit_tested_in_its_own_two_cells() {
+        let projects = fixture::projects();
+        let state = collapsed();
+        let deck = deck_for(&projects, &state);
+        let area = Rect::new(0, 0, 144, 42);
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // An open preview insets its title past the border: columns 103-104.
+        assert_eq!(buffer[(103u16, 0u16)].symbol(), "▾");
+        assert_eq!(deck.marker_at(area, Position::new(103, 0)), Some(1));
+        assert_eq!(deck.marker_at(area, Position::new(104, 0)), Some(1));
+        // A strip has no border to inset past: columns 102-103.
+        assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
+        assert_eq!(deck.marker_at(area, Position::new(102, 35)), Some(2));
+        assert_eq!(deck.marker_at(area, Position::new(103, 37)), Some(3));
+
+        // Neither the border cell beside it nor the pane body is the marker.
+        assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
+        assert_eq!(deck.marker_at(area, Position::new(110, 5)), None);
+        // The master carries no marker of its own.
+        assert_eq!(deck.marker_at(area, Position::new(3, 0)), None);
+    }
+
+    /// The marker cells sit inside the pane, so the gesture has to be consumed
+    /// or the same click would also drag or promote.
+    #[test]
+    fn the_marker_overlaps_the_pane_it_belongs_to() {
+        let projects = fixture::projects();
+        let state = collapsed();
+        let deck = deck_for(&projects, &state);
+        let area = Rect::new(0, 0, 144, 42);
+
+        assert_eq!(deck.marker_at(area, Position::new(103, 0)), Some(1));
+        assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+    }
+
+    /// With nothing folded the export draws no marker, so those cells keep
+    /// their ordinary drag and double-click behaviour.
+    #[test]
+    fn there_is_no_marker_to_click_until_a_fold_is_in_play() {
+        let projects = fixture::projects();
+        let state = DeckState::new(4);
+        let deck = deck_for(&projects, &state);
+        let area = Rect::new(0, 0, 144, 42);
+
+        assert_eq!(deck.marker_at(area, Position::new(103, 0)), None);
+        assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
+        // The pane underneath still answers, so the drag still starts there.
+        assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+    }
+
+    /// Clicking a strip's marker expands that preview, and the rows it takes
+    /// back come out of the pane that grew.
+    #[test]
+    fn toggling_a_marker_expands_just_that_preview() {
+        let projects = fixture::projects();
+        let mut state = collapsed();
+        let area = Rect::new(0, 0, 144, 42);
+
+        let marker = deck_for(&projects, &state).marker_at(area, Position::new(102, 35));
+        assert_eq!(marker, Some(2));
+        state.toggle_collapse(marker.unwrap());
+
+        assert_eq!(state.collapsed_count(), 1, "worker stays folded");
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        // Two open previews now split the single fold's 11 freed rows 6/5.
+        assert_eq!(buffer[(100u16, 17u16)].symbol(), "└");
+        assert_eq!(buffer[(100u16, 19u16)].symbol(), "┌");
+        assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    }
+
+    /// Zoom and the narrow fallback hide the stack, so there is no marker.
+    #[test]
+    fn a_hidden_stack_offers_no_marker() {
+        let projects = fixture::projects();
+        let mut state = collapsed();
+        state.apply(&ActionCommand::ToggleZoom, &projects, fixture::NOW);
+        let area = Rect::new(0, 0, 144, 42);
+
+        assert_eq!(
+            deck_for(&projects, &state).marker_at(area, Position::new(103, 0)),
+            None
+        );
+
+        let folded = collapsed();
+        assert_eq!(
+            deck_for(&projects, &folded).marker_at(Rect::new(0, 0, 84, 24), Position::new(3, 0)),
+            None
+        );
     }
 
     #[test]
