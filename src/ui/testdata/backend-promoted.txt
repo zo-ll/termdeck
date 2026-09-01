@@ -8,7 +8,7 @@
 │  12:06:01 /api/health ·········  3.0ms                                                         │  │                                          │
 │  12:06:07 queue ProcessLog ··· done                                                            │  │    ➜  Local:   http://localhost:5173/    │
 │  12:06:09 /api/terminals/2/log  8.7ms                                                          │  │    ➜  Network: http://192.168.1.24:5173  │
-│                                                                                                │  │    ➜  press h + enter to show help       │
+│                                                                                                │  │  ↑ 214 lines above · ^g [                │
 │                                                                                                │  └──────────────────────────────────────────┘
 │                                                                                                │                                              
 │                                                                                                │  ┌─ 3 app · …/app · ✕ exit 1 ────── 2m ago ─┐

@@ -21,6 +21,7 @@ const DEMOTION_WINDOW: Elapsed = Elapsed { millis: 1_500 };
 pub struct DeckState {
     order: Vec<usize>,
     zoomed: bool,
+    scrollback: bool,
     demotion: Option<(usize, Timestamp)>,
 }
 
@@ -30,6 +31,7 @@ impl DeckState {
         Self {
             order: (0..terminals).collect(),
             zoomed: false,
+            scrollback: false,
             demotion: None,
         }
     }
@@ -46,6 +48,13 @@ impl DeckState {
 
     pub fn zoomed(&self) -> bool {
         self.zoomed
+    }
+
+    /// Whether the master pane shows its engine-owned scrollback instead of
+    /// live output. Scrollback is a mode of the master pane, not an overlay:
+    /// the previews stay live and the stack stays visible.
+    pub fn scrollback(&self) -> bool {
+        self.scrollback
     }
 
     /// The pane demoted by the most recent promotion, while its highlight
@@ -74,6 +83,10 @@ impl DeckState {
                 self.zoomed = !self.zoomed;
                 true
             }
+            ActionCommand::ToggleScrollback => {
+                self.scrollback = !self.scrollback;
+                true
+            }
             _ => false,
         }
     }
@@ -89,6 +102,8 @@ impl DeckState {
         }
         self.demotion = Some((self.order[0], now));
         self.order.swap(0, slot);
+        // The mode belongs to the pane, and the new master is live.
+        self.scrollback = false;
         true
     }
 
@@ -274,6 +289,30 @@ mod tests {
 
         assert!(apply(&mut state, ActionCommand::ToggleZoom));
         assert!(!state.zoomed());
+    }
+
+    #[test]
+    fn scrollback_toggles_and_survives_zoom() {
+        let mut state = DeckState::new(4);
+
+        assert!(apply(&mut state, ActionCommand::ToggleScrollback));
+        assert!(state.scrollback());
+        apply(&mut state, ActionCommand::ToggleZoom);
+        assert!(state.scrollback(), "zoom and scrollback are independent");
+
+        assert!(apply(&mut state, ActionCommand::ToggleScrollback));
+        assert!(!state.scrollback());
+    }
+
+    #[test]
+    fn promotion_leaves_scrollback_because_the_new_master_is_live() {
+        let mut state = DeckState::new(4);
+
+        apply(&mut state, ActionCommand::ToggleScrollback);
+        apply(&mut state, ActionCommand::SelectNext);
+
+        assert_eq!(state.active(), Some(1));
+        assert!(!state.scrollback());
     }
 
     #[test]
