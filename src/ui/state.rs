@@ -1,4 +1,4 @@
-//! Selection and zoom state for the master-and-preview stack.
+//! Selection, zoom, and modal state for the master-and-preview stack.
 //!
 //! This is the only mutable state the interface owns. It holds no terminal
 //! data: everything it stores is a configured position, so terminal identity
@@ -9,6 +9,15 @@ use crate::contracts::{ActionCommand, Elapsed, Project, Timestamp};
 /// How long a just-demoted pane keeps its highlight, per the design export's
 /// "holds ... for ~1.5s, then settles".
 const DEMOTION_WINDOW: Elapsed = Elapsed { millis: 1_500 };
+
+/// An overlay that takes focus from the deck. Only one can be open, and it
+/// captures every key until it closes: focus stays singular, so the modal
+/// takes the accent border and the master gives its own up.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Modal {
+    Help,
+    Quit,
+}
 
 /// Which terminal holds the master pane, in which order the rest stack, and
 /// whether the stack is hidden.
@@ -22,6 +31,7 @@ pub struct DeckState {
     order: Vec<usize>,
     zoomed: bool,
     scrollback: bool,
+    modal: Option<Modal>,
     demotion: Option<(usize, Timestamp)>,
 }
 
@@ -32,6 +42,7 @@ impl DeckState {
             order: (0..terminals).collect(),
             zoomed: false,
             scrollback: false,
+            modal: None,
             demotion: None,
         }
     }
@@ -57,6 +68,16 @@ impl DeckState {
         self.scrollback
     }
 
+    /// The open overlay, if any.
+    pub fn modal(&self) -> Option<Modal> {
+        self.modal
+    }
+
+    /// Closes the open overlay. Returns whether one was open.
+    pub fn close_modal(&mut self) -> bool {
+        self.modal.take().is_some()
+    }
+
     /// The pane demoted by the most recent promotion, while its highlight
     /// lasts. `None` once the window has passed or nothing was promoted yet.
     pub fn demoted(&self, now: Timestamp) -> Option<usize> {
@@ -68,8 +89,8 @@ impl DeckState {
     /// Applies one outer-interface action. Returns whether anything changed.
     ///
     /// `SelectPosition` carries a zero-based configured position: the `1..4`
-    /// keys select `0..3`. Actions belonging to later slices — scrollback,
-    /// respawn, help, quit — are not this type's concern and are ignored.
+    /// keys select `0..3`. `RespawnActive` needs the engine, so it is not this
+    /// type's concern and is ignored.
     pub fn apply(&mut self, action: &ActionCommand, projects: &[Project], now: Timestamp) -> bool {
         match action {
             ActionCommand::SelectNext => self.step(1, now),
@@ -87,8 +108,15 @@ impl DeckState {
                 self.scrollback = !self.scrollback;
                 true
             }
+            ActionCommand::ShowHelp => self.open(Modal::Help),
+            ActionCommand::RequestQuit => self.open(Modal::Quit),
             _ => false,
         }
+    }
+
+    fn open(&mut self, modal: Modal) -> bool {
+        self.modal = Some(modal);
+        true
     }
 
     /// Promotes a configured position to master and demotes the old master
@@ -313,6 +341,34 @@ mod tests {
 
         assert_eq!(state.active(), Some(1));
         assert!(!state.scrollback());
+    }
+
+    #[test]
+    fn the_help_and_quit_actions_open_the_modal_they_name() {
+        let mut state = DeckState::new(4);
+
+        assert!(apply(&mut state, ActionCommand::ShowHelp));
+        assert_eq!(state.modal(), Some(super::Modal::Help));
+
+        // A modal replaces the one before it: focus stays singular.
+        assert!(apply(&mut state, ActionCommand::RequestQuit));
+        assert_eq!(state.modal(), Some(super::Modal::Quit));
+
+        // The deck behind it is untouched.
+        assert_eq!(state.active(), Some(0));
+        assert_eq!(state.stack(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn closing_reports_whether_a_modal_was_open() {
+        let mut state = DeckState::new(4);
+
+        assert!(!state.close_modal());
+        apply(&mut state, ActionCommand::ShowHelp);
+
+        assert!(state.close_modal());
+        assert_eq!(state.modal(), None);
+        assert!(!state.close_modal());
     }
 
     #[test]
