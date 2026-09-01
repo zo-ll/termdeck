@@ -33,6 +33,7 @@ pub struct DeckState {
     scrollback: bool,
     modal: Option<Modal>,
     demotion: Option<(usize, Timestamp)>,
+    drag: Option<(usize, Option<usize>)>,
 }
 
 impl DeckState {
@@ -44,6 +45,7 @@ impl DeckState {
             scrollback: false,
             modal: None,
             demotion: None,
+            drag: None,
         }
     }
 
@@ -76,6 +78,47 @@ impl DeckState {
     /// Closes the open overlay. Returns whether one was open.
     pub fn close_modal(&mut self) -> bool {
         self.modal.take().is_some()
+    }
+
+    /// Starts a pane drag. Only the master and one preview can form a valid
+    /// pair, because promotion is the frozen action that swaps those slots.
+    pub fn begin_drag(&mut self, source: usize) -> bool {
+        if self.order.contains(&source) {
+            self.drag = Some((source, None));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Updates the highlighted drop target, rejecting stack-to-stack drops.
+    pub fn update_drag(&mut self, target: Option<usize>) {
+        let Some((source, _)) = self.drag else {
+            return;
+        };
+        let target = target.filter(|target| {
+            *target != source && (*target == self.order[0] || source == self.order[0])
+        });
+        if let Some(drag) = &mut self.drag {
+            drag.1 = target;
+        }
+    }
+
+    /// The source and valid target when a mouse button is released.
+    pub fn finish_drag(&mut self) -> Option<(usize, Option<usize>)> {
+        self.drag.take()
+    }
+
+    pub fn cancel_drag(&mut self) {
+        self.drag = None;
+    }
+
+    pub fn dragged(&self) -> Option<usize> {
+        self.drag.map(|(source, _)| source)
+    }
+
+    pub fn drag_target(&self) -> Option<usize> {
+        self.drag.and_then(|(_, target)| target)
     }
 
     /// The pane demoted by the most recent promotion, while its highlight
@@ -293,6 +336,21 @@ mod tests {
         assert_eq!(state.active(), Some(0));
         assert_eq!(state.stack(), [1, 2, 3]);
         assert_eq!(state.demoted(NOW), None);
+    }
+
+    #[test]
+    fn dragging_only_marks_a_master_preview_pair_as_a_valid_drop() {
+        let mut state = DeckState::new(4);
+
+        assert!(state.begin_drag(2));
+        state.update_drag(Some(3));
+        assert_eq!(state.dragged(), Some(2));
+        assert_eq!(state.drag_target(), None, "previews do not swap directly");
+
+        state.update_drag(Some(0));
+        assert_eq!(state.drag_target(), Some(0));
+        assert_eq!(state.finish_drag(), Some((2, Some(0))));
+        assert_eq!(state.dragged(), None);
     }
 
     #[test]
