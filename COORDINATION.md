@@ -443,3 +443,9 @@ scope.
   8aa66d51-…, focus Termdeck TUI.dc.html, read support.js, "Implement:
   Termdeck TUI.dc.html"). Staged at
   /tmp/shipwright/termdeck/27-collapse-stack/mcp-prompt.md.
+- 2026-09-01: #27 DESIGN SPEC committed by claude `4af49d0`
+  (docs/design/termdeck/collapse-stack.md, 568 lines: geometry, `^g c` +
+  chevron control, states, interplay, edge cases, coder list, 11 ambiguities
+  flagged). QUEUED claude_design MCP prompt then DELIVERED — claude is now
+  importing/implementing `Termdeck TUI.dc.html` via the MCP. Design spec
+  ready for user review before implementation.
