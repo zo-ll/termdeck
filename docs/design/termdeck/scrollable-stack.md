@@ -1,9 +1,9 @@
 # Scrollable preview stack — decisions (issue #34b)
 
 Status: implemented on `coord/34b-scrollable-stack`. UI only; no engine,
-contract or configuration change. #34a lifts the 1–4 terminal cap separately,
-so until it merges the stack lengths described here are reachable only from
-synthetic decks in the unit tests.
+contract or configuration change. #34a (merged) lifts the 1–4 terminal cap, so
+the stack lengths described here are now reachable from a workspace file as
+well as from the synthetic decks the unit tests build.
 
 The design export has no vocabulary for a preview list longer than the column —
 it never draws more than three previews. This document records what was added,
@@ -122,9 +122,12 @@ footer is naming the window.
 ## 5. Known follow-ups
 
 - The status bar still advertises `^g 1-4 select` and the stack footer
-  `ctrl+g 1-4 promote`, which is the export's literal text and correct for
-  every deck the configuration can build today. With #34a merged and more than
-  four terminals configured, those labels want the deck's own count.
+  `ctrl+g 1-4 promote`. That is the export's literal text, and it was correct
+  for every deck the configuration could build before #34a. Now that the cap is
+  lifted it under-states a longer deck: `^g 1-9` all promote, and the labels
+  want the deck's own count. Left alone here because changing them moves the
+  committed screens 01–05, which is a design call rather than an integration
+  one.
 - Auto-collapse at the `MIN_OPEN` floor (`collapse-stack.md` §1.4, R3) is still
   not implemented. It is now less pressing: a column too short for its previews
   scrolls rather than dropping them.

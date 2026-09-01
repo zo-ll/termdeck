@@ -498,3 +498,17 @@ scope.
   (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
   #34b (scrollable stack list, UI) next — awaiting user choice (design-first
   vs direct) but queued to claude.
+- 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
+  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
+  defined carefully vs #25 wheel; hit-testing by list offset; scroll
+  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
+  working (#34a codex, #34b claude).
+- 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
+  critic review.
+- 2026-09-01: #34a critic PASS → committed → pushed → PR (#34a), merge
+  before #34b. #34b still with claude.
+- 2026-09-01: #34b done (claude, `3a9175a`: scrolled window over preview
+  list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
+  follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
+  in critic review; branch base predates #36/#37, integration onto main after
+  review.

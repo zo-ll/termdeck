@@ -98,9 +98,10 @@ impl DeckState {
         self.active() != Some(position) && self.collapsed.get(position).copied().unwrap_or(false)
     }
 
-    /// How many previews are currently folded. Drives the disclosure markers,
-    /// the stack footer, and the status-bar census, all of which the export
-    /// shows only once at least one preview is collapsed.
+    /// How many previews are currently folded. Drives the stack footer and
+    /// the status-bar census, both of which the export shows only once at
+    /// least one preview is collapsed. The disclosure markers themselves are
+    /// unconditional, so they do not consult this.
     pub fn collapsed_count(&self) -> usize {
         self.stack()
             .iter()

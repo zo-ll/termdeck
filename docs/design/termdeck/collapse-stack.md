@@ -224,8 +224,8 @@ arm the double-click promote timer.
 - Open preview: `▾ ` prefixed to the title, inside the top border, at the
   title's existing 2-column inset. Screen 05: `▾ 2 backend · …/backend · ●`.
 - Collapsed preview: `▸ ` at the head of the strip, same column.
-- The marker is drawn **only while the stack has at least one collapsed
-  preview** — see §3.4.
+- The marker is drawn on **every** stack pane, folded or not — see §3.4, as
+  revised by issue #32.
 - The stack footer states the exit: `{c} collapsed · ^g c expand all`.
 - The status bar states the census and advertises the key: see §3.5.
 
@@ -337,16 +337,30 @@ shortens as it already does.
 ### 3.4 When the disclosure markers appear
 
 **Ambiguity.** The collapse board says "Open panes show `▾`", but screens 01 and
-02 — part of the *same* updated export, and the states the committed fixtures
-`frontend-active.txt` / `backend-promoted.txt` reproduce byte for byte — show
-preview titles with **no marker at all**.
+02 — part of the *same* updated export — show preview titles with **no marker
+at all**.
 
-Chosen reading: **markers are drawn on stack panes only while at least one
-preview in the stack is collapsed.** With nothing collapsed the stack looks
-exactly like screens 01/02; the moment collapse is in play every stack pane
-declares its state. This is the only reading under which all three rendered
-screens are simultaneously correct, and it keeps the two existing snapshots
-untouched.
+**Original reading (superseded):** markers drawn only while at least one preview
+is collapsed. That is the only reading under which all three rendered screens
+are simultaneously correct, and it kept the two existing snapshots untouched.
+
+**Revised by issue #32 — markers are drawn on every stack pane, always.** The
+superseded reading was tested against a user and failed: on a fresh run nothing
+on screen said the stack folds, so the feature was reachable only by already
+knowing `^g c`. §8 flagged exactly this ("if that bootstrapping is judged wrong,
+the fix is a design decision — draw the markers unconditionally — and it would
+change the two committed screen fixtures"). It was judged wrong.
+
+So the collapse board's "Open panes show `▾`" is taken at face value and screens
+01/02 are treated as pre-dating the collapse feature rather than as constraining
+it. Every stacked preview carries `▾` from the first frame; a folded one carries
+`▸`. The master never carries either — it has no fold to state. The marker's two
+cells are live from the first frame too, so the pointer path needs no keyboard
+bootstrap (§2.2b).
+
+This is the *only* change issue #32 makes to the marker: colour (`HINT`),
+column (§3.1's A11 one-column offset), the 2-column title budget cost and the
+click target are all unchanged.
 
 ### 3.5 Status bar
 
@@ -478,8 +492,8 @@ responsive follow-on and can land second.
   constants next to `PREVIEW_HEIGHT`.
 - **C3.** Draw the strip: §3.1. `DEMOTED_BG` background across the full stack
   width, text at `stack.x + 2`, no `Block::bordered`.
-- **C4.** Draw `▾ `/`▸ ` per §3.4, and shrink the title budget by 2 when it is
-  drawn.
+- **C4.** Draw `▾ `/`▸ ` per §3.4 on every stack pane, and shrink the title
+  budget by 2 accordingly.
 - **C5.** Status bar census + hint swap per §3.5; stack footer per §3.6.
 - **R3.** Auto-collapse and the `MIN_OPEN` floor (§1.4) plus the new narrow
   threshold (§1.5). This replaces the current "drop previews that do not fit"
@@ -533,8 +547,11 @@ responsive follow-on and can land second.
   screen 05; only the fixture's terminal contents differ, and they are the
   export's own contents from screen 01.
 
-- **F2.** `frontend-active.txt` and `backend-promoted.txt` must stay **byte
-  identical** (§1.3, §3.4, §3.5). If either moves, a rule was over-applied.
+- **F2.** `frontend-active.txt` and `backend-promoted.txt` change by exactly
+  three rows each under issue #32's revised §3.4 — the `▾ ` prefix on each of
+  the three preview titles, absorbed out of the trailing border rule. Every
+  other row, and the whole status line, stays byte identical (§1.3, §3.5). If
+  anything else moves, a rule was over-applied.
 - **F3.** `zoomed.txt`, `narrow.txt`, `scrollback.txt`, `quit.txt` unchanged.
   `help.txt` changes only by the added `^g c` row and the taller overlay (H4).
 
@@ -558,7 +575,7 @@ responsive follow-on and can land second.
 | --- | --- | --- |
 | A1 | Issue says the master grows; the export says the stack keeps its width and the freed rows go to the open previews. | Export wins. Master unchanged in both dimensions. |
 | A2 | `^g c` "toggles the selected pane", but there is no preview selection. | `^g c` = all previews (the master is always selected). Per-preview toggle = click the disclosure marker, the only affordance the export draws and the only unbound pointer target left after #26. |
-| A3 | "Open panes show `▾`" vs. screens 01/02 showing no marker. | Markers appear only while ≥ 1 preview is collapsed. |
+| A3 | "Open panes show `▾`" vs. screens 01/02 showing no marker. | ~~Markers appear only while ≥ 1 preview is collapsed.~~ **Revised by #32:** the board wins — every stack pane always shows a marker, and screens 01/02 are read as pre-dating the feature. |
 | A4 | `^g c collapse` in screen 05's hint row vs. its absence in screens 01/02. | The hint row swaps `^g [ scroll` for `^g c collapse` only while ≥ 1 preview is collapsed; discoverability otherwise comes from the help overlay. |
 | A5 | "last meaningful line" — `bundled 1.2s` is not derivable from any single field. | Deterministic table in §3.1; matches `idle 6m` and `exit 1` exactly, matches `bundled 1.2s` in kind. |
 | A6 | RESPONSIVE board's `<30 rows → previews reduce to 2, then to the strip` vs. the collapse board's auto-collapse rule. | Collapse board governs; previews are never dropped, only folded. The 6-row floor is the operative number, not 30. |

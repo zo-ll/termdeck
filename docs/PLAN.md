@@ -42,7 +42,7 @@ It must not expose Ratatui, Alacritty, or PTY types.
 - Zoom hides previews and gives the master the complete screen.
 - Below a usable preview width, use master-only mode with a compact terminal
   status line.
-- Support one to four configured terminals. The first starts as master.
+- Support one or more configured terminals. The first starts as master.
 - `master_ratio` defaults to `0.70` and accepts `0.55..=0.85`.
 
 Bindings:
@@ -105,4 +105,3 @@ RAII guards, panic hooks, and handled signals must restore the outer terminal.
 - Idle CPU remains below 2% in the acceptance environment.
 - Normal exit, panic, `SIGINT`, and `SIGTERM` restore the outer terminal.
 - Confirmed exit leaves no owned child processes.
-

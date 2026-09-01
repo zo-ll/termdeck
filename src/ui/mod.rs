@@ -371,15 +371,11 @@ impl Deck<'_> {
     /// head of a collapsed strip, one column further left because the strip
     /// has no border to inset past.
     ///
-    /// Markers exist only while a fold is in play, so with nothing collapsed
-    /// this never matches and those cells keep their ordinary drag and
-    /// double-click behaviour.
+    /// Every stack pane carries a marker, folded or not, so the cells are
+    /// live from the first frame — that is the affordance a fresh run has to
+    /// offer, and it takes precedence over drag and double-click there.
     pub fn marker_at(&self, area: Rect, pointer: Position) -> Option<usize> {
-        if self.state.collapsed_count() == 0
-            || !area.contains(pointer)
-            || area.width < GUTTER + 4
-            || area.height < 4
-        {
+        if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
         let body = Rect {
@@ -1092,9 +1088,10 @@ impl Deck<'_> {
         let separator = if wide { "  ·  " } else { " · " };
         let (glyph, glyph_colour) = status_glyph(status, metadata);
         let mut spans = Vec::new();
-        // The stack declares its disclosure state only once a fold is in play;
-        // with nothing collapsed the export draws no marker at all.
-        if !master && self.state.collapsed_count() > 0 {
+        // Every stack pane declares its disclosure state, folded or not: the
+        // open `▾` is the only thing on a fresh frame that says the stack
+        // folds at all, and it is the cell the pointer toggles.
+        if !master {
             spans.push(Span::styled("▾ ", Style::new().fg(HINT)));
         }
         if master {
@@ -2182,17 +2179,33 @@ mod tests {
         }
     }
 
-    /// With nothing folded the stack looks exactly as screens 01 and 02 draw
-    /// it: no disclosure markers anywhere.
+    /// Issue #32: a fresh run has to show the affordance. Every stack pane
+    /// carries `▾` before anything is folded, and the master carries none.
     #[test]
-    fn the_disclosure_markers_appear_only_once_a_fold_is_in_play() {
+    fn the_disclosure_markers_are_drawn_before_anything_is_folded() {
         let (plain, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
-        assert!(!text(&plain).contains("▾"));
-        assert!(!text(&plain).contains("▸"));
+        let rendered = text(&plain);
 
+        assert!(rendered.contains("▾ 2 backend"), "{rendered}");
+        assert!(rendered.contains("▾ 3 app"), "{rendered}");
+        assert!(rendered.contains("▾ 4 worker"), "{rendered}");
+        assert_eq!(rendered.matches('▾').count(), 3, "one per stacked preview");
+        assert!(!rendered.contains("▸"), "nothing is folded yet");
+        assert!(
+            !rendered.contains("▾ > 1 frontend"),
+            "the master never folds, so it never claims a marker"
+        );
+    }
+
+    /// The markers track each preview's own state once folds are in play.
+    #[test]
+    fn each_marker_states_its_own_panes_fold() {
         let (folded, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
-        assert!(text(&folded).contains("▾ 2 backend"), "the open pane opens");
-        assert!(text(&folded).contains("▸ 3 app"), "the folded panes close");
+        let rendered = text(&folded);
+
+        assert!(rendered.contains("▾ 2 backend"), "the open pane opens");
+        assert!(rendered.contains("▸ 3 app"), "the folded panes close");
+        assert!(rendered.contains("▸ 4 worker"), "{rendered}");
     }
 
     /// An exit outranks the live output, so a folded exited pane says so.
@@ -2318,19 +2331,38 @@ mod tests {
         assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
     }
 
-    /// With nothing folded the export draws no marker, so those cells keep
-    /// their ordinary drag and double-click behaviour.
+    /// Issue #32: the marker a fresh run draws is the marker a fresh run can
+    /// click. Every open preview's two cells fold that preview from frame one.
     #[test]
-    fn there_is_no_marker_to_click_until_a_fold_is_in_play() {
+    fn the_markers_are_clickable_before_anything_is_folded() {
         let projects = fixture::projects();
-        let state = DeckState::new(4);
-        let deck = deck_for(&projects, &state);
+        let mut state = DeckState::new(4);
         let area = Rect::new(0, 0, 144, 42);
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        assert_eq!(deck.marker_at(area, Position::new(103, 0)), None);
-        assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
-        // The pane underneath still answers, so the drag still starts there.
-        assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+        // Three open previews, each with its marker on its own top border.
+        for (position, row) in [(1usize, 0u16), (2, 13), (3, 26)] {
+            assert_eq!(buffer[(103u16, row)].symbol(), "▾", "row {row}");
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(103, row)),
+                Some(position)
+            );
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(104, row)),
+                Some(position)
+            );
+            // The border cell beside it is not the marker.
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(102, row)),
+                None
+            );
+        }
+
+        // Clicking one folds exactly that preview, from a stack with no folds.
+        state.toggle_collapse(2);
+        assert_eq!(state.collapsed_count(), 1);
+        let (folded, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        assert!(text(&folded).contains("▸ 3 app"), "{}", text(&folded));
     }
 
     /// Clicking a strip's marker expands that preview, and the rows it takes
@@ -2427,11 +2459,11 @@ mod tests {
         // Backend keeps its configured number 2 while holding the master.
         assert!(screen.contains("> 2 backend"), "{screen}");
         // Frontend keeps number 1 and lands in the slot backend vacated.
-        // Every pane number, in draw order, skipping the caret-marked master.
+        // Every pane number, in draw order. The disclosure marker is what
+        // tells a stacked preview from the caret-marked master.
         let stack: Vec<_> = screen
-            .match_indices("┌─ ")
+            .match_indices("┌─ ▾ ")
             .filter_map(|(at, marker)| screen[at + marker.len()..].split(' ').next())
-            .filter(|number| *number != ">")
             .collect();
         assert_eq!(stack, ["1", "3", "4"], "{screen}");
         assert!(screen.contains("promoted backend · ^g 1 back"), "{screen}");
@@ -2582,7 +2614,7 @@ mod tests {
         engine.set_status(&TerminalId::new("backend"), TerminalStatus::Starting);
         let screen = text(&render(&engine, &DeckState::new(4), (144, 42)).0);
 
-        assert!(screen.contains("2 backend · …/backend · ○ ───"), "{screen}");
+        assert!(screen.contains("▾ 2 backend · …/backend · ○ ─"), "{screen}");
     }
 
     #[test]
@@ -2633,6 +2665,25 @@ mod tests {
         assert_snapshot("help", &buffer);
         // The modal holds focus, so the master draws no cursor.
         assert_eq!(cursor, Some(Position::new(0, 0)));
+    }
+
+    /// Issue #32: the pointer has the marker, and the keyboard has the help
+    /// overlay. `^g c` is named there under VIEW, beside the zoom it sits with.
+    #[test]
+    fn the_help_overlay_names_the_collapse_key() {
+        let state = opened(ActionCommand::ShowHelp);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        let rendered = text(&buffer);
+
+        assert!(
+            rendered.contains("^g c             collapse / expand previews"),
+            "{rendered}"
+        );
+        let view = rendered.find("VIEW").expect("the VIEW section");
+        let zoom = rendered.find("^g z  ").expect("the zoom binding");
+        let collapse = rendered.find("^g c  ").expect("the collapse binding");
+        assert!(view < zoom && zoom < collapse, "collapse follows zoom");
     }
 
     #[test]
@@ -2782,21 +2833,10 @@ mod tests {
             .collect()
     }
 
-    fn deck<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
-        Deck {
-            workspace: "idp",
-            projects,
-            state,
-            home: Some(fixture::home()),
-            master_ratio: 0.70,
-            now: fixture::NOW,
-        }
-    }
-
     /// Renders a synthetic deck of any length on the reference canvas.
     fn render_long(projects: &[Project], state: &DeckState, size: (u16, u16)) -> Buffer {
         let engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
-        let deck = deck(projects, state);
+        let deck = deck_for(projects, state);
         let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
         terminal
             .draw(|frame| deck.render(&engine as &dyn TerminalEngine, frame))
@@ -2804,7 +2844,8 @@ mod tests {
         terminal.backend().buffer().clone()
     }
 
-    const CANVAS: Rect = Rect {
+    /// The reference canvas, as a hit-testing area.
+    const SCREEN: Rect = Rect {
         x: 0,
         y: 0,
         width: 144,
@@ -2818,7 +2859,7 @@ mod tests {
         let projects = synthetic(8);
         let state = DeckState::new(8);
 
-        let window = deck(&projects, &state).stack_window(CANVAS);
+        let window = deck_for(&projects, &state).stack_window(SCREEN);
 
         assert_eq!(window.offset, 0);
         assert_eq!(window.visible, 3, "39 budget rows hold 3 x (12 + 1)");
@@ -2833,7 +2874,7 @@ mod tests {
         let projects = fixture::projects();
         let mut state = DeckState::new(4);
 
-        let window = deck(&projects, &state).stack_window(CANVAS);
+        let window = deck_for(&projects, &state).stack_window(SCREEN);
         assert!(!window.overflows());
         assert_eq!(window.scrolled(1), 0, "there is nothing below to reach");
 
@@ -2854,14 +2895,14 @@ mod tests {
     fn paging_stops_with_the_last_preview_in_view() {
         let projects = synthetic(8);
         let mut state = DeckState::new(8);
-        let window = deck(&projects, &state).stack_window(CANVAS);
+        let window = deck_for(&projects, &state).stack_window(SCREEN);
 
         assert_eq!(window.paged(1), 3, "one page is one window of previews");
         assert_eq!(window.scrolled(9), 4, "7 previews less the 3 on screen");
         assert_eq!(window.scrolled(-1), 0);
 
         state.set_stack_offset(window.paged(1));
-        let scrolled = deck(&projects, &state).stack_window(CANVAS);
+        let scrolled = deck_for(&projects, &state).stack_window(SCREEN);
         assert_eq!(scrolled.offset, 3);
         assert_eq!(scrolled.paged(-1), 0);
         assert_eq!(scrolled.paged(1), 4);
@@ -2875,25 +2916,25 @@ mod tests {
         let mut state = DeckState::new(8);
         state.toggle_collapse(6);
         state.set_stack_offset(2);
-        let view = deck(&projects, &state);
+        let view = deck_for(&projects, &state);
 
         // The stack is [1..=7]; the window starts at its third preview.
-        assert_eq!(view.position_at(CANVAS, Position::new(110, 5)), Some(3));
-        assert_eq!(view.position_at(CANVAS, Position::new(110, 18)), Some(4));
-        assert_eq!(view.position_at(CANVAS, Position::new(110, 31)), Some(5));
+        assert_eq!(view.position_at(SCREEN, Position::new(110, 5)), Some(3));
+        assert_eq!(view.position_at(SCREEN, Position::new(110, 18)), Some(4));
+        assert_eq!(view.position_at(SCREEN, Position::new(110, 31)), Some(5));
         assert_eq!(
-            view.swap_position_at(CANVAS, Position::new(110, 5)),
+            view.swap_position_at(SCREEN, Position::new(110, 5)),
             Some(3)
         );
         assert_eq!(
-            view.terminal_at(CANVAS, Position::new(110, 5))
+            view.terminal_at(SCREEN, Position::new(110, 5))
                 .map(ToString::to_string)
                 .as_deref(),
             Some("t4")
         );
         // The marker cells belong to whichever preview the window put there.
-        assert_eq!(view.marker_at(CANVAS, Position::new(103, 0)), Some(3));
-        assert_eq!(view.marker_at(CANVAS, Position::new(103, 13)), Some(4));
+        assert_eq!(view.marker_at(SCREEN, Position::new(103, 0)), Some(3));
+        assert_eq!(view.marker_at(SCREEN, Position::new(103, 13)), Some(4));
     }
 
     /// The wheel over a preview is that preview's (#25), so the list is paged
@@ -2902,24 +2943,24 @@ mod tests {
     fn the_stack_chrome_is_where_the_wheel_pages_the_list() {
         let projects = synthetic(8);
         let state = DeckState::new(8);
-        let view = deck(&projects, &state);
+        let view = deck_for(&projects, &state);
 
-        assert!(view.stack_scroll_at(CANVAS, Position::new(99, 5)), "gutter");
-        assert!(view.stack_scroll_at(CANVAS, Position::new(120, 12)), "gap");
+        assert!(view.stack_scroll_at(SCREEN, Position::new(99, 5)), "gutter");
+        assert!(view.stack_scroll_at(SCREEN, Position::new(120, 12)), "gap");
         assert!(
-            view.stack_scroll_at(CANVAS, Position::new(120, 39)),
+            view.stack_scroll_at(SCREEN, Position::new(120, 39)),
             "footer"
         );
         assert!(
-            !view.stack_scroll_at(CANVAS, Position::new(110, 5)),
+            !view.stack_scroll_at(SCREEN, Position::new(110, 5)),
             "preview"
         );
         assert!(
-            !view.stack_scroll_at(CANVAS, Position::new(10, 10)),
+            !view.stack_scroll_at(SCREEN, Position::new(10, 10)),
             "master"
         );
         assert!(
-            !view.stack_scroll_at(CANVAS, Position::new(120, 41)),
+            !view.stack_scroll_at(SCREEN, Position::new(120, 41)),
             "the status row is not the stack"
         );
     }
@@ -2933,7 +2974,7 @@ mod tests {
         assert!(state.toggle_collapse(1));
         assert!(state.toggle_collapse(2));
 
-        let window = deck(&projects, &state).stack_window(CANVAS);
+        let window = deck_for(&projects, &state).stack_window(SCREEN);
         assert_eq!(window.visible, 4, "two strips buy room for a fourth pane");
 
         let buffer = render_long(&projects, &state, (144, 42));
