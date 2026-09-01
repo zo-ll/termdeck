@@ -1,4 +1,4 @@
-//! The frontend-active reference state from the accepted design export.
+//! Reference engine states from the accepted design export.
 //!
 //! Test-only: this module is compiled under `cfg(test)` and is not part of the
 //! library's public surface.
@@ -110,12 +110,26 @@ pub fn projects() -> Vec<Project> {
 /// Engine state for reference screen 01: frontend master, backend running,
 /// app exited with code 1, worker running but idle.
 pub fn frontend_active() -> FakeEngine {
+    engine("frontend")
+}
+
+/// The same four terminals after `ctrl+g 2`, as reference screen 02: the
+/// engine has reflowed backend to the master size and frontend to a preview.
+pub fn backend_promoted() -> FakeEngine {
+    engine("backend")
+}
+
+/// Builds the reference terminals, sized for whichever one holds the master.
+fn engine(master: &str) -> FakeEngine {
+    let master = TerminalId::new(master);
     let projects = projects();
     let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    let size = |terminal: &TerminalId| {
+        if *terminal == master { MASTER } else { PREVIEW }
+    };
 
     let frontend = TerminalId::new("frontend");
-    let mut frame = screen(&frontend, MASTER, FRONTEND);
-    frame.cursor.row = FRONTEND.len() as u16;
+    let mut frame = screen(&frontend, size(&frontend), FRONTEND);
     // Two coloured runs prove engine styles survive into the buffer.
     paint(&mut frame, 5, 2, 11, bold(0xc8, 0x98, 0xe0));
     paint(&mut frame, 7, 13, 22, plain(0x7a, 0xa2, 0xf7));
@@ -124,12 +138,12 @@ pub fn frontend_active() -> FakeEngine {
     engine.set_metadata(&frontend, running(12_000, 4_207_331, 41_233));
 
     let backend = TerminalId::new("backend");
-    engine.set_frame(screen(&backend, PREVIEW, BACKEND));
+    engine.set_frame(screen(&backend, size(&backend), BACKEND));
     engine.set_status(&backend, TerminalStatus::Running);
     engine.set_metadata(&backend, running(22_000, 91_204, 41_240));
 
     let app = TerminalId::new("app");
-    engine.set_frame(screen(&app, PREVIEW, APP));
+    engine.set_frame(screen(&app, size(&app), APP));
     engine.set_status(&app, TerminalStatus::Exited { code: Some(1) });
     engine.set_metadata(
         &app,
@@ -145,7 +159,7 @@ pub fn frontend_active() -> FakeEngine {
     );
 
     let worker = TerminalId::new("worker");
-    engine.set_frame(screen(&worker, PREVIEW, WORKER));
+    engine.set_frame(screen(&worker, size(&worker), WORKER));
     engine.set_status(&worker, TerminalStatus::Running);
     engine.set_metadata(&worker, running(384_000, 2_044, 41_255));
 
@@ -187,6 +201,7 @@ fn screen(terminal: &TerminalId, size: ScreenSize, lines: &[&str]) -> TerminalFr
         }
     }
     frame.cursor.column = 0;
+    frame.cursor.row = (lines.len() as u16).min(size.rows.saturating_sub(1));
     frame
 }
 

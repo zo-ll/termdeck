@@ -1,0 +1,22 @@
+  1 frontend  2 backend · 3 app ✕1 · 4 worker ○                                     
+                                                                                    
+┌─ > 1 frontend · …/frontend · ● ──────────────────────────────────────────────────┐
+│  $ pnpm dev                                                                   …  │
+│                                                                               …  │
+│  > idp-frontend@0.4.2 dev                                                     …  │
+│  > vite --host                                                                …  │
+│                                                                               …  │
+│    VITE v5.4.8  ready in 412 ms                                               …  │
+│                                                                               …  │
+│    ➜  Local:   http://localhost:5173/                                         …  │
+│    ➜  Network: http://192.168.1.24:5173/                                      …  │
+│    ➜  press h + enter to show help                                            …  │
+│                                                                               …  │
+│  12:03:58 [vite] page reload src/main.tsx                                     …  │
+│  12:04:12 [vite] hmr update /src/routes/WorkspaceList.tsx                     …  │
+│  12:04:12 [vite] hmr update /src/styles/tokens.css                            …  │
+│  12:04:29 [vite] hmr update /src/routes/WorkspaceList.tsx                     …  │
+│  12:04:41 [vite] optimized dependencies changed, reloading                    …  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+                                                                                    
+   idp   84×22  stack hidden                          ^g j/k · 1-4 · z · [ · ? · q  

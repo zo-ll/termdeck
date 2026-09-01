@@ -1,0 +1,42 @@
+┌─ > 2 backend  ·  ~/idp/backend  ·  ● running  ·  uv run api ───────────────── [##····] MASTER ─┐  ┌─ 1 frontend · …/frontend · ● ─ [####··] ─┐
+│    INFO  Server running on                                                                     │  │  $ pnpm dev                              │
+│          [http://127.0.0.1:8000]                                                               │  │                                          │
+│                                                                                                │  │  > idp-frontend@0.4.2 dev                │
+│  12:05:52 /api/workspaces ····· 42.1ms                                                         │  │  > vite --host                           │
+│  12:05:53 /api/workspaces/idp/… 118ms                                                          │  │                                          │
+│  12:05:58 /api/terminals ······ 11.4ms                                                         │  │    VITE v5.4.8  ready in 412 ms          │
+│  12:06:01 /api/health ·········  3.0ms                                                         │  │                                          │
+│  12:06:07 queue ProcessLog ··· done                                                            │  │    ➜  Local:   http://localhost:5173/    │
+│  12:06:09 /api/terminals/2/log  8.7ms                                                          │  │    ➜  Network: http://192.168.1.24:5173  │
+│                                                                                                │  │    ➜  press h + enter to show help       │
+│                                                                                                │  └──────────────────────────────────────────┘
+│                                                                                                │                                              
+│                                                                                                │  ┌─ 3 app · …/app · ✕ exit 1 ────── 2m ago ─┐
+│                                                                                                │  │  > idp-app@0.2.1 dev                     │
+│                                                                                                │  │  > expo start --dev-client               │
+│                                                                                                │  │                                          │
+│                                                                                                │  │  ✖ Metro bundler failed to start         │
+│                                                                                                │  │    Error: EADDRINUSE :::8081             │
+│                                                                                                │  │    another process is bound to           │
+│                                                                                                │  │    port 8081                             │
+│                                                                                                │  │                                          │
+│                                                                                                │  │  ──────────────────────────────────────  │
+│                                                                                                │  │  exited · code 1 · 12:04:02 · r restart  │
+│                                                                                                │  └──────────────────────────────────────────┘
+│                                                                                                │                                              
+│                                                                                                │  ┌─ 4 worker · …/backend · ○ ───── idle 6m ─┐
+│                                                                                                │  │    INFO  Processing jobs from the        │
+│                                                                                                │  │          [default] queue.                │
+│                                                                                                │  │                                          │
+│                                                                                                │  │  12:00:14 SyncRepos ········ DONE        │
+│                                                                                                │  │  12:00:19 IndexWorkspace ··· DONE        │
+│                                                                                                │  │  12:00:21 SendDigest ······· DONE        │
+│                                                                                                │  │                                          │
+│                                                                                                │  │  no output for 6m                        │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  └──────────────────────────────────────────┘
+│                                                                                                │                                              
+└────────────────────────────────────────────────────────────────────────────────────────────────┘   promoted backend · ^g 1 back               
+                                                                                                                                                
+   idp   4 terminals   > 2 backend  ·  3 stacked  ·  1 exited       ^g j/k switch  ^g 1-4 select  ^g z zoom  ^g [ scroll  ^g ? help  ^g q quit  
