@@ -344,3 +344,10 @@ scope.
   codex (same session, correction-4.md): add ONLY the idle-CPU step, keep gate
   green, real marker timestamp this time. Final slice; on re-review pass →
   commit → push → PR → then #2/#3 epics close.
+- 2026-09-01: #4 re-review PASS (idle-CPU step added, gate 88 tests).
+  Committed `cd26bfa` → pushed → PR #23 — the FINAL slice. Pending: user
+  merge approval → then close epics #2/#3 and mark the tracker done.
+  Also pending: codex crates.io permission change (codex is now idle,
+  per user: investigate after its last turn). Flaky observation recorded:
+  one engine real-shell test flaked once under load (87/1) — follow-up
+  robustness candidate.
