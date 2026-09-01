@@ -17,19 +17,19 @@
 │  12:04:41 [vite] optimized dependencies │                                                          │                                         │
 │                                         │  VIEW                                                    │ ✖ Metro bundler failed to start         │
 │    VITE v5.4.8  ready in 268 ms         │  ^g z             toggle zoom                            │   Error: EADDRINUSE :::8081             │
-│                                         │  ^g [             enter scrollback mode                  │   another process is bound to           │
-│  12:05:02 [vite] hmr update /src/compone│                                                          │   port 8081                             │
-│  12:05:09 warning  src/components/PaneTi│  TERMINAL                                                │                                         │
-│           'status' is declared but its v│  ^g r             respawn active terminal                │ ──────────────────────────────────────  │
-│  12:05:17 [vite] hmr update /src/compone│  ^g ^g            send a literal ^g                      │ exited · code 1 · 12:04:02 · r restart  │
-│  12:05:33 [vite] hmr update /src/compone│                                                          │─────────────────────────────────────────┘
-│  12:05:58 [vite] hmr update /src/routes/│  SESSION                                                 │                                          
-│  12:06:04 [vite] hmr invalidate /src/hoo│  ^g ?             this help                              │ 4 worker · …/backend · ○ ───── idle 6m ─┐
-│  12:06:04 [vite] page reload src/hooks/u│  ^g q             quit termdeck                          │   INFO  Processing jobs from the        │
-│  12:06:11 [vite] hmr update /src/routes/│                                                          │         [default] queue.                │
-│                                         │  esc  close                                              │                                         │
-│                                         └──────────────────────────────────────────────────────────┘ 12:00:14 SyncRepos ········ DONE        │
-│                                                                                                │  │  12:00:19 IndexWorkspace ··· DONE        │
+│                                         │  ^g c             collapse / expand previews             │   another process is bound to           │
+│  12:05:02 [vite] hmr update /src/compone│  ^g [             enter scrollback mode                  │   port 8081                             │
+│  12:05:09 warning  src/components/PaneTi│                                                          │                                         │
+│           'status' is declared but its v│  TERMINAL                                                │ ──────────────────────────────────────  │
+│  12:05:17 [vite] hmr update /src/compone│  ^g r             respawn active terminal                │ exited · code 1 · 12:04:02 · r restart  │
+│  12:05:33 [vite] hmr update /src/compone│  ^g ^g            send a literal ^g                      │─────────────────────────────────────────┘
+│  12:05:58 [vite] hmr update /src/routes/│                                                          │                                          
+│  12:06:04 [vite] hmr invalidate /src/hoo│  SESSION                                                 │ 4 worker · …/backend · ○ ───── idle 6m ─┐
+│  12:06:04 [vite] page reload src/hooks/u│  ^g ?             this help                              │   INFO  Processing jobs from the        │
+│  12:06:11 [vite] hmr update /src/routes/│  ^g q             quit termdeck                          │         [default] queue.                │
+│                                         │                                                          │                                         │
+│                                         │  esc  close                                              │ 12:00:14 SyncRepos ········ DONE        │
+│                                         └──────────────────────────────────────────────────────────┘ 12:00:19 IndexWorkspace ··· DONE        │
 │                                                                                                │  │  12:00:21 SendDigest ······· DONE        │
 │                                                                                                │  │                                          │
 │                                                                                                │  │  no output for 6m                        │

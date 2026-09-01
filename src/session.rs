@@ -129,11 +129,15 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             master_ratio: workspace.master_ratio.get(),
                             now: now(),
                         }
-                        .terminal_at(
+                        .position_at(
                             ratatui::layout::Rect::new(0, 0, size.columns, size.rows),
                             pointer,
                         )
-                        .cloned();
+                        // A collapsed preview has no viewport, so there is
+                        // nothing under the pointer to scroll.
+                        .filter(|position| !deck.collapsed(*position))
+                        .and_then(|position| workspace.projects.get(position))
+                        .map(|project| project.terminal.clone());
                         let active = deck
                             .active()
                             .and_then(|position| workspace.projects.get(position))

@@ -19,16 +19,21 @@ pub enum Modal {
     Quit,
 }
 
-/// Which terminal holds the master pane, in which order the rest stack, and
-/// whether the stack is hidden.
+/// Which terminal holds the master pane, in which order the rest stack,
+/// whether the stack is hidden, and which previews are folded to a title row.
 ///
 /// `order` is a permutation of configured positions: `order[0]` is the master
 /// and the remainder is the stack from top to bottom. Promotion swaps the
 /// selected terminal with the master, so the old master lands in the slot the
 /// new one vacated and configured numbers stay learnable.
+///
+/// `collapsed` is indexed by configured position rather than by slot, so a
+/// fold travels with its terminal: the export's "collapse state persists per
+/// workspace and survives promotion".
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeckState {
     order: Vec<usize>,
+    collapsed: Vec<bool>,
     zoomed: bool,
     scrollback: bool,
     modal: Option<Modal>,
@@ -40,6 +45,7 @@ impl DeckState {
     pub fn new(terminals: usize) -> Self {
         Self {
             order: (0..terminals).collect(),
+            collapsed: vec![false; terminals],
             zoomed: false,
             scrollback: false,
             modal: None,
@@ -59,6 +65,48 @@ impl DeckState {
 
     pub fn zoomed(&self) -> bool {
         self.zoomed
+    }
+
+    /// Whether the preview at this configured position is folded to a single
+    /// title row. The master is never collapsed, whatever the stored flag.
+    pub fn collapsed(&self, position: usize) -> bool {
+        self.active() != Some(position) && self.collapsed.get(position).copied().unwrap_or(false)
+    }
+
+    /// How many previews are currently folded. Drives the disclosure markers,
+    /// the stack footer, and the status-bar census, all of which the export
+    /// shows only once at least one preview is collapsed.
+    pub fn collapsed_count(&self) -> usize {
+        self.stack()
+            .iter()
+            .filter(|position| self.collapsed(**position))
+            .count()
+    }
+
+    /// Folds or unfolds one preview. The master has no fold to toggle.
+    pub fn toggle_collapse(&mut self, position: usize) -> bool {
+        if self.active() == Some(position) {
+            return false;
+        }
+        let Some(flag) = self.collapsed.get_mut(position) else {
+            return false;
+        };
+        *flag = !*flag;
+        true
+    }
+
+    /// `^g c`: the master is always the selected pane, so this collapses every
+    /// preview at once, and expands them all again once none is left open.
+    pub fn toggle_collapse_all(&mut self) -> bool {
+        let stack = self.stack().to_vec();
+        if stack.is_empty() {
+            return false;
+        }
+        let collapse = stack.iter().any(|position| !self.collapsed[*position]);
+        for position in stack {
+            self.collapsed[position] = collapse;
+        }
+        true
     }
 
     /// Whether the master pane shows its engine-owned scrollback instead of
@@ -130,6 +178,11 @@ impl DeckState {
         }
         self.demotion = Some((self.order[0], now));
         self.order.swap(0, slot);
+        // A collapsed pane expands as it takes the master frame; every other
+        // fold is left alone, so the rest of the stack survives the swap.
+        if let Some(flag) = self.collapsed.get_mut(position) {
+            *flag = false;
+        }
         // The mode belongs to the pane, and the new master is live.
         self.scrollback = false;
         true
@@ -369,6 +422,91 @@ mod tests {
         assert!(state.close_modal());
         assert_eq!(state.modal(), None);
         assert!(!state.close_modal());
+    }
+
+    #[test]
+    fn collapse_all_folds_every_preview_then_expands_them_again() {
+        let mut state = DeckState::new(4);
+
+        assert!(state.toggle_collapse_all());
+        assert_eq!(state.collapsed_count(), 3);
+        assert!(state.collapsed(1) && state.collapsed(2) && state.collapsed(3));
+
+        assert!(state.toggle_collapse_all());
+        assert_eq!(state.collapsed_count(), 0);
+    }
+
+    /// From a mixed stack the first press finishes the job rather than
+    /// inverting it, so the key always means "collapse" until nothing is open.
+    #[test]
+    fn collapse_all_closes_what_is_left_open_before_it_reopens_anything() {
+        let mut state = DeckState::new(4);
+        state.toggle_collapse(2);
+
+        assert!(state.toggle_collapse_all());
+
+        assert_eq!(state.collapsed_count(), 3);
+    }
+
+    #[test]
+    fn the_master_has_no_fold_to_toggle() {
+        let mut state = DeckState::new(4);
+
+        assert!(!state.toggle_collapse(0));
+        assert!(!state.toggle_collapse(9));
+        assert_eq!(state.collapsed_count(), 0);
+    }
+
+    #[test]
+    fn a_lone_terminal_has_no_stack_to_fold() {
+        let mut state = DeckState::new(1);
+
+        assert!(!state.toggle_collapse_all());
+        assert_eq!(state.collapsed_count(), 0);
+    }
+
+    /// The export: "^g 2-4 promotes a collapsed pane directly — it expands as
+    /// it takes the master frame."
+    #[test]
+    fn promoting_a_folded_preview_expands_it_and_leaves_the_others_folded() {
+        let mut state = DeckState::new(4);
+        state.toggle_collapse_all();
+
+        apply(&mut state, ActionCommand::SelectPosition(2));
+
+        assert_eq!(state.active(), Some(2));
+        assert!(!state.collapsed(2), "a master is never folded");
+        assert!(state.collapsed(1) && state.collapsed(3));
+        // The demoted old master lands in the vacated slot, still open.
+        assert!(!state.collapsed(0));
+    }
+
+    /// The export: "collapse state persists per workspace and survives
+    /// promotion."
+    #[test]
+    fn a_fold_travels_with_its_terminal_across_promotions() {
+        let mut state = DeckState::new(4);
+        state.toggle_collapse(3);
+
+        apply(&mut state, ActionCommand::SelectPosition(1));
+        apply(&mut state, ActionCommand::SelectPosition(2));
+
+        assert!(
+            state.collapsed(3),
+            "worker is still folded wherever it sits"
+        );
+        assert_eq!(state.collapsed_count(), 1);
+    }
+
+    #[test]
+    fn a_fold_survives_zoom() {
+        let mut state = DeckState::new(4);
+        state.toggle_collapse(2);
+
+        apply(&mut state, ActionCommand::ToggleZoom);
+        apply(&mut state, ActionCommand::ToggleZoom);
+
+        assert!(state.collapsed(2));
     }
 
     #[test]

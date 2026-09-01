@@ -374,9 +374,10 @@ Screen 05's right hint row:
 treatment `^g z` gets in screen 03 when zoom is on. Note that `^g [ scroll` is
 **absent**; `^g c collapse` takes its place.
 
-Rule: when `c >= 1`, `KEY_HINTS` swaps the `^g [ scroll` entry for
-`^g c collapse` and accents the key. When `c == 0` the hint row is unchanged
-(screens 01/02).
+Rule: when `c >= 1` the hint row **drops** `^g [ scroll` and **seats
+`^g c collapse` ahead of `^g z zoom`**, accenting the key. Note the ordering:
+the export does not put collapse into the slot scrollback vacated, it puts it
+third. When `c == 0` the hint row is unchanged (screens 01/02).
 
 **Ambiguity:** the export never shows a hint row containing `^g c` with nothing
 collapsed, and screens 01/02 in the same export show the pre-collapse row.
@@ -487,11 +488,11 @@ responsive follow-on and can land second.
 ### Control wiring
 
 - **H1.** `Input::command`: `Key::Char('c')` → `deck.toggle_collapse_all()`.
-- **H2.** Mouse: a press-and-release inside the two cells the marker actually
-  occupies toggles that preview and consumes the gesture — no drag begins, no
-  double-click timer arms. Per A11 those cells are
-  `stack.x + 3 .. stack.x + 4` on an open pane's top border row, and
-  `stack.x + 2 .. stack.x + 3` on a collapsed strip's row.
+- **H2.** *(blocked — see Implementation status.)* Mouse: a press-and-release
+  inside the two cells the marker actually occupies toggles that preview and
+  consumes the gesture — no drag begins, no double-click timer arms. Per A11
+  those cells are `stack.x + 3 .. stack.x + 4` on an open pane's top border
+  row, and `stack.x + 2 .. stack.x + 3` on a collapsed strip's row.
 - **H3.** Wheel: suppress the `EngineCommand::Scroll` dispatch when the hit pane
   is collapsed. Simplest plumbing: have the hit test yield the configured
   position (it already walks the stack) and let the session consult
@@ -566,3 +567,47 @@ responsive follow-on and can land second.
 | A9 | Stack footer when a demotion and a collapse are both live. | Demotion wins for its 1.5s window, then the collapse footer returns. |
 | A10 | Wheel over a strip never shown. | No-op — a strip has no viewport. |
 | A11 | The export's strip text sits at `2ch` while a pane title's text sits at `3ch`, so `▸` and `▾` are one column out of line. | Followed literally. Moving the title would change the committed screen-01/02 fixtures; moving the strip would deviate from screen 05. |
+
+
+---
+
+## 8. Implementation status
+
+Screen 05 was implemented on `coord/27-collapse-stack` after this spec was
+written. Gate: **106 tests pass, `cargo fmt --check` clean, `cargo clippy
+--all-targets -D warnings` clean.**
+
+**Landed:** S1–S4, C1–C5, H1, H3, H4, F1–F3.
+
+**Not landed — H2 (marker click).** The per-preview pointer toggle needs mouse
+press/release events, and this branch only decodes the wheel. The press/move/up
+state machine, drag-to-swap and double-click-to-promote all live in issue #26
+(`coord/26-mouse-actions`, PR #29), which is not merged into `main` yet. H2
+should land as a small follow-on once #26 merges; everything it needs is
+already in place:
+
+- `DeckState::toggle_collapse(position)` is implemented, tested, and currently
+  reachable only from tests and `toggle_collapse_all`;
+- `Deck::position_at` resolves a collapsed strip to its configured position, so
+  the marker's two cells can be range-checked against the slot rectangle;
+- the geometry engine already renders any mix of folded and open previews, so
+  no layout work remains.
+
+Until then the reachable controls are `^g c` (fold or unfold the whole stack)
+and `^g 2-4` / `^g j` / `^g k` (promoting a folded preview expands it). The
+mixed state screen 05 depicts is therefore reachable in tests and by promotion,
+but not yet by a single pointer gesture.
+
+**Two corrections this document absorbed from implementation:**
+
+1. §3.5 — the hint row seats `^g c collapse` *third*, ahead of `^g z zoom`, and
+   drops `^g [ scroll`; it does not reuse scrollback's slot. Corrected above.
+2. §3.1 — the strip tail clips to the width the 44-column strip has left after
+   the marker, number, name and dot, so a long output line renders as e.g.
+   `▸ 2 backend · ● · 12:06:09 /api/termina…`. The rule was right; the worked
+   example is worth having.
+
+**R3 was deliberately not implemented** (auto-collapse, the `MIN_OPEN` floor,
+the new narrow threshold), per the scope chosen for this slice. Nothing depends
+on it: the §1.3 invariant means a fold can never overflow a stack that fitted
+before it, so the existing "drop previews that do not fit" path stays correct.
