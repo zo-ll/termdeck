@@ -296,3 +296,10 @@ scope.
   (committed in the skills repo). The reviewer for #14 reported pass (input
   router and modals verified, c4f2b6c, 85 tests) — PR #21 open; PR #20 open;
   both awaiting user merge approval.
+- 2026-09-01: MERGED (user approval): #20 (one-terminal native engine) →
+  `4aadb16`, #21 (modal + input modes) → `200e3cb`. Post-merge main:
+  fmt/clippy `-D warnings` clean, 86 tests pass. Issues #9 and #14 CLOSED
+  (comments reference merges). Remaining tracker: #10 (native lifecycle,
+  blocked on #9 — NOW UNBLOCKED, codex lane), #2/#3 epics in progress, #4
+  production integration (blocked on #2/#3). Worker branches kept (user
+  preference).
