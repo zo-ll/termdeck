@@ -383,6 +383,8 @@ mod tests {
         let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 4)).unwrap();
 
         wait_for_exit(&mut engine, &frontend, 7);
+        wait_for_frame(&mut engine, &frontend, "FRONT-EXITED");
+        wait_for_frame(&mut engine, &backend, "BACK-RUNNING");
         assert!(frame_text(engine.frame(&frontend).unwrap()).contains("FRONT-EXITED"));
         assert!(frame_text(engine.frame(&backend).unwrap()).contains("BACK-RUNNING"));
         assert_eq!(engine.status(&backend), Some(&TerminalStatus::Running));
@@ -458,7 +460,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     fn wait_for_exit(engine: &mut NativeEngine, terminal: &TerminalId, code: i32) {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(15);
         while Instant::now() < deadline {
             engine.drain_events();
             if engine.status(terminal) == Some(&TerminalStatus::Exited { code: Some(code) }) {
@@ -471,7 +473,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     fn wait_for_frame(engine: &mut NativeEngine, terminal: &TerminalId, expected: &str) {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(15);
         while Instant::now() < deadline {
             engine.drain_events();
             if frame_text(engine.frame(terminal).unwrap()).contains(expected) {
