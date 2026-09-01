@@ -1,10 +1,11 @@
 //! Key handling for the outer interface.
 //!
-//! Every binding is reached through the `ctrl+g` prefix and maps onto a frozen
-//! [`ActionCommand`]. Anything the deck can carry out itself — selection, zoom,
-//! scrollback, the modals — [`Input::press`] applies to the [`DeckState`] it is
-//! given; what is left over needs the engine or the process, and comes back as
-//! a [`Reaction`] for the caller.
+//! Every binding is reached through the `ctrl+g` prefix. Most map onto a frozen
+//! [`ActionCommand`]; `^g c` is purely the deck's own geometry and applies
+//! straight to [`DeckState`]. Anything the deck can carry out itself —
+//! selection, zoom, collapse, scrollback, the modals — [`Input::press`] applies
+//! to the [`DeckState`] it is given; what is left over needs the engine or the
+//! process, and comes back as a [`Reaction`] for the caller.
 //!
 //! Keys arrive already decoded: this module names no terminal backend, so the
 //! event loop can be written against any of them.
@@ -160,6 +161,12 @@ impl Input {
                 ActionCommand::SelectPosition(digit as usize - '1' as usize)
             }
             Key::Char('z') => ActionCommand::ToggleZoom,
+            // Collapse is the deck's own geometry, so it needs no engine and
+            // carries no frozen action of its own.
+            Key::Char('c') => {
+                deck.toggle_collapse_all();
+                return None;
+            }
             Key::Char('[') => ActionCommand::ToggleScrollback,
             Key::Char('r') => ActionCommand::RespawnActive,
             Key::Char('?') => ActionCommand::ShowHelp,
@@ -296,6 +303,23 @@ mod tests {
 
         session.command(Key::Char('['));
         assert!(session.deck.scrollback());
+    }
+
+    #[test]
+    fn the_collapse_key_folds_the_stack_without_a_frozen_action() {
+        let mut input = Input::new(10);
+        let mut deck = DeckState::new(4);
+        let projects = fixture::projects();
+
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        assert_eq!(input.press(Key::Char('c'), &mut deck, &projects, NOW), None);
+
+        assert_eq!(deck.collapsed_count(), 3);
+
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('c'), &mut deck, &projects, NOW);
+
+        assert_eq!(deck.collapsed_count(), 0);
     }
 
     #[test]

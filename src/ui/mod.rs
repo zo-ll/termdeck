@@ -74,6 +74,8 @@ const GUTTER: u16 = 2;
 const PREVIEW_HEIGHT: u16 = 12;
 /// Rows in one preview once the stack is narrower than [`WIDE_COLUMNS`].
 const COMPACT_PREVIEW_HEIGHT: u16 = 9;
+/// Rows in a collapsed preview: the export folds it to a single title row.
+const COLLAPSED_HEIGHT: u16 = 1;
 /// At or above this width the stack takes its share of `master_ratio`.
 const WIDE_COLUMNS: u16 = 120;
 /// Below this width the stack is not usable and the deck falls back to
@@ -87,8 +89,9 @@ const PADDING: u16 = 2;
 const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 /// Cells in the activity meter.
 const METER_CELLS: u64 = 6;
-/// Help overlay size, from the supplement: 60 columns by 21 rows.
-const HELP_SIZE: (u16, u16) = (60, 21);
+/// Help overlay size: the supplement's 60 columns by 21 rows, one row taller
+/// for the collapse binding.
+const HELP_SIZE: (u16, u16) = (60, 22);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// Column the help overlay's descriptions start at.
@@ -141,6 +144,19 @@ impl Pane {
     fn wide(self) -> bool {
         matches!(self.base(), Self::Master | Self::Zoomed)
     }
+}
+
+/// One drawn child of the preview stack, top to bottom.
+///
+/// Produced once per render by [`Deck::stack_layout`] and consumed by both the
+/// renderer and the pointer hit test, so the two can never disagree about
+/// where a preview sits — heights stopped being uniform once a preview could
+/// be folded.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct StackSlot {
+    position: usize,
+    rect: Rect,
+    collapsed: bool,
 }
 
 /// The chosen screen arrangement for one render.
@@ -245,6 +261,10 @@ impl Deck<'_> {
     }
 
     /// Returns the configured position in the pane under `pointer`.
+    ///
+    /// A collapsed preview still answers here, so promoting or swapping it by
+    /// pointer keeps working; it is the caller's business to notice that a
+    /// folded pane has no viewport to scroll.
     pub fn position_at(&self, area: Rect, pointer: Position) -> Option<usize> {
         if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
@@ -276,26 +296,63 @@ impl Deck<'_> {
                 if master.contains(pointer) {
                     return active();
                 }
-                let mut top = body.y;
-                for position in self.state.stack().iter().copied() {
-                    if top + preview > body.y + body.height.saturating_sub(2) {
-                        break;
-                    }
-                    let pane = Rect {
+                self.stack_layout(
+                    Rect {
                         x: master.width + GUTTER,
-                        y: top,
                         width: stack,
-                        height: preview,
-                    };
-                    if pane.contains(pointer) {
-                        return self.projects.get(position).map(|_| position);
-                    }
-                    top += preview + 1;
-                }
-                None
+                        ..body
+                    },
+                    preview,
+                )
+                .into_iter()
+                .find(|slot| slot.rect.contains(pointer))
+                .map(|slot| slot.position)
             }
             _ => None,
         }
+    }
+
+    /// The configured position whose disclosure marker sits under `pointer`.
+    ///
+    /// The marker owns two cells at the head of a stack pane's title: the
+    /// export draws `▾ ` inside an open preview's top border and `▸ ` at the
+    /// head of a collapsed strip, one column further left because the strip
+    /// has no border to inset past.
+    ///
+    /// Markers exist only while a fold is in play, so with nothing collapsed
+    /// this never matches and those cells keep their ordinary drag and
+    /// double-click behaviour.
+    pub fn marker_at(&self, area: Rect, pointer: Position) -> Option<usize> {
+        if self.state.collapsed_count() == 0
+            || !area.contains(pointer)
+            || area.width < GUTTER + 4
+            || area.height < 4
+        {
+            return None;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let Layout::Stacked { stack, preview } = self.layout(body) else {
+            return None;
+        };
+        let master = body.width - GUTTER - stack;
+        self.stack_layout(
+            Rect {
+                x: master + GUTTER,
+                width: stack,
+                ..body
+            },
+            preview,
+        )
+        .into_iter()
+        .find(|slot| {
+            // An open pane insets its title past the border; a strip does not.
+            let head = slot.rect.x + if slot.collapsed { PADDING } else { PADDING + 1 };
+            pointer.y == slot.rect.y && (pointer.x == head || pointer.x == head + 1)
+        })
+        .map(|slot| slot.position)
     }
 
     /// A draggable pane must have a visible master-and-stack counterpart.
@@ -338,6 +395,65 @@ impl Deck<'_> {
         }
     }
 
+    /// Places the stack's children, top to bottom.
+    ///
+    /// A collapsed preview gives up every row but its title, and those rows go
+    /// straight to the previews still open: the export's "freed rows
+    /// redistribute to the panes still open, so one open preview grows to fill
+    /// the column". The remainder goes to the topmost open panes so the column
+    /// stays deterministic.
+    ///
+    /// Because each fold hands over exactly what it gave up, the stack's total
+    /// used height never changes, and a fold can never overflow a stack that
+    /// fitted before it.
+    fn stack_layout(&self, area: Rect, preview: u16) -> Vec<StackSlot> {
+        let stacked: Vec<usize> = self
+            .state
+            .stack()
+            .iter()
+            .copied()
+            .filter(|position| self.projects.get(*position).is_some())
+            .collect();
+        let folded = stacked
+            .iter()
+            .filter(|position| self.state.collapsed(**position))
+            .count();
+        let open = stacked.len() - folded;
+        let freed = folded as u16 * (preview - COLLAPSED_HEIGHT);
+        let (share, mut remainder) = if open > 0 {
+            (freed / open as u16, freed % open as u16)
+        } else {
+            (0, 0)
+        };
+
+        let mut slots = Vec::new();
+        let mut top = area.y;
+        for position in stacked {
+            let collapsed = self.state.collapsed(position);
+            let height = if collapsed {
+                COLLAPSED_HEIGHT
+            } else {
+                let extra = u16::from(remainder > 0);
+                remainder = remainder.saturating_sub(1);
+                preview + share + extra
+            };
+            if top + height > area.y + area.height.saturating_sub(2) {
+                break;
+            }
+            slots.push(StackSlot {
+                position,
+                rect: Rect {
+                    y: top,
+                    height,
+                    ..area
+                },
+                collapsed,
+            });
+            top += height + 1;
+        }
+        slots
+    }
+
     fn draw_active(
         &self,
         engine: &dyn TerminalEngine,
@@ -364,31 +480,27 @@ impl Deck<'_> {
     ) -> Vec<Rect> {
         let demoted = self.state.demoted(self.now);
         let mut drawn = Vec::new();
-        let mut top = area.y;
-        for position in self.state.stack().iter().copied() {
-            let Some(project) = self.projects.get(position) else {
+        for slot in self.stack_layout(area, preview) {
+            let Some(project) = self.projects.get(slot.position) else {
                 continue;
             };
-            if top + preview > area.y + area.height.saturating_sub(2) {
-                break;
-            }
-            let kind = if self.state.dragged() == Some(position) {
-                Pane::Preview.dragging(false)
-            } else if self.state.drag_target() == Some(position) {
-                Pane::Preview.dragging(true)
-            } else if demoted == Some(position) {
-                Pane::Demoted
+            if slot.collapsed {
+                // A strip has no border to carry a drag or demotion highlight,
+                // and already sits on the demoted background.
+                self.draw_strip(engine, buffer, slot.rect, project, slot.position);
             } else {
-                Pane::Preview
-            };
-            let rect = Rect {
-                y: top,
-                height: preview,
-                ..area
-            };
-            self.draw_pane(engine, buffer, rect, project, position, kind);
-            drawn.push(rect);
-            top += preview + 1;
+                let kind = if self.state.dragged() == Some(slot.position) {
+                    Pane::Preview.dragging(false)
+                } else if self.state.drag_target() == Some(slot.position) {
+                    Pane::Preview.dragging(true)
+                } else if demoted == Some(slot.position) {
+                    Pane::Demoted
+                } else {
+                    Pane::Preview
+                };
+                self.draw_pane(engine, buffer, slot.rect, project, slot.position, kind);
+            }
+            drawn.push(slot.rect);
         }
         buffer.set_line(
             area.x + 1,
@@ -397,6 +509,80 @@ impl Deck<'_> {
             area.width - 1,
         );
         drawn
+    }
+
+    /// A collapsed preview: one row, no box, on the export's `#101317`.
+    ///
+    /// `▸ {n} {name} · {dot} · {tail}`, where the tail is the pane's last
+    /// meaningful line. The box goes and takes the cwd, the right-hand
+    /// activity slot, the viewport, the exit footer and the scrollback marker
+    /// with it; all of them come back when the pane expands.
+    fn draw_strip(
+        &self,
+        engine: &dyn TerminalEngine,
+        buffer: &mut Buffer,
+        area: Rect,
+        project: &Project,
+        position: usize,
+    ) {
+        Block::new()
+            .style(Style::new().bg(DEMOTED_BG))
+            .render(area, buffer);
+        let status = self.status(engine, project);
+        let metadata = self.metadata(engine, project);
+        let (glyph, glyph_colour) = status_glyph(&status, &metadata);
+        let separator = Style::new().fg(SEPARATOR).bg(DEMOTED_BG);
+
+        let mut spans = vec![
+            Span::styled("▸ ", Style::new().fg(HINT).bg(DEMOTED_BG)),
+            Span::styled(
+                format!("{} {}", position + 1, project.terminal),
+                Style::new().fg(PREVIEW_FG).bg(DEMOTED_BG),
+            ),
+            Span::styled(" · ", separator),
+            Span::styled(glyph, Style::new().fg(glyph_colour).bg(DEMOTED_BG)),
+            Span::styled(" · ", separator),
+        ];
+        // The strip sits two columns in, per the export's `padding:0 2ch`, and
+        // keeps the same inset on the right.
+        let width = area.width.saturating_sub(2 * PADDING);
+        let taken: usize = spans.iter().map(|span| span.content.chars().count()).sum();
+        let (tail, colour) = self.strip_tail(engine, project, &status, &metadata);
+        spans.push(Span::styled(
+            clip(&tail, (width as usize).saturating_sub(taken)),
+            Style::new().fg(colour).bg(DEMOTED_BG),
+        ));
+        buffer.set_line(area.x + PADDING, area.y, &Line::from(spans), width);
+    }
+
+    /// The strip's trailing text: what the pane would say if it had one line
+    /// left. An exit outranks an idle age, which outranks the live output.
+    fn strip_tail(
+        &self,
+        engine: &dyn TerminalEngine,
+        project: &Project,
+        status: &TerminalStatus,
+        metadata: &TerminalMetadata,
+    ) -> (String, Color) {
+        match status {
+            TerminalStatus::Exited { .. } | TerminalStatus::Failed { .. } => (
+                status_label(status, false).unwrap_or_else(|| "exited".to_owned()),
+                ERROR,
+            ),
+            TerminalStatus::Starting => ("starting".to_owned(), MUTED),
+            TerminalStatus::Running => match metadata.output_idle {
+                Some(idle) if idle >= ACTIVE_WINDOW => {
+                    (format!("idle {}", age(idle.millis)), MUTED)
+                }
+                _ => (
+                    engine
+                        .frame(&project.terminal)
+                        .map(last_line)
+                        .unwrap_or_default(),
+                    MUTED,
+                ),
+            },
+        }
     }
 
     /// The stack footer names the promotion that just happened and the key
@@ -414,6 +600,16 @@ impl Deck<'_> {
             .state
             .active()
             .and_then(|position| self.projects.get(position));
+        // A demotion outranks the fold census: it clears itself after ~1.5s
+        // and the collapse footer comes back.
+        let collapsed = self.state.collapsed_count();
+        if demoted.is_none() && collapsed > 0 {
+            return vec![
+                Span::styled(format!("{collapsed} collapsed · "), Style::new().fg(HINT)),
+                Span::styled("^g c", Style::new().fg(PREVIEW_FG)),
+                Span::styled(" expand all", Style::new().fg(HINT)),
+            ];
+        }
         match (demoted, promoted) {
             (Some(previous), Some(project)) => vec![
                 Span::styled("promoted ", Style::new().fg(HINT)),
@@ -653,6 +849,11 @@ impl Deck<'_> {
         let separator = if wide { "  ·  " } else { " · " };
         let (glyph, glyph_colour) = status_glyph(status, metadata);
         let mut spans = Vec::new();
+        // The stack declares its disclosure state only once a fold is in play;
+        // with nothing collapsed the export draws no marker at all.
+        if !master && self.state.collapsed_count() > 0 {
+            spans.push(Span::styled("▾ ", Style::new().fg(HINT)));
+        }
         if master {
             spans.push(Span::styled(
                 format!("> {number} {name}"),
@@ -944,6 +1145,18 @@ impl Deck<'_> {
             } else if layout == Layout::Zoom {
                 spans.push(Span::styled("  ·  hidden: ", hint));
                 spans.extend(self.hidden_summary(engine));
+            } else if self.state.collapsed_count() > 0 {
+                // The fold census replaces the stack count outright: the
+                // export states it alone, with no exited summary after it.
+                let collapsed = self.state.collapsed_count();
+                spans.push(Span::styled(
+                    format!("  ·  {} open  ·  ", self.state.stack().len() - collapsed),
+                    hint,
+                ));
+                spans.push(Span::styled(
+                    format!("{collapsed} collapsed"),
+                    Style::new().fg(WARNING).bg(STATUS_BG),
+                ));
             } else {
                 spans.push(Span::styled(
                     format!("  ·  {} stacked", total.saturating_sub(1)),
@@ -1051,9 +1264,25 @@ impl Deck<'_> {
         if layout == Layout::Narrow {
             return vec![collapsed];
         }
+        // While a fold is in play the row advertises the key that undoes it.
+        // The export drops the scrollback hint and seats collapse ahead of
+        // zoom rather than in the slot scrollback vacated.
+        let folded: [(&str, &str); 6] = [
+            KEY_HINTS[0],
+            KEY_HINTS[1],
+            ("^g c", "collapse"),
+            KEY_HINTS[2],
+            KEY_HINTS[4],
+            KEY_HINTS[5],
+        ];
+        let entries = if self.state.collapsed_count() > 0 {
+            folded
+        } else {
+            KEY_HINTS
+        };
         vec![
-            self.hints(&KEY_HINTS, layout, true),
-            self.hints(&KEY_HINTS, layout, false),
+            self.hints(&entries, layout, true),
+            self.hints(&entries, layout, false),
             collapsed,
         ]
     }
@@ -1066,11 +1295,13 @@ impl Deck<'_> {
             if index > 0 {
                 spans.push(Span::styled("  ", hint));
             }
-            // Zoom names its own exit and takes the accent while it is on.
+            // An active mode names itself in accent: zoom while zoomed, and
+            // collapse while any preview is folded.
+            let folded = self.state.collapsed_count() > 0 && *name == "^g c";
             let zoom = layout == Layout::Zoom && *name == "^g z";
             spans.push(Span::styled(
                 (*name).to_owned(),
-                if zoom {
+                if zoom || folded {
                     Style::new().fg(ACCENT).bg(STATUS_BG)
                 } else {
                     key
@@ -1079,7 +1310,7 @@ impl Deck<'_> {
             if labels {
                 spans.push(Span::styled(
                     format!(" {}", if zoom { "unzoom" } else { *label }),
-                    if zoom { key } else { hint },
+                    if zoom || folded { key } else { hint },
                 ));
             }
         }
@@ -1253,13 +1484,14 @@ fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-const HELP: [(&str, &str); 13] = [
+const HELP: [(&str, &str); 14] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
     ("^g 1 … ^g 4", "promote by configured position"),
     ("VIEW", ""),
     ("^g z", "toggle zoom"),
+    ("^g c", "collapse / expand previews"),
     ("^g [", "enter scrollback mode"),
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
@@ -1297,6 +1529,28 @@ fn stack_width(width: u16, master_ratio: f64) -> u16 {
     }
     let stack = (f64::from(width) * (1.0 - master_ratio)).ceil() as u16;
     stack.clamp(1, width.saturating_sub(GUTTER + 1))
+}
+
+/// The last non-blank row of a frame, as plain text. This is what a collapsed
+/// preview shows for a terminal that is neither exited nor idle.
+fn last_line(frame: &TerminalFrame) -> String {
+    (0..frame.size.rows)
+        .rev()
+        .map(|row| {
+            (0..frame.size.columns)
+                .filter_map(
+                    |column| match frame.cell(column, row).map(|cell| &cell.content) {
+                        Some(CellContent::Glyph { text, .. }) => Some(text.as_str()),
+                        Some(CellContent::Empty) => Some(" "),
+                        _ => None,
+                    },
+                )
+                .collect::<String>()
+                .trim_end()
+                .to_owned()
+        })
+        .find(|line| !line.is_empty())
+        .unwrap_or_default()
 }
 
 fn plural(count: usize) -> &'static str {
@@ -1476,7 +1730,7 @@ mod tests {
         STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
     };
     use crate::{
-        contracts::{ActionCommand, TerminalEngine, TerminalId, TerminalStatus},
+        contracts::{ActionCommand, Project, TerminalEngine, TerminalId, TerminalStatus},
         engine::FakeEngine,
     };
 
@@ -1604,6 +1858,275 @@ mod tests {
             fixture::NOW,
         );
         state
+    }
+
+    /// The export's screen 05: app and worker folded to their title rows.
+    fn collapsed() -> DeckState {
+        let mut state = DeckState::new(4);
+        assert!(state.toggle_collapse(2));
+        assert!(state.toggle_collapse(3));
+        state
+    }
+
+    #[test]
+    fn collapsed_stack_matches_the_reference_canvas() {
+        let (buffer, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
+
+        assert_snapshot("collapsed-stack", &buffer);
+    }
+
+    /// Screen 05 measured: the one open preview takes both folds' rows, so it
+    /// runs from row 0 to row 33 and the strips sit on rows 35 and 37.
+    #[test]
+    fn folded_previews_hand_their_rows_to_the_one_still_open() {
+        let (buffer, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
+
+        assert_eq!(buffer[(100u16, 0u16)].symbol(), "┌");
+        assert_eq!(
+            buffer[(100u16, 33u16)].symbol(),
+            "└",
+            "12 + 2 x 11 = 34 rows"
+        );
+        assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
+        assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+        // The strips sit on the export's #101317, and carry no border.
+        assert_eq!(buffer[(100u16, 35u16)].bg, DEMOTED_BG);
+        assert!(text(&buffer).contains("2 collapsed · ^g c expand all"));
+    }
+
+    /// One fold among three previews: 11 freed rows split 6/5, the remainder
+    /// going to the topmost open pane.
+    #[test]
+    fn freed_rows_split_evenly_with_the_remainder_going_to_the_top() {
+        let mut state = DeckState::new(4);
+        state.toggle_collapse(3);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // 18 rows, then 17, then the strip.
+        assert_eq!(buffer[(100u16, 17u16)].symbol(), "└");
+        assert_eq!(buffer[(100u16, 19u16)].symbol(), "┌");
+        assert_eq!(buffer[(100u16, 35u16)].symbol(), "└");
+        assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    }
+
+    /// Every fold hands over exactly the rows it gave up, so the stack always
+    /// ends on the same row whatever the mix.
+    #[test]
+    fn folding_never_changes_the_height_the_stack_uses() {
+        let mut state = DeckState::new(4);
+
+        for folds in 0..3 {
+            let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+            // The stack's own columns, on the row the footer always owns.
+            let footer = (100..144)
+                .map(|x| buffer[(x, 39u16)].symbol())
+                .collect::<String>();
+            let expected = if folds == 0 {
+                "ctrl+g 1-4 promote · j/k cycle".to_owned()
+            } else {
+                format!("{folds} collapsed · ^g c expand all")
+            };
+            assert_eq!(
+                footer.trim(),
+                expected,
+                "the footer stays on row 39 with {folds} folded"
+            );
+            // The row above it stays blank, so nothing has overrun.
+            assert_eq!(buffer[(102u16, 38u16)].symbol(), " ");
+            state.toggle_collapse(folds + 1);
+        }
+    }
+
+    /// With nothing folded the stack looks exactly as screens 01 and 02 draw
+    /// it: no disclosure markers anywhere.
+    #[test]
+    fn the_disclosure_markers_appear_only_once_a_fold_is_in_play() {
+        let (plain, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
+        assert!(!text(&plain).contains("▾"));
+        assert!(!text(&plain).contains("▸"));
+
+        let (folded, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
+        assert!(text(&folded).contains("▾ 2 backend"), "the open pane opens");
+        assert!(text(&folded).contains("▸ 3 app"), "the folded panes close");
+    }
+
+    /// An exit outranks the live output, so a folded exited pane says so.
+    #[test]
+    fn a_folded_pane_states_its_exit_and_its_idle_age() {
+        let (buffer, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
+        let rendered = text(&buffer);
+
+        assert!(rendered.contains("▸ 3 app · ✕ · exit 1"), "{rendered}");
+        assert!(rendered.contains("▸ 4 worker · ○ · idle 6m"), "{rendered}");
+    }
+
+    /// A pane that is neither exited nor idle falls back to its last output.
+    #[test]
+    fn a_folded_running_pane_shows_its_last_output_line() {
+        let mut state = DeckState::new(4);
+        state.toggle_collapse(1);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // The tail takes what the 44-column strip has left and clips.
+        assert!(
+            text(&buffer).contains("▸ 2 backend · ● · 12:06:09 /api/termina…"),
+            "{}",
+            text(&buffer)
+        );
+    }
+
+    /// The census and the key hint both switch over, and the exited summary
+    /// gives up its place, exactly as screen 05 states it.
+    #[test]
+    fn the_status_bar_counts_the_folds_instead_of_the_stack() {
+        let (buffer, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
+        let rendered = text(&buffer);
+
+        assert!(
+            rendered.contains("> 1 frontend  ·  1 open  ·  2 collapsed"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("3 stacked"));
+        assert!(
+            !rendered.contains("1 exited"),
+            "the fold census stands alone"
+        );
+        assert!(rendered.contains("^g c collapse"));
+        assert!(
+            !rendered.contains("^g [ scroll"),
+            "collapse takes scroll's slot"
+        );
+    }
+
+    /// A folded strip still answers the hit test, so promoting or swapping it
+    /// by pointer keeps working; the caller decides it has nothing to scroll.
+    #[test]
+    fn a_folded_strip_is_hit_tested_but_has_nothing_to_scroll() {
+        let projects = fixture::projects();
+        let state = collapsed();
+        let deck = Deck {
+            workspace: "idp",
+            projects: &projects,
+            state: &state,
+            home: Some(fixture::home()),
+            master_ratio: 0.70,
+            now: fixture::NOW,
+        };
+        let area = Rect::new(0, 0, 144, 42);
+
+        let position = deck.position_at(area, Position::new(110, 35));
+
+        assert_eq!(position, Some(2), "the strip on row 35 is app");
+        assert!(state.collapsed(2), "so the wheel skips it");
+        assert_eq!(deck.position_at(area, Position::new(110, 10)), Some(1));
+        assert!(!state.collapsed(1), "the open preview still scrolls");
+    }
+
+    fn deck_for<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
+        Deck {
+            workspace: "idp",
+            projects,
+            state,
+            home: Some(fixture::home()),
+            master_ratio: 0.70,
+            now: fixture::NOW,
+        }
+    }
+
+    /// The two cells the export draws the disclosure marker in, on an open
+    /// preview's top border and at the head of each strip.
+    #[test]
+    fn the_disclosure_marker_is_hit_tested_in_its_own_two_cells() {
+        let projects = fixture::projects();
+        let state = collapsed();
+        let deck = deck_for(&projects, &state);
+        let area = Rect::new(0, 0, 144, 42);
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // An open preview insets its title past the border: columns 103-104.
+        assert_eq!(buffer[(103u16, 0u16)].symbol(), "▾");
+        assert_eq!(deck.marker_at(area, Position::new(103, 0)), Some(1));
+        assert_eq!(deck.marker_at(area, Position::new(104, 0)), Some(1));
+        // A strip has no border to inset past: columns 102-103.
+        assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
+        assert_eq!(deck.marker_at(area, Position::new(102, 35)), Some(2));
+        assert_eq!(deck.marker_at(area, Position::new(103, 37)), Some(3));
+
+        // Neither the border cell beside it nor the pane body is the marker.
+        assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
+        assert_eq!(deck.marker_at(area, Position::new(110, 5)), None);
+        // The master carries no marker of its own.
+        assert_eq!(deck.marker_at(area, Position::new(3, 0)), None);
+    }
+
+    /// The marker cells sit inside the pane, so the gesture has to be consumed
+    /// or the same click would also drag or promote.
+    #[test]
+    fn the_marker_overlaps_the_pane_it_belongs_to() {
+        let projects = fixture::projects();
+        let state = collapsed();
+        let deck = deck_for(&projects, &state);
+        let area = Rect::new(0, 0, 144, 42);
+
+        assert_eq!(deck.marker_at(area, Position::new(103, 0)), Some(1));
+        assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+    }
+
+    /// With nothing folded the export draws no marker, so those cells keep
+    /// their ordinary drag and double-click behaviour.
+    #[test]
+    fn there_is_no_marker_to_click_until_a_fold_is_in_play() {
+        let projects = fixture::projects();
+        let state = DeckState::new(4);
+        let deck = deck_for(&projects, &state);
+        let area = Rect::new(0, 0, 144, 42);
+
+        assert_eq!(deck.marker_at(area, Position::new(103, 0)), None);
+        assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
+        // The pane underneath still answers, so the drag still starts there.
+        assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+    }
+
+    /// Clicking a strip's marker expands that preview, and the rows it takes
+    /// back come out of the pane that grew.
+    #[test]
+    fn toggling_a_marker_expands_just_that_preview() {
+        let projects = fixture::projects();
+        let mut state = collapsed();
+        let area = Rect::new(0, 0, 144, 42);
+
+        let marker = deck_for(&projects, &state).marker_at(area, Position::new(102, 35));
+        assert_eq!(marker, Some(2));
+        state.toggle_collapse(marker.unwrap());
+
+        assert_eq!(state.collapsed_count(), 1, "worker stays folded");
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        // Two open previews now split the single fold's 11 freed rows 6/5.
+        assert_eq!(buffer[(100u16, 17u16)].symbol(), "└");
+        assert_eq!(buffer[(100u16, 19u16)].symbol(), "┌");
+        assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    }
+
+    /// Zoom and the narrow fallback hide the stack, so there is no marker.
+    #[test]
+    fn a_hidden_stack_offers_no_marker() {
+        let projects = fixture::projects();
+        let mut state = collapsed();
+        state.apply(&ActionCommand::ToggleZoom, &projects, fixture::NOW);
+        let area = Rect::new(0, 0, 144, 42);
+
+        assert_eq!(
+            deck_for(&projects, &state).marker_at(area, Position::new(103, 0)),
+            None
+        );
+
+        let folded = collapsed();
+        assert_eq!(
+            deck_for(&projects, &folded).marker_at(Rect::new(0, 0, 84, 24), Position::new(3, 0)),
+            None
+        );
     }
 
     #[test]
@@ -1874,9 +2397,9 @@ mod tests {
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        // 60x21 centred on the canvas: columns 42..101, rows 10..30.
+        // 60x22 centred on the canvas: columns 42..101, rows 10..31.
         assert_eq!(buffer[(42u16, 10u16)].symbol(), "┌");
-        assert_eq!(buffer[(101u16, 30u16)].symbol(), "┘");
+        assert_eq!(buffer[(101u16, 31u16)].symbol(), "┘");
         assert_eq!(buffer[(42u16, 10u16)].fg, ACCENT);
         // Focus is singular: the master border is no longer the accent, and
         // the underlay recedes by foreground alone.
