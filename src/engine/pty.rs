@@ -7,7 +7,7 @@ use std::{
 
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
-use crate::contracts::{ScreenSize, TerminalId, TerminalStatus};
+use crate::contracts::{Project, ScreenSize, TerminalId, TerminalStatus};
 
 const EVENT_CAPACITY: usize = 16;
 const READ_BUFFER_SIZE: usize = 4096;
@@ -15,7 +15,7 @@ const READ_BUFFER_SIZE: usize = 4096;
 /// Bytes and lifecycle changes from one PTY. This stays inside the engine;
 /// callers at the UI boundary receive only the application-owned contracts.
 #[derive(Debug)]
-pub(crate) enum PtyEvent {
+pub enum PtyEvent {
     Output {
         terminal: TerminalId,
         bytes: Vec<u8>,
@@ -27,7 +27,7 @@ pub(crate) enum PtyEvent {
 }
 
 /// A single host shell and its bounded PTY transport.
-pub(crate) struct PtyTransport {
+pub struct PtyTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
@@ -38,7 +38,18 @@ pub(crate) struct PtyTransport {
 }
 
 impl PtyTransport {
-    pub(crate) fn spawn(
+    /// Starts a configured host shell in its configured working directory.
+    pub fn spawn(project: &Project, size: ScreenSize) -> Result<Self, String> {
+        let Some((program, arguments)) = project.command.split_first() else {
+            return Err(format!("{}: command must not be empty", project.terminal));
+        };
+        let mut command = CommandBuilder::new(program);
+        command.args(arguments);
+        command.cwd(&project.path);
+        Self::spawn_command(project.terminal.clone(), command, size)
+    }
+
+    fn spawn_command(
         terminal: TerminalId,
         command: CommandBuilder,
         size: ScreenSize,
@@ -92,20 +103,20 @@ impl PtyTransport {
         })
     }
 
-    pub(crate) fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
+    pub fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.writer
             .write_all(bytes)
             .map_err(|error| error.to_string())?;
         self.writer.flush().map_err(|error| error.to_string())
     }
 
-    pub(crate) fn resize(&mut self, size: ScreenSize) -> Result<(), String> {
+    pub fn resize(&mut self, size: ScreenSize) -> Result<(), String> {
         self.master
             .resize(pty_size(size))
             .map_err(|error| error.to_string())
     }
 
-    pub(crate) fn drain_events(&self) -> Vec<PtyEvent> {
+    pub fn drain_events(&self) -> Vec<PtyEvent> {
         self.events
             .as_ref()
             .map(|events| events.try_iter().collect())
@@ -114,7 +125,7 @@ impl PtyTransport {
 
     /// Terminates the shell's process group, then drops the receiver before
     /// joining. Dropping it wakes a reader blocked by the bounded channel.
-    pub(crate) fn shutdown(&mut self) -> Result<(), String> {
+    pub fn shutdown(&mut self) -> Result<(), String> {
         if self.events.is_none() {
             return Ok(());
         }
@@ -231,9 +242,9 @@ fn process_group_alive(process_group: u32) -> bool {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use portable_pty::CommandBuilder;
+    use std::path::PathBuf;
 
-    use crate::contracts::{ScreenSize, TerminalId, TerminalStatus};
+    use crate::contracts::{Project, ScreenSize, TerminalId, TerminalStatus};
 
     use super::{PtyEvent, PtyTransport};
 
@@ -241,12 +252,12 @@ mod tests {
     #[test]
     fn shell_forwards_input_applies_resize_and_reports_exit() {
         let terminal = TerminalId::new("transport");
-        let mut transport = PtyTransport::spawn(
-            terminal.clone(),
-            CommandBuilder::new("/bin/sh"),
-            ScreenSize::new(80, 24),
-        )
-        .unwrap();
+        let project = Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec!["/bin/sh".to_owned()],
+        };
+        let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
         transport.resize(ScreenSize::new(101, 7)).unwrap();
         transport
             .write(b"printf 'TERMDECK-INPUT\n'; stty size; exit 7\n")
@@ -293,15 +304,16 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn shutdown_terminates_the_shell_process_group() {
-        let mut command = CommandBuilder::new("/bin/sh");
-        command.arg("-c");
-        command.arg("sleep 30 & wait");
-        let mut transport = PtyTransport::spawn(
-            TerminalId::new("transport"),
-            command,
-            ScreenSize::new(80, 24),
-        )
-        .unwrap();
+        let project = Project {
+            terminal: TerminalId::new("transport"),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "sleep 30 & wait".to_owned(),
+            ],
+        };
+        let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
         let process_group = transport.process_group.unwrap();
 
         std::thread::sleep(Duration::from_millis(100));
