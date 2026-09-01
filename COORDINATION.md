@@ -528,3 +528,12 @@ scope.
   claude (coord/35-collapsed-default): default folded strips, markers show ▸
   from frame one, ^g c = toggle-all/expand-all, deliberate snapshot
   re-blessing per fixture (honesty enforced by the critic).
+- 2026-09-01 (end-of-day, saved for tonight): #39 (stack previews collapsed
+  by default) remains OPEN, ready-for-agent, fully specced on GitHub. claude
+  exhausted its session tokens mid-task (~91% then cut) — its partial work in
+  ~/.worktrees/termdeck/35-collapsed-default (M src/ui/state.rs only, no
+  commit) is intentionally NOT saved (user decision); do not touch it. Resume
+  tonight: claude session resets 20:10 (Europe/Malta) — reroute/redo #39 from
+  a clean fresh branch off main (the existing coord/35-collapsed-default
+  branch is stale with partial state; prefer a new branch), or ask the user.
+  Task brief lives at /tmp/shipwright/termdeck/35-collapsed-default/task.md.
