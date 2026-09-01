@@ -395,3 +395,10 @@ scope.
   coordinator's probe as evidence-to-verify + asks it to choose the real
   root cause and fix in scope (or route UI-owned fix to Claude). Finish
   protocol applies (inbox 25-scrollback.ping + marker).
+- 2026-09-01: USER requirements (sanctioned deviations from v1 "no mouse
+  forwarding"): (1) panes scrollable with the MOUSE WHEEL, (2) drag-and-drop
+  panes between stack and master to SWAP them. Both open as issues (#25 wheel,
+  #26 drag-drop); both need crossterm mouse capture enabled in the session
+  loop (codex's lane). #25 already dispatched to codex; #26 queued to codex
+  after #25 (same worker; codex will flag any UI-rendering piece for Claude).
+  Notes left on #25 (wheel behavior decided: all panes).
