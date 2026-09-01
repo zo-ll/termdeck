@@ -360,3 +360,15 @@ scope.
   Loose ends (not blocking): codex crates.io permission for future sessions;
   one flaky real-shell engine test (green on reruns); scroll_marker chrome
   kept per user (decision open).
+- 2026-09-01: LOOSE ENDS: scroll_marker DECIDED — keep (user choice; no
+  longer open). codex crates.io permission: exhausted — 8 config shapes probed
+  (sandbox_permissions network keys, network.enabled, network.allowed_domains,
+  network.domains, permissions.network.domains) all `Operation not
+  permitted`/FAIL in workspace-write; the installed codex 0.152 exposes no
+  reachable network grant. Adopted fallback (documented for future sessions):
+  pre-warm new deps into the shared cargo cache from the coordinator shell
+  (throwaway `cargo add` + `cargo fetch`), so sandboxed codex builds resolve
+  offline — same mechanism that worked for #8. Flaky engine test: hardening
+  dispatched to codex (branch `coord/flaky-test`, worktree
+  ~/.worktrees/termdeck/flaky-test): audit fixed sleeps → deadline-polls,
+  comfortable real-shell deadlines, no assertion weakening, gate ×3.
