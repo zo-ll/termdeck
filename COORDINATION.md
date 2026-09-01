@@ -480,3 +480,8 @@ scope.
   needs user decision); #34 open ALL projects at once (config scope + the v1
   1-4 terminal cap — needs user decision on how many). #31/#32 workers
   working.
+- 2026-09-01: #34 DECIDED (user): N previews — the stack becomes a
+  SCROLLABLE LIST. Decomposed: #34a lift cap (config+engine, codex),
+  #34b scrollable stack list (UI, claude, design-first). Cap located:
+  config/mod.rs:161 + native.rs MAX_TERMINALS=4; engine internals Vec-based.
+  Queues after #31/#32. #33 (animations) still awaiting user's choice.
