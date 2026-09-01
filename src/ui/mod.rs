@@ -30,7 +30,7 @@ pub use state::{DeckState, Modal};
 
 use crate::contracts::{
     CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, TerminalEngine, TerminalFrame,
-    TerminalMetadata, TerminalStatus, Timestamp,
+    TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
 };
 
 /// Accepted palette. Every value comes from the design export's palette board.
@@ -207,6 +207,62 @@ impl Deck<'_> {
                 self.modal(frame.buffer_mut(), area, modal);
             }
             None => self.place_cursor(engine, frame, panes[0]),
+        }
+    }
+
+    /// Returns the terminal in the pane under `pointer`, excluding chrome
+    /// outside the pane rectangles.
+    pub fn terminal_at(&self, area: Rect, pointer: Position) -> Option<&TerminalId> {
+        if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
+            return None;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let active = || {
+            self.state
+                .active()
+                .and_then(|position| self.projects.get(position))
+                .map(|project| &project.terminal)
+        };
+        match self.layout(body) {
+            Layout::Zoom if body.contains(pointer) => active(),
+            Layout::Narrow => {
+                let master = Rect {
+                    y: body.y + 2,
+                    height: body.height.saturating_sub(2),
+                    ..body
+                };
+                master.contains(pointer).then(active).flatten()
+            }
+            Layout::Stacked { stack, preview } => {
+                let master = Rect {
+                    width: body.width - GUTTER - stack,
+                    ..body
+                };
+                if master.contains(pointer) {
+                    return active();
+                }
+                let mut top = body.y;
+                for position in self.state.stack().iter().copied() {
+                    if top + preview > body.y + body.height.saturating_sub(2) {
+                        break;
+                    }
+                    let pane = Rect {
+                        x: master.width + GUTTER,
+                        y: top,
+                        width: stack,
+                        height: preview,
+                    };
+                    if pane.contains(pointer) {
+                        return self.projects.get(position).map(|project| &project.terminal);
+                    }
+                    top += preview + 1;
+                }
+                None
+            }
+            _ => None,
         }
     }
 
@@ -1349,7 +1405,12 @@ const fn colour(rgb: Rgb) -> Color {
 
 #[cfg(test)]
 mod tests {
-    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Position};
+    use ratatui::{
+        Terminal,
+        backend::TestBackend,
+        buffer::Buffer,
+        layout::{Position, Rect},
+    };
 
     use super::{
         ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, IDLE_BORDER,
@@ -1386,6 +1447,36 @@ mod tests {
     /// The accepted 144x42 reference canvas with the first terminal as master.
     fn reference() -> (Buffer, Option<Position>) {
         render(&fixture::frontend_active(), &DeckState::new(4), (144, 42))
+    }
+
+    #[test]
+    fn pane_hit_testing_follows_the_rendered_layout() {
+        let projects = fixture::projects();
+        let deck = Deck {
+            workspace: "idp",
+            projects: &projects,
+            state: &DeckState::new(4),
+            home: Some(fixture::home()),
+            master_ratio: 0.70,
+            now: fixture::NOW,
+        };
+        let area = Rect::new(0, 0, 144, 42);
+
+        let terminal = |pointer| deck.terminal_at(area, pointer).map(ToString::to_string);
+        assert_eq!(terminal(Position::new(10, 10)).as_deref(), Some("frontend"));
+        assert_eq!(terminal(Position::new(110, 5)).as_deref(), Some("backend"));
+        assert_eq!(terminal(Position::new(110, 18)).as_deref(), Some("app"));
+        assert_eq!(terminal(Position::new(110, 31)).as_deref(), Some("worker"));
+        assert_eq!(
+            terminal(Position::new(99, 10)),
+            None,
+            "the gutter is not a pane"
+        );
+        assert_eq!(
+            terminal(Position::new(10, 40)),
+            None,
+            "the hint row is not a pane"
+        );
     }
 
     fn text(buffer: &Buffer) -> String {

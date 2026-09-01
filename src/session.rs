@@ -21,12 +21,14 @@ use ratatui::{
 
 use crate::{
     config::Workspace,
-    contracts::{EngineCommand, ScreenSize, TerminalEngine, Timestamp, UserCommand},
+    contracts::{EngineCommand, ScreenSize, ScrollCommand, TerminalEngine, Timestamp, UserCommand},
     engine::NativeEngine,
     ui::{Deck, DeckState, Input, Key, Reaction},
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
+/// A wheel tick is intentionally smaller than a keyboard page movement.
+const WHEEL_LINES: u16 = 3;
 static SIGNAL: AtomicI32 = AtomicI32::new(0);
 static SAVED_TERMIOS: OnceLock<Mutex<Option<libc::termios>>> = OnceLock::new();
 type PanicHook = Box<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static>;
@@ -117,6 +119,40 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         None => {}
                     }
                 }
+                InputEvent::Wheel { pointer, command } => {
+                    if deck.modal().is_none() {
+                        let terminal = Deck {
+                            workspace: &workspace.name,
+                            projects: &workspace.projects,
+                            state: &deck,
+                            home: None,
+                            master_ratio: workspace.master_ratio.get(),
+                            now: now(),
+                        }
+                        .terminal_at(
+                            ratatui::layout::Rect::new(0, 0, size.columns, size.rows),
+                            pointer,
+                        )
+                        .cloned();
+                        let active = deck
+                            .active()
+                            .and_then(|position| workspace.projects.get(position))
+                            .map(|project| &project.terminal);
+                        if terminal.as_ref() == active
+                            && !deck.scrollback()
+                            && command == ScrollCommand::Up(WHEEL_LINES)
+                        {
+                            deck.apply(
+                                &crate::contracts::ActionCommand::ToggleScrollback,
+                                &workspace.projects,
+                                now(),
+                            );
+                        }
+                        if let Some(terminal) = terminal {
+                            engine.dispatch(EngineCommand::Scroll { terminal, command });
+                        }
+                    }
+                }
                 InputEvent::Paste(text) => {
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()
@@ -201,7 +237,9 @@ impl OuterTerminal {
             .lock()
             .expect("terminal state lock poisoned") = Some(previous);
         let mut stdout = io::stdout();
-        if let Err(error) = stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[?2004h") {
+        if let Err(error) =
+            stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1000h\x1b[?1006h")
+        {
             restore_outer_terminal();
             return Err(error);
         }
@@ -225,7 +263,7 @@ fn saved_panic_hook() -> &'static Mutex<Option<PanicHook>> {
 }
 
 fn restore_outer_terminal() {
-    let _ = io::stdout().write_all(b"\x1b[?2004l\x1b[?25h\x1b[?1049l");
+    let _ = io::stdout().write_all(b"\x1b[?1006l\x1b[?1000l\x1b[?2004l\x1b[?25h\x1b[?1049l");
     let _ = io::stdout().flush();
     if let Some(previous) = saved_termios()
         .lock()
@@ -319,6 +357,10 @@ struct KeyReader {
 enum InputEvent {
     Key(Key),
     Paste(String),
+    Wheel {
+        pointer: Position,
+        command: ScrollCommand,
+    },
 }
 
 impl KeyReader {
@@ -354,6 +396,21 @@ impl KeyReader {
                 let text = String::from_utf8_lossy(&self.bytes[6..end]).into_owned();
                 self.bytes.drain(..end + 6);
                 events.push(InputEvent::Paste(text));
+                continue;
+            }
+            if self.bytes.starts_with(b"\x1b[<") {
+                let Some(end) = self.bytes[3..]
+                    .iter()
+                    .position(|byte| matches!(byte, b'M' | b'm'))
+                else {
+                    break;
+                };
+                let end = end + 3;
+                let event = mouse_event(&self.bytes[3..end]);
+                self.bytes.drain(..=end);
+                if let Some(event) = event {
+                    events.push(event);
+                }
                 continue;
             }
             let sequence = [
@@ -408,6 +465,27 @@ impl KeyReader {
         }
         events
     }
+}
+
+/// Decodes an xterm SGR mouse report. Other mouse actions are consumed so
+/// they cannot leak into the active shell; only wheel events are actionable.
+fn mouse_event(bytes: &[u8]) -> Option<InputEvent> {
+    let mut fields = std::str::from_utf8(bytes).ok()?.split(';');
+    let code = fields.next()?.parse::<u16>().ok()?;
+    let column = fields.next()?.parse::<u16>().ok()?.saturating_sub(1);
+    let row = fields.next()?.parse::<u16>().ok()?.saturating_sub(1);
+    let command = match code & 0b11_000_000 {
+        64 => match code & 0b11 {
+            0 => ScrollCommand::Up(WHEEL_LINES),
+            1 => ScrollCommand::Down(WHEEL_LINES),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(InputEvent::Wheel {
+        pointer: Position::new(column, row),
+        command,
+    })
 }
 
 struct AnsiBackend {
@@ -526,12 +604,15 @@ fn colour(colour: Color, foreground: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::{InputEvent, KeyReader};
-    use crate::ui::Key;
+    use crate::{contracts::ScrollCommand, ui::Key};
+    use ratatui::layout::Position;
 
     #[test]
-    fn decoder_keeps_terminal_controls_out_of_the_shell_input_path() {
+    fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
         let mut reader = KeyReader {
-            bytes: "a\x03\x1b[A\x1b[200~paste\x1b[201~界".as_bytes().to_vec(),
+            bytes: "a\x03\x1b[A\x1b[200~paste\x1b[201~\x1b[<64;3;5M\x1b[<0;4;6M界"
+                .as_bytes()
+                .to_vec(),
         };
 
         let events = reader.decode(true);
@@ -540,6 +621,13 @@ mod tests {
         assert!(matches!(events[1], InputEvent::Key(Key::Ctrl('c'))));
         assert!(matches!(events[2], InputEvent::Key(Key::Up)));
         assert!(matches!(events[3], InputEvent::Paste(ref text) if text == "paste"));
-        assert!(matches!(events[4], InputEvent::Key(Key::Char('界'))));
+        assert!(matches!(
+            events[4],
+            InputEvent::Wheel {
+                pointer: Position { x: 2, y: 4 },
+                command: ScrollCommand::Up(super::WHEEL_LINES),
+            }
+        ));
+        assert!(matches!(events[5], InputEvent::Key(Key::Char('界'))));
     }
 }
