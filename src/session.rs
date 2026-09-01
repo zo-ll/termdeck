@@ -29,6 +29,7 @@ use crate::{
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// A wheel tick is intentionally smaller than a keyboard page movement.
 const WHEEL_LINES: u16 = 3;
+const DOUBLE_CLICK_WINDOW: u64 = 500;
 static SIGNAL: AtomicI32 = AtomicI32::new(0);
 static SAVED_TERMIOS: OnceLock<Mutex<Option<libc::termios>>> = OnceLock::new();
 type PanicHook = Box<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static>;
@@ -47,6 +48,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut deck = DeckState::new(workspace.projects.len());
     let mut input = Input::new(size.rows.saturating_sub(4));
     let mut keys = KeyReader::default();
+    let mut last_click = None;
 
     let mut dirty = true;
     'session: loop {
@@ -72,6 +74,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             dirty = true;
             match event {
                 InputEvent::Key(key) => {
+                    deck.cancel_drag();
+                    last_click = None;
                     let was_scrollback = deck.scrollback();
                     let reaction = input.press(key, &mut deck, &workspace.projects, now());
                     if was_scrollback
@@ -120,6 +124,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     }
                 }
                 InputEvent::Wheel { pointer, command } => {
+                    deck.cancel_drag();
+                    last_click = None;
                     if deck.modal().is_none() {
                         let terminal = Deck {
                             workspace: &workspace.name,
@@ -153,7 +159,31 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
+                InputEvent::Mouse { pointer, action } => {
+                    if deck.modal().is_none() {
+                        let pane = Deck {
+                            workspace: &workspace.name,
+                            projects: &workspace.projects,
+                            state: &deck,
+                            home: None,
+                            master_ratio: workspace.master_ratio.get(),
+                            now: now(),
+                        };
+                        let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
+                        let position = match action {
+                            MouseAction::Down => pane.swap_position_at(area, pointer),
+                            MouseAction::Move | MouseAction::Up => pane.position_at(area, pointer),
+                        };
+                        if let Some(action) =
+                            mouse_action(&mut deck, position, action, now(), &mut last_click)
+                        {
+                            deck.apply(&action, &workspace.projects, now());
+                        }
+                    }
+                }
                 InputEvent::Paste(text) => {
+                    deck.cancel_drag();
+                    last_click = None;
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()
                         && !deck.scrollback()
@@ -238,7 +268,7 @@ impl OuterTerminal {
             .expect("terminal state lock poisoned") = Some(previous);
         let mut stdout = io::stdout();
         if let Err(error) =
-            stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1000h\x1b[?1006h")
+            stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1000h\x1b[?1002h\x1b[?1006h")
         {
             restore_outer_terminal();
             return Err(error);
@@ -263,7 +293,8 @@ fn saved_panic_hook() -> &'static Mutex<Option<PanicHook>> {
 }
 
 fn restore_outer_terminal() {
-    let _ = io::stdout().write_all(b"\x1b[?1006l\x1b[?1000l\x1b[?2004l\x1b[?25h\x1b[?1049l");
+    let _ =
+        io::stdout().write_all(b"\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2004l\x1b[?25h\x1b[?1049l");
     let _ = io::stdout().flush();
     if let Some(previous) = saved_termios()
         .lock()
@@ -361,6 +392,64 @@ enum InputEvent {
         pointer: Position,
         command: ScrollCommand,
     },
+    Mouse {
+        pointer: Position,
+        action: MouseAction,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MouseAction {
+    Down,
+    Move,
+    Up,
+}
+
+fn mouse_action(
+    deck: &mut DeckState,
+    position: Option<usize>,
+    action: MouseAction,
+    now: Timestamp,
+    last_click: &mut Option<(usize, Timestamp)>,
+) -> Option<crate::contracts::ActionCommand> {
+    match action {
+        MouseAction::Down => {
+            deck.cancel_drag();
+            deck.begin_drag(position?);
+            None
+        }
+        MouseAction::Move => {
+            deck.update_drag(position);
+            None
+        }
+        MouseAction::Up => {
+            deck.update_drag(position);
+            let (source, target) = deck.finish_drag()?;
+            if let Some(target) = target {
+                *last_click = None;
+                return Some(crate::contracts::ActionCommand::SelectPosition(
+                    if deck.active() == Some(source) {
+                        target
+                    } else {
+                        source
+                    },
+                ));
+            }
+            if position == Some(source) && deck.active() != Some(source) {
+                if last_click.is_some_and(|(previous, at)| {
+                    previous == source
+                        && now.unix_millis.saturating_sub(at.unix_millis) <= DOUBLE_CLICK_WINDOW
+                }) {
+                    *last_click = None;
+                    return Some(crate::contracts::ActionCommand::SelectPosition(source));
+                }
+                *last_click = Some((source, now));
+            } else {
+                *last_click = None;
+            }
+            None
+        }
+    }
 }
 
 impl KeyReader {
@@ -406,7 +495,7 @@ impl KeyReader {
                     break;
                 };
                 let end = end + 3;
-                let event = mouse_event(&self.bytes[3..end]);
+                let event = mouse_event(&self.bytes[3..end], self.bytes[end]);
                 self.bytes.drain(..=end);
                 if let Some(event) = event {
                     events.push(event);
@@ -467,25 +556,29 @@ impl KeyReader {
     }
 }
 
-/// Decodes an xterm SGR mouse report. Other mouse actions are consumed so
-/// they cannot leak into the active shell; only wheel events are actionable.
-fn mouse_event(bytes: &[u8]) -> Option<InputEvent> {
+/// Decodes an xterm SGR mouse report. Mouse reports stay in the outer UI and
+/// never leak into the active shell.
+fn mouse_event(bytes: &[u8], terminator: u8) -> Option<InputEvent> {
     let mut fields = std::str::from_utf8(bytes).ok()?.split(';');
     let code = fields.next()?.parse::<u16>().ok()?;
     let column = fields.next()?.parse::<u16>().ok()?.saturating_sub(1);
     let row = fields.next()?.parse::<u16>().ok()?.saturating_sub(1);
-    let command = match code & 0b11_000_000 {
-        64 => match code & 0b11 {
+    let pointer = Position::new(column, row);
+    if code & 0b11_000_000 == 64 {
+        let command = match code & 0b11 {
             0 => ScrollCommand::Up(WHEEL_LINES),
             1 => ScrollCommand::Down(WHEEL_LINES),
             _ => return None,
-        },
+        };
+        return Some(InputEvent::Wheel { pointer, command });
+    }
+    let action = match (terminator, code & 0b11, code & 32) {
+        (b'm', _, _) => MouseAction::Up,
+        (b'M', 0, 0) => MouseAction::Down,
+        (b'M', _, 32) => MouseAction::Move,
         _ => return None,
     };
-    Some(InputEvent::Wheel {
-        pointer: Position::new(column, row),
-        command,
-    })
+    Some(InputEvent::Mouse { pointer, action })
 }
 
 struct AnsiBackend {
@@ -603,14 +696,17 @@ fn colour(colour: Color, foreground: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{InputEvent, KeyReader};
-    use crate::{contracts::ScrollCommand, ui::Key};
+    use super::{InputEvent, KeyReader, MouseAction, mouse_action};
+    use crate::{
+        contracts::{ActionCommand, ScrollCommand, Timestamp},
+        ui::{DeckState, Key},
+    };
     use ratatui::layout::Position;
 
     #[test]
     fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
         let mut reader = KeyReader {
-            bytes: "a\x03\x1b[A\x1b[200~paste\x1b[201~\x1b[<64;3;5M\x1b[<0;4;6M界"
+            bytes: "a\x03\x1b[A\x1b[200~paste\x1b[201~\x1b[<64;3;5M\x1b[<0;4;6M\x1b[<32;5;6M\x1b[<0;5;6m界"
                 .as_bytes()
                 .to_vec(),
         };
@@ -628,6 +724,88 @@ mod tests {
                 command: ScrollCommand::Up(super::WHEEL_LINES),
             }
         ));
-        assert!(matches!(events[5], InputEvent::Key(Key::Char('界'))));
+        assert!(matches!(
+            events[5],
+            InputEvent::Mouse {
+                pointer: Position { x: 3, y: 5 },
+                action: MouseAction::Down,
+            }
+        ));
+        assert!(matches!(
+            events[6],
+            InputEvent::Mouse {
+                pointer: Position { x: 4, y: 5 },
+                action: MouseAction::Move,
+            }
+        ));
+        assert!(matches!(
+            events[7],
+            InputEvent::Mouse {
+                pointer: Position { x: 4, y: 5 },
+                action: MouseAction::Up,
+            }
+        ));
+        assert!(matches!(events[8], InputEvent::Key(Key::Char('界'))));
+    }
+
+    #[test]
+    fn drag_and_double_click_dispatch_the_existing_promotion_action() {
+        let mut state = DeckState::new(4);
+        let mut last_click = None;
+        let at = |millis| Timestamp {
+            unix_millis: millis,
+        };
+
+        assert_eq!(
+            mouse_action(
+                &mut state,
+                Some(1),
+                MouseAction::Down,
+                at(0),
+                &mut last_click
+            ),
+            None
+        );
+        assert_eq!(
+            mouse_action(
+                &mut state,
+                Some(0),
+                MouseAction::Move,
+                at(1),
+                &mut last_click
+            ),
+            None
+        );
+        let action = mouse_action(&mut state, Some(0), MouseAction::Up, at(2), &mut last_click);
+        assert_eq!(action, Some(ActionCommand::SelectPosition(1)));
+        state.apply(&action.unwrap(), &[], at(2));
+        assert_eq!(state.active(), Some(1));
+
+        for millis in [10, 20] {
+            assert_eq!(
+                mouse_action(
+                    &mut state,
+                    Some(2),
+                    MouseAction::Down,
+                    at(millis),
+                    &mut last_click
+                ),
+                None
+            );
+            let action = mouse_action(
+                &mut state,
+                Some(2),
+                MouseAction::Up,
+                at(millis + 1),
+                &mut last_click,
+            );
+            if millis == 20 {
+                assert_eq!(action, Some(ActionCommand::SelectPosition(2)));
+                state.apply(&action.unwrap(), &[], at(millis + 1));
+            } else {
+                assert_eq!(action, None);
+            }
+        }
+        assert_eq!(state.active(), Some(2));
     }
 }

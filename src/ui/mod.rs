@@ -107,18 +107,39 @@ enum Pane {
     Preview,
     /// The preview that the most recent promotion demoted.
     Demoted,
+    DragMasterSource,
+    DragMasterTarget,
+    DragPreviewSource,
+    DragPreviewTarget,
 }
 
 impl Pane {
+    fn base(self) -> Self {
+        match self {
+            Self::DragMasterSource | Self::DragMasterTarget => Self::Master,
+            Self::DragPreviewSource | Self::DragPreviewTarget => Self::Preview,
+            pane => pane,
+        }
+    }
+
+    fn dragging(self, target: bool) -> Self {
+        match (self.master(), target) {
+            (true, false) => Self::DragMasterSource,
+            (true, true) => Self::DragMasterTarget,
+            (false, false) => Self::DragPreviewSource,
+            (false, true) => Self::DragPreviewTarget,
+        }
+    }
+
     /// Whether this pane holds the active terminal.
     fn master(self) -> bool {
-        matches!(self, Self::Master | Self::Zoomed | Self::Compact)
+        matches!(self.base(), Self::Master | Self::Zoomed | Self::Compact)
     }
 
     /// Whether the pane has room for the full title: complete path, state
     /// label, command, and the right-aligned slot.
     fn wide(self) -> bool {
-        matches!(self, Self::Master | Self::Zoomed)
+        matches!(self.base(), Self::Master | Self::Zoomed)
     }
 }
 
@@ -169,7 +190,12 @@ impl Deck<'_> {
                     width: body.width - GUTTER - stack,
                     ..body
                 };
-                self.draw_active(engine, frame.buffer_mut(), master, Pane::Master);
+                self.draw_active(
+                    engine,
+                    frame.buffer_mut(),
+                    master,
+                    self.master_pane(Pane::Master),
+                );
                 let mut panes = vec![master];
                 panes.extend(self.stack(
                     engine,
@@ -213,6 +239,13 @@ impl Deck<'_> {
     /// Returns the terminal in the pane under `pointer`, excluding chrome
     /// outside the pane rectangles.
     pub fn terminal_at(&self, area: Rect, pointer: Position) -> Option<&TerminalId> {
+        self.position_at(area, pointer)
+            .and_then(|position| self.projects.get(position))
+            .map(|project| &project.terminal)
+    }
+
+    /// Returns the configured position in the pane under `pointer`.
+    pub fn position_at(&self, area: Rect, pointer: Position) -> Option<usize> {
         if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
@@ -223,8 +256,7 @@ impl Deck<'_> {
         let active = || {
             self.state
                 .active()
-                .and_then(|position| self.projects.get(position))
-                .map(|project| &project.terminal)
+                .filter(|position| self.projects.get(*position).is_some())
         };
         match self.layout(body) {
             Layout::Zoom if body.contains(pointer) => active(),
@@ -256,13 +288,32 @@ impl Deck<'_> {
                         height: preview,
                     };
                     if pane.contains(pointer) {
-                        return self.projects.get(position).map(|project| &project.terminal);
+                        return self.projects.get(position).map(|_| position);
                     }
                     top += preview + 1;
                 }
                 None
             }
             _ => None,
+        }
+    }
+
+    /// A draggable pane must have a visible master-and-stack counterpart.
+    pub fn swap_position_at(&self, area: Rect, pointer: Position) -> Option<usize> {
+        let body = Rect {
+            height: area.height.saturating_sub(2),
+            ..area
+        };
+        matches!(self.layout(body), Layout::Stacked { .. })
+            .then(|| self.position_at(area, pointer))
+            .flatten()
+    }
+
+    fn master_pane(&self, pane: Pane) -> Pane {
+        match self.state.active() {
+            Some(position) if self.state.dragged() == Some(position) => pane.dragging(false),
+            Some(position) if self.state.drag_target() == Some(position) => pane.dragging(true),
+            _ => pane,
         }
     }
 
@@ -321,7 +372,11 @@ impl Deck<'_> {
             if top + preview > area.y + area.height.saturating_sub(2) {
                 break;
             }
-            let kind = if demoted == Some(position) {
+            let kind = if self.state.dragged() == Some(position) {
+                Pane::Preview.dragging(false)
+            } else if self.state.drag_target() == Some(position) {
+                Pane::Preview.dragging(true)
+            } else if demoted == Some(position) {
                 Pane::Demoted
             } else {
                 Pane::Preview
@@ -508,6 +563,10 @@ impl Deck<'_> {
         let (border, background) = match pane {
             Pane::Preview => (IDLE_BORDER, CANVAS),
             Pane::Demoted => (DEMOTED_BORDER, DEMOTED_BG),
+            // A held pane turns warning-coloured; its only valid counterpart
+            // gets the accent and a quiet lifted background.
+            Pane::DragMasterSource | Pane::DragPreviewSource => (WARNING, CANVAS),
+            Pane::DragMasterTarget | Pane::DragPreviewTarget => (ACCENT, DEMOTED_BG),
             _ => (ACCENT, CANVAS),
         };
         Block::bordered()
@@ -602,7 +661,7 @@ impl Deck<'_> {
         } else {
             spans.push(Span::styled(
                 format!("{number} {name}"),
-                Style::new().fg(if pane == Pane::Demoted {
+                Style::new().fg(if pane.base() == Pane::Demoted {
                     DEMOTED_FG
                 } else {
                     PREVIEW_FG
@@ -647,7 +706,7 @@ impl Deck<'_> {
     /// Zoom has the width to spend on the process behind the command.
     fn command(&self, project: &Project, metadata: &TerminalMetadata, pane: Pane) -> String {
         let command = project.command.join(" ");
-        match (pane, metadata.process) {
+        match (pane.base(), metadata.process) {
             (Pane::Zoomed, Some(process)) => format!(
                 "{command} · pid {} · up {}",
                 process.pid,
@@ -688,10 +747,10 @@ impl Deck<'_> {
                     .add_modifier(Modifier::BOLD),
             )];
         }
-        if pane == Pane::Compact {
+        if pane.base() == Pane::Compact {
             return Vec::new();
         }
-        let colour = match pane {
+        let colour = match pane.base() {
             Pane::Master | Pane::Zoomed => ACCENT,
             Pane::Demoted => MUTED,
             _ => HINT,
@@ -712,7 +771,7 @@ impl Deck<'_> {
                 None => meter(0),
             },
         };
-        match pane {
+        match pane.base() {
             Pane::Zoomed => vec![
                 Span::styled(
                     " ZOOM ",
@@ -1477,6 +1536,27 @@ mod tests {
             None,
             "the hint row is not a pane"
         );
+        assert_eq!(deck.swap_position_at(area, Position::new(10, 10)), Some(0));
+        assert_eq!(
+            deck.swap_position_at(Rect::new(0, 0, 84, 22), Position::new(10, 10)),
+            None,
+            "a hidden stack has no swap target"
+        );
+    }
+
+    #[test]
+    fn dragging_marks_the_source_and_only_valid_drop_target() {
+        let mut state = DeckState::new(4);
+        assert!(state.begin_drag(1));
+        state.update_drag(Some(0));
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // The held preview is warning-coloured, while the master is lifted as
+        // the valid drop target using the accepted accent palette.
+        assert_eq!(buffer[(100u16, 0u16)].fg, WARNING);
+        assert_eq!(buffer[(0u16, 0u16)].fg, ACCENT);
+        assert_eq!(buffer[(5u16, 1u16)].bg, DEMOTED_BG);
     }
 
     fn text(buffer: &Buffer) -> String {
