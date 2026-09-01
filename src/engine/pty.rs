@@ -116,6 +116,10 @@ impl PtyTransport {
             .map_err(|error| error.to_string())
     }
 
+    pub fn process_id(&self) -> Option<u32> {
+        self.process_group
+    }
+
     pub fn drain_events(&self) -> Vec<PtyEvent> {
         self.events
             .as_ref()
