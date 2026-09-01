@@ -1,11 +1,13 @@
 //! Key handling for the outer interface.
 //!
 //! Every binding is reached through the `ctrl+g` prefix. Most map onto a frozen
-//! [`ActionCommand`]; `^g c` is purely the deck's own geometry and applies
-//! straight to [`DeckState`]. Anything the deck can carry out itself —
-//! selection, zoom, collapse, scrollback, the modals — [`Input::press`] applies
-//! to the [`DeckState`] it is given; what is left over needs the engine or the
-//! process, and comes back as a [`Reaction`] for the caller.
+//! [`ActionCommand`]; `^g c` and `^g pgup`/`^g pgdn` are purely the deck's own
+//! geometry, so the first applies straight to [`DeckState`] and the second
+//! comes back for the caller that holds the rendered stack. Anything the deck
+//! can carry out itself — selection, zoom, collapse, scrollback, the modals —
+//! [`Input::press`] applies to the [`DeckState`] it is given; what is left over
+//! needs the engine, the process, or the geometry, and comes back as a
+//! [`Reaction`] for the caller.
 //!
 //! Keys arrive already decoded: this module names no terminal backend, so the
 //! event loop can be written against any of them.
@@ -65,6 +67,10 @@ pub enum Reaction {
     /// [`ActionCommand::RespawnActive`]: restarting a process is the engine's
     /// business, not the deck's.
     Respawn,
+    /// Page the preview stack's window by whole screens, negative for up. How
+    /// far one page reaches is rendered geometry, which only the caller holds,
+    /// so it applies this through [`super::Deck::stack_window`].
+    PageStack(isize),
     /// Quit confirmed at the confirmation modal that
     /// [`ActionCommand::RequestQuit`] opened.
     Quit,
@@ -161,6 +167,12 @@ impl Input {
                 ActionCommand::SelectPosition(digit as usize - '1' as usize)
             }
             Key::Char('z') => ActionCommand::ToggleZoom,
+            // The stack is a window onto a list that can be longer than the
+            // column. Paging it is the deck's own geometry, so it carries no
+            // frozen action either; the page keys are free under the prefix
+            // because scrollback reads them unprefixed.
+            Key::PageUp => return Some(Reaction::PageStack(-1)),
+            Key::PageDown => return Some(Reaction::PageStack(1)),
             // Collapse is the deck's own geometry, so it needs no engine and
             // carries no frozen action of its own.
             Key::Char('c') => {
@@ -320,6 +332,32 @@ mod tests {
         input.press(Key::Char('c'), &mut deck, &projects, NOW);
 
         assert_eq!(deck.collapsed_count(), 0);
+    }
+
+    /// The page keys are the keyboard half of the scrollable stack. Only the
+    /// caller knows how far one page reaches, so they come back rather than
+    /// applying themselves.
+    #[test]
+    fn the_page_keys_hand_the_stack_window_to_the_caller() {
+        let mut session = Session::new();
+
+        assert_eq!(session.command(Key::PageDown), Some(Reaction::PageStack(1)));
+        assert_eq!(session.command(Key::PageUp), Some(Reaction::PageStack(-1)));
+        assert_eq!(session.deck.active(), Some(0), "paging promotes nothing");
+    }
+
+    /// Unprefixed they are still the shell's, and scrollback's, as before.
+    #[test]
+    fn an_unprefixed_page_key_is_not_a_stack_command() {
+        let mut session = Session::new();
+
+        assert_eq!(session.press(Key::PageDown), sent(b"\x1b[6~"));
+
+        session.command(Key::Char('['));
+        assert_eq!(
+            session.press(Key::PageDown),
+            Some(Reaction::Scroll(ScrollCommand::Down(PAGE)))
+        );
     }
 
     #[test]

@@ -5,9 +5,10 @@
 //! no terminal backend of its own: the caller supplies a Ratatui [`Frame`], a
 //! [`TerminalEngine`] to read from, and the state to render.
 //!
-//! The public surface is the renderer, its state, its key handling, and the
-//! frozen contracts only. Reference fixtures and `FakeEngine` are test-only and
-//! never reach a release build.
+//! The public surface is the renderer, its state, its key handling, the window
+//! it scrolls the preview list through, and the frozen contracts only.
+//! Reference fixtures and `FakeEngine` are test-only and never reach a release
+//! build.
 
 #[cfg(test)]
 mod fixture;
@@ -90,12 +91,14 @@ const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 /// Cells in the activity meter.
 const METER_CELLS: u64 = 6;
 /// Help overlay size: the supplement's 60 columns by 21 rows, one row taller
-/// for the collapse binding.
-const HELP_SIZE: (u16, u16) = (60, 22);
+/// for the collapse binding and one more for the stack-paging keys.
+const HELP_SIZE: (u16, u16) = (60, 23);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// Column the help overlay's descriptions start at.
 const HELP_KEYS: usize = 17;
+/// The keys that page the preview list, as the stack footer states them.
+const PAGE_KEYS: &str = "^g pgup/pgdn";
 
 /// How a single pane is dressed. Every pane draws the same chrome; the kind
 /// selects the colours and how much of the title the pane has room to say.
@@ -151,12 +154,61 @@ impl Pane {
 /// Produced once per render by [`Deck::stack_layout`] and consumed by both the
 /// renderer and the pointer hit test, so the two can never disagree about
 /// where a preview sits — heights stopped being uniform once a preview could
-/// be folded.
+/// be folded, and the list stopped starting at its first entry once it could
+/// be scrolled.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct StackSlot {
     position: usize,
     rect: Rect,
     collapsed: bool,
+}
+
+/// Which part of the preview list the stack column is showing.
+///
+/// The column holds whole previews at their fixed heights, so a list longer
+/// than the column is paged rather than scrolled by rows: the window states
+/// where it starts, how many previews it drew, and how long the list is. Every
+/// hit test and every indicator reads it, so they cannot disagree.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StackWindow {
+    /// Index into [`DeckState::stack`] of the first preview drawn.
+    pub offset: usize,
+    /// How many previews the column drew.
+    pub visible: usize,
+    /// How many previews the list holds.
+    pub total: usize,
+    /// The furthest offset that still ends the window on the last preview.
+    limit: usize,
+}
+
+impl StackWindow {
+    /// The offset after scrolling `items` slots down the list, negative for
+    /// up, clamped so the window never scrolls past the last preview.
+    pub fn scrolled(&self, items: isize) -> usize {
+        self.offset.saturating_add_signed(items).min(self.limit)
+    }
+
+    /// The offset after paging by whole windows, which is what the keyboard
+    /// moves.
+    pub fn paged(&self, pages: isize) -> usize {
+        self.scrolled(pages.saturating_mul(self.visible.max(1) as isize))
+    }
+
+    /// Whether the list is longer than the window — the only state in which
+    /// the column draws a scroll indicator at all.
+    pub fn overflows(&self) -> bool {
+        self.total > self.visible
+    }
+
+    /// Previews hidden above the window.
+    fn above(&self) -> usize {
+        self.offset
+    }
+
+    /// Previews hidden below it.
+    fn below(&self) -> usize {
+        self.total.saturating_sub(self.offset + self.visible)
+    }
 }
 
 /// The chosen screen arrangement for one render.
@@ -355,6 +407,61 @@ impl Deck<'_> {
         .map(|slot| slot.position)
     }
 
+    /// The part of the preview list the stack column is currently showing.
+    ///
+    /// The caller pages the list through this: the window knows how far it can
+    /// scroll, which only the rendered geometry can say. A hidden stack has no
+    /// window, and its offset never moves.
+    pub fn stack_window(&self, area: Rect) -> StackWindow {
+        if area.width < GUTTER + 4 || area.height < 4 {
+            return StackWindow::default();
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let Layout::Stacked { preview, .. } = self.layout(body) else {
+            return StackWindow::default();
+        };
+        self.stack_window_of(&self.stack_items(), body.height.saturating_sub(1), preview)
+    }
+
+    /// Whether `pointer` sits on the stack column's own chrome rather than on
+    /// a preview: the gutter beside it, the blank rows between previews, the
+    /// empty column below them, and the footer row.
+    ///
+    /// That is where the wheel pages the list. Over a preview the wheel still
+    /// belongs to that preview's viewport, so the two gestures never fight.
+    pub fn stack_scroll_at(&self, area: Rect, pointer: Position) -> bool {
+        if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
+            return false;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let Layout::Stacked { stack, preview } = self.layout(body) else {
+            return false;
+        };
+        let column = Rect {
+            x: body.width - GUTTER - stack,
+            width: GUTTER + stack,
+            ..body
+        };
+        column.contains(pointer)
+            && !self
+                .stack_layout(
+                    Rect {
+                        x: body.width - stack,
+                        width: stack,
+                        ..body
+                    },
+                    preview,
+                )
+                .iter()
+                .any(|slot| slot.rect.contains(pointer))
+    }
+
     /// A draggable pane must have a visible master-and-stack counterpart.
     pub fn swap_position_at(&self, area: Rect, pointer: Position) -> Option<usize> {
         let body = Rect {
@@ -395,7 +502,67 @@ impl Deck<'_> {
         }
     }
 
-    /// Places the stack's children, top to bottom.
+    /// The previews the list holds, top to bottom, dropping any configured
+    /// position the workspace has no project for.
+    fn stack_items(&self) -> Vec<usize> {
+        self.state
+            .stack()
+            .iter()
+            .copied()
+            .filter(|position| self.projects.get(*position).is_some())
+            .collect()
+    }
+
+    /// What one preview costs the column before any freed rows are handed out:
+    /// a fold is a single title row, everything else is a whole preview.
+    fn item_height(&self, position: usize, preview: u16) -> u16 {
+        if self.state.collapsed(position) {
+            COLLAPSED_HEIGHT
+        } else {
+            preview
+        }
+    }
+
+    /// Which previews the column can show from the stored offset.
+    ///
+    /// `budget` is the stack area less its footer row, and every preview costs
+    /// its height plus the blank row under it. The window takes previews from
+    /// the offset while they fit, so the column always holds whole previews;
+    /// the offset itself is clamped to the last window that still ends on the
+    /// final preview, which is found by filling the same budget backwards.
+    fn stack_window_of(&self, items: &[usize], budget: u16, preview: u16) -> StackWindow {
+        let limit = items.len() - self.fill(items.iter().rev(), budget, preview);
+        let offset = self.state.stack_offset().min(limit);
+        StackWindow {
+            offset,
+            visible: self.fill(items[offset..].iter(), budget, preview),
+            total: items.len(),
+            limit,
+        }
+    }
+
+    /// How many of `positions` fit in `budget` rows, each costing its height
+    /// plus the blank row that follows it.
+    fn fill<'a>(
+        &self,
+        positions: impl Iterator<Item = &'a usize>,
+        budget: u16,
+        preview: u16,
+    ) -> usize {
+        let mut used = 0;
+        let mut count = 0;
+        for position in positions {
+            let cost = self.item_height(*position, preview) + 1;
+            if used + cost > budget {
+                break;
+            }
+            used += cost;
+            count += 1;
+        }
+        count
+    }
+
+    /// Places the stack's children, top to bottom, from the scrolled window.
     ///
     /// A collapsed preview gives up every row but its title, and those rows go
     /// straight to the previews still open: the export's "freed rows
@@ -403,32 +570,35 @@ impl Deck<'_> {
     /// the column". The remainder goes to the topmost open panes so the column
     /// stays deterministic.
     ///
-    /// Because each fold hands over exactly what it gave up, the stack's total
-    /// used height never changes, and a fold can never overflow a stack that
-    /// fitted before it.
+    /// When the whole list fits, each fold hands over exactly what it gave up,
+    /// so the stack's used height never changes and a fold can never overflow
+    /// a stack that fitted before it. When the list is longer than the column,
+    /// the folds have already bought room for further previews, so what is
+    /// handed out is only the room the window has left over.
     fn stack_layout(&self, area: Rect, preview: u16) -> Vec<StackSlot> {
-        let stacked: Vec<usize> = self
-            .state
-            .stack()
+        let items = self.stack_items();
+        let budget = area.height.saturating_sub(1);
+        let window = self.stack_window_of(&items, budget, preview);
+        let drawn = &items[window.offset..window.offset + window.visible];
+        let used: u16 = drawn
             .iter()
-            .copied()
-            .filter(|position| self.projects.get(*position).is_some())
-            .collect();
-        let folded = stacked
+            .map(|position| self.item_height(*position, preview) + 1)
+            .sum();
+        let folded = drawn
             .iter()
             .filter(|position| self.state.collapsed(**position))
             .count();
-        let open = stacked.len() - folded;
-        let freed = folded as u16 * (preview - COLLAPSED_HEIGHT);
+        let open = window.visible - folded;
+        let freed = (folded as u16 * (preview - COLLAPSED_HEIGHT)).min(budget - used);
         let (share, mut remainder) = if open > 0 {
             (freed / open as u16, freed % open as u16)
         } else {
             (0, 0)
         };
 
-        let mut slots = Vec::new();
+        let mut slots = Vec::with_capacity(window.visible);
         let mut top = area.y;
-        for position in stacked {
+        for position in drawn.iter().copied() {
             let collapsed = self.state.collapsed(position);
             let height = if collapsed {
                 COLLAPSED_HEIGHT
@@ -437,9 +607,6 @@ impl Deck<'_> {
                 remainder = remainder.saturating_sub(1);
                 preview + share + extra
             };
-            if top + height > area.y + area.height.saturating_sub(2) {
-                break;
-            }
             slots.push(StackSlot {
                 position,
                 rect: Rect {
@@ -479,6 +646,8 @@ impl Deck<'_> {
         preview: u16,
     ) -> Vec<Rect> {
         let demoted = self.state.demoted(self.now);
+        let window =
+            self.stack_window_of(&self.stack_items(), area.height.saturating_sub(1), preview);
         let mut drawn = Vec::new();
         for slot in self.stack_layout(area, preview) {
             let Some(project) = self.projects.get(slot.position) else {
@@ -502,13 +671,48 @@ impl Deck<'_> {
             }
             drawn.push(slot.rect);
         }
+        self.scroll_track(buffer, area, window);
         buffer.set_line(
             area.x + 1,
             area.y + area.height - 1,
-            &Line::from(self.stack_hints(demoted)),
+            &Line::from(self.stack_hints(demoted, window, area.width - 1)),
             area.width - 1,
         );
         drawn
+    }
+
+    /// A one-column track in the gutter beside the stack, drawn only while the
+    /// list is longer than the window.
+    ///
+    /// It takes no room from the previews, so a stack that fits looks exactly
+    /// as the export draws it. The thumb's length and position are the
+    /// window's share of the list, which states both how much is hidden and
+    /// where the window sits in it.
+    fn scroll_track(&self, buffer: &mut Buffer, area: Rect, window: StackWindow) {
+        let track = usize::from(area.height.saturating_sub(1));
+        if !window.overflows() || track == 0 || area.x == 0 {
+            return;
+        }
+        let length = (window.visible * track)
+            .div_ceil(window.total)
+            .clamp(1, track);
+        // Anchored at whichever end the window has reached, so "there is
+        // nothing further down" is never a rounding question.
+        let top = match window.below() {
+            0 => track - length,
+            _ => (window.offset * track / window.total).min(track - length),
+        };
+        for row in 0..track {
+            let held = (top..top + length).contains(&row);
+            let Some(cell) = buffer.cell_mut((area.x - 1, area.y + row as u16)) else {
+                continue;
+            };
+            cell.set_symbol(if held { "┃" } else { "│" }).set_style(
+                Style::new()
+                    .fg(if held { HINT } else { IDLE_BORDER })
+                    .bg(CANVAS),
+            );
+        }
     }
 
     /// A collapsed preview: one row, no box, on the export's `#101317`.
@@ -586,8 +790,14 @@ impl Deck<'_> {
     }
 
     /// The stack footer names the promotion that just happened and the key
-    /// that undoes it; otherwise it states the promotion keys.
-    fn stack_hints(&self, demoted: Option<usize>) -> Vec<Span<'static>> {
+    /// that undoes it; otherwise it states what the window hides, the fold
+    /// census, or the promotion keys.
+    fn stack_hints(
+        &self,
+        demoted: Option<usize>,
+        window: StackWindow,
+        width: u16,
+    ) -> Vec<Span<'static>> {
         if self.state.scrollback() {
             return vec![
                 Span::styled("scrollback", Style::new().fg(WARNING)),
@@ -600,8 +810,15 @@ impl Deck<'_> {
             .state
             .active()
             .and_then(|position| self.projects.get(position));
-        // A demotion outranks the fold census: it clears itself after ~1.5s
-        // and the collapse footer comes back.
+        // A demotion outranks both censuses: it clears itself after ~1.5s and
+        // whichever of them applies comes back.
+        //
+        // Hidden previews outrank folded ones. A fold is already declared by
+        // its own strip, its marker and the status row, while a preview the
+        // window has scrolled past says nothing about itself anywhere else.
+        if demoted.is_none() && window.overflows() {
+            return self.overflow_hints(window, width);
+        }
         let collapsed = self.state.collapsed_count();
         if demoted.is_none() && collapsed > 0 {
             return vec![
@@ -626,6 +843,32 @@ impl Deck<'_> {
                 Span::styled(" cycle", Style::new().fg(HINT)),
             ],
         }
+    }
+
+    /// `↑ 2 more · ↓ 3 more · ^g pgup/pgdn`, naming only the end that has
+    /// something behind it. The keys are stated whenever the footer has the
+    /// columns for them, and dropped first when it does not — the status
+    /// bar's own rule.
+    fn overflow_hints(&self, window: StackWindow, width: u16) -> Vec<Span<'static>> {
+        let hint = Style::new().fg(HINT);
+        let key = Style::new().fg(PREVIEW_FG);
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        for (arrow, hidden) in [("↑", window.above()), ("↓", window.below())] {
+            if hidden == 0 {
+                continue;
+            }
+            if !spans.is_empty() {
+                spans.push(Span::styled(" · ", hint));
+            }
+            spans.push(Span::styled(format!("{arrow} {hidden} "), key));
+            spans.push(Span::styled("more", hint));
+        }
+        let taken: usize = spans.iter().map(Span::width).sum();
+        if taken + PAGE_KEYS.chars().count() + 3 <= usize::from(width) {
+            spans.push(Span::styled(" · ", hint));
+            spans.push(Span::styled(PAGE_KEYS, key));
+        }
+        spans
     }
 
     /// Master-only fallback: a one-line pane strip on the first row, a blank
@@ -1484,7 +1727,7 @@ fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-const HELP: [(&str, &str); 14] = [
+const HELP: [(&str, &str); 15] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
@@ -1492,6 +1735,7 @@ const HELP: [(&str, &str); 14] = [
     ("VIEW", ""),
     ("^g z", "toggle zoom"),
     ("^g c", "collapse / expand previews"),
+    ("^g pgup/pgdn", "page the preview stack"),
     ("^g [", "enter scrollback mode"),
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
@@ -1726,7 +1970,7 @@ mod tests {
     };
 
     use super::{
-        ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, IDLE_BORDER,
+        ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, HINT, IDLE_BORDER,
         STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
     };
     use crate::{
@@ -2397,10 +2641,10 @@ mod tests {
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        // 60x22 centred on the canvas: columns 42..101, rows 10..31.
-        assert_eq!(buffer[(42u16, 10u16)].symbol(), "┌");
+        // 60x23 centred on the canvas: columns 42..101, rows 9..31.
+        assert_eq!(buffer[(42u16, 9u16)].symbol(), "┌");
         assert_eq!(buffer[(101u16, 31u16)].symbol(), "┘");
-        assert_eq!(buffer[(42u16, 10u16)].fg, ACCENT);
+        assert_eq!(buffer[(42u16, 9u16)].fg, ACCENT);
         // Focus is singular: the master border is no longer the accent, and
         // the underlay recedes by foreground alone.
         assert_eq!(buffer[(0u16, 0u16)].fg, IDLE_BORDER);
@@ -2521,6 +2765,286 @@ mod tests {
         // 34 stack columns hold previews, which the export fixes below 120.
         assert!(text(&stacked).matches('┌').count() > 1);
         assert_eq!(stacked[(63u16, 0u16)].symbol(), "┐");
+    }
+
+    /// A synthetic workspace of `count` terminals.
+    ///
+    /// The configuration still caps a workspace at four until #34a lands, so a
+    /// stack longer than the reference deck is built here rather than loaded
+    /// from a workspace file. The renderer has never known the cap.
+    fn synthetic(count: usize) -> Vec<Project> {
+        (1..=count)
+            .map(|number| Project {
+                terminal: TerminalId::new(format!("t{number}")),
+                path: std::path::PathBuf::from(fixture::HOME).join(format!("idp/t{number}")),
+                command: vec!["sh".to_owned()],
+            })
+            .collect()
+    }
+
+    fn deck<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
+        Deck {
+            workspace: "idp",
+            projects,
+            state,
+            home: Some(fixture::home()),
+            master_ratio: 0.70,
+            now: fixture::NOW,
+        }
+    }
+
+    /// Renders a synthetic deck of any length on the reference canvas.
+    fn render_long(projects: &[Project], state: &DeckState, size: (u16, u16)) -> Buffer {
+        let engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+        let deck = deck(projects, state);
+        let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
+        terminal
+            .draw(|frame| deck.render(&engine as &dyn TerminalEngine, frame))
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    const CANVAS: Rect = Rect {
+        x: 0,
+        y: 0,
+        width: 144,
+        height: 42,
+    };
+
+    /// Eight terminals leave seven previews for a column that holds three: the
+    /// window states where it starts and how much of the list it is showing.
+    #[test]
+    fn a_long_list_fills_the_column_with_whole_previews() {
+        let projects = synthetic(8);
+        let state = DeckState::new(8);
+
+        let window = deck(&projects, &state).stack_window(CANVAS);
+
+        assert_eq!(window.offset, 0);
+        assert_eq!(window.visible, 3, "39 budget rows hold 3 x (12 + 1)");
+        assert_eq!(window.total, 7);
+        assert!(window.overflows());
+    }
+
+    /// The four previews that fit the reference deck are the whole list, so
+    /// nothing scrolls and screens 01-04 are untouched.
+    #[test]
+    fn a_list_that_fits_does_not_scroll() {
+        let projects = fixture::projects();
+        let mut state = DeckState::new(4);
+
+        let window = deck(&projects, &state).stack_window(CANVAS);
+        assert!(!window.overflows());
+        assert_eq!(window.scrolled(1), 0, "there is nothing below to reach");
+
+        // A stored offset it cannot honour is still ignored by the renderer.
+        state.set_stack_offset(2);
+        let buffer = render_long(&projects, &state, (144, 42));
+        assert_eq!(
+            buffer[(99u16, 5u16)].symbol(),
+            " ",
+            "no track in the gutter"
+        );
+        assert!(!text(&buffer).contains("more"));
+    }
+
+    /// The window stops when its last preview is the list's last preview, so
+    /// the column never scrolls into empty space.
+    #[test]
+    fn paging_stops_with_the_last_preview_in_view() {
+        let projects = synthetic(8);
+        let mut state = DeckState::new(8);
+        let window = deck(&projects, &state).stack_window(CANVAS);
+
+        assert_eq!(window.paged(1), 3, "one page is one window of previews");
+        assert_eq!(window.scrolled(9), 4, "7 previews less the 3 on screen");
+        assert_eq!(window.scrolled(-1), 0);
+
+        state.set_stack_offset(window.paged(1));
+        let scrolled = deck(&projects, &state).stack_window(CANVAS);
+        assert_eq!(scrolled.offset, 3);
+        assert_eq!(scrolled.paged(-1), 0);
+        assert_eq!(scrolled.paged(1), 4);
+    }
+
+    /// Promotion, drag and the disclosure markers all address a configured
+    /// position, so they must read the window rather than the list.
+    #[test]
+    fn hit_testing_follows_the_scrolled_window() {
+        let projects = synthetic(8);
+        let mut state = DeckState::new(8);
+        state.toggle_collapse(6);
+        state.set_stack_offset(2);
+        let view = deck(&projects, &state);
+
+        // The stack is [1..=7]; the window starts at its third preview.
+        assert_eq!(view.position_at(CANVAS, Position::new(110, 5)), Some(3));
+        assert_eq!(view.position_at(CANVAS, Position::new(110, 18)), Some(4));
+        assert_eq!(view.position_at(CANVAS, Position::new(110, 31)), Some(5));
+        assert_eq!(
+            view.swap_position_at(CANVAS, Position::new(110, 5)),
+            Some(3)
+        );
+        assert_eq!(
+            view.terminal_at(CANVAS, Position::new(110, 5))
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("t4")
+        );
+        // The marker cells belong to whichever preview the window put there.
+        assert_eq!(view.marker_at(CANVAS, Position::new(103, 0)), Some(3));
+        assert_eq!(view.marker_at(CANVAS, Position::new(103, 13)), Some(4));
+    }
+
+    /// The wheel over a preview is that preview's (#25), so the list is paged
+    /// from the column's own chrome instead.
+    #[test]
+    fn the_stack_chrome_is_where_the_wheel_pages_the_list() {
+        let projects = synthetic(8);
+        let state = DeckState::new(8);
+        let view = deck(&projects, &state);
+
+        assert!(view.stack_scroll_at(CANVAS, Position::new(99, 5)), "gutter");
+        assert!(view.stack_scroll_at(CANVAS, Position::new(120, 12)), "gap");
+        assert!(
+            view.stack_scroll_at(CANVAS, Position::new(120, 39)),
+            "footer"
+        );
+        assert!(
+            !view.stack_scroll_at(CANVAS, Position::new(110, 5)),
+            "preview"
+        );
+        assert!(
+            !view.stack_scroll_at(CANVAS, Position::new(10, 10)),
+            "master"
+        );
+        assert!(
+            !view.stack_scroll_at(CANVAS, Position::new(120, 41)),
+            "the status row is not the stack"
+        );
+    }
+
+    /// A folded preview keeps its place in the list and costs one row, so the
+    /// window reaches further down the list without the column growing.
+    #[test]
+    fn folding_inside_a_long_list_lets_more_previews_into_the_window() {
+        let projects = synthetic(8);
+        let mut state = DeckState::new(8);
+        assert!(state.toggle_collapse(1));
+        assert!(state.toggle_collapse(2));
+
+        let window = deck(&projects, &state).stack_window(CANVAS);
+        assert_eq!(window.visible, 4, "two strips buy room for a fourth pane");
+
+        let buffer = render_long(&projects, &state, (144, 42));
+        let rendered = text(&buffer);
+        assert!(rendered.contains("▸ 2 t2"), "the folds stay in place");
+        assert!(rendered.contains("▸ 3 t3"));
+        assert!(rendered.contains("▾ 4 t4"));
+        // Two strips and two open previews, and the footer still on row 39.
+        assert_eq!(buffer[(100u16, 0u16)].symbol(), " ");
+        assert_eq!(buffer[(102u16, 0u16)].symbol(), "▸");
+        assert_eq!(buffer[(102u16, 2u16)].symbol(), "▸");
+        assert_eq!(buffer[(100u16, 4u16)].symbol(), "┌");
+    }
+
+    /// The column never overruns its footer row, whatever the mix of folds and
+    /// whatever the window is showing.
+    #[test]
+    fn a_scrolled_column_never_overruns_its_footer() {
+        let projects = synthetic(9);
+        let mut state = DeckState::new(9);
+
+        for step in 0..8 {
+            for offset in 0..8 {
+                state.set_stack_offset(offset);
+                let buffer = render_long(&projects, &state, (144, 42));
+                assert_eq!(
+                    buffer[(102u16, 38u16)].symbol(),
+                    " ",
+                    "row 38 stays blank at offset {offset} with {step} folded"
+                );
+            }
+            state.toggle_collapse(step + 1);
+        }
+    }
+
+    /// The footer names what the window hides at each end, and the keys that
+    /// move it while it has the columns for them.
+    #[test]
+    fn the_footer_states_what_the_window_hides() {
+        let projects = synthetic(8);
+        let mut state = DeckState::new(8);
+
+        let head = text(&render_long(&projects, &state, (144, 42)));
+        assert!(head.contains("↓ 4 more · ^g pgup/pgdn"), "{head}");
+
+        state.set_stack_offset(2);
+        let middle = text(&render_long(&projects, &state, (144, 42)));
+        assert!(
+            middle.contains("↑ 2 more · ↓ 2 more · ^g pgup/pgdn"),
+            "{middle}"
+        );
+
+        state.set_stack_offset(4);
+        let tail = text(&render_long(&projects, &state, (144, 42)));
+        assert!(tail.contains("↑ 4 more"), "{tail}");
+        assert!(!tail.contains("↓"), "nothing is left below: {tail}");
+
+        // The narrower column drops the keys before the counts.
+        state.set_stack_offset(2);
+        let compact = text(&render_long(&projects, &state, (110, 42)));
+        assert!(compact.contains("↑ 2 more · ↓ 2 more"), "{compact}");
+        assert!(!compact.contains("pgup"), "{compact}");
+    }
+
+    /// A hidden preview is the one thing collapse never announces elsewhere,
+    /// so it takes the footer while the fold census keeps the status row.
+    #[test]
+    fn hidden_previews_outrank_the_fold_census_in_the_footer() {
+        let projects = synthetic(8);
+        let mut state = DeckState::new(8);
+        state.toggle_collapse(1);
+
+        let rendered = text(&render_long(&projects, &state, (144, 42)));
+
+        assert!(rendered.contains("more"), "{rendered}");
+        assert!(!rendered.contains("expand all"));
+        assert!(
+            rendered.contains("1 collapsed"),
+            "the status row still says"
+        );
+    }
+
+    /// The track sits in the gutter, so it takes no columns from the previews.
+    /// Its thumb is the window's share of the list and reaches each end.
+    #[test]
+    fn the_gutter_carries_a_track_while_the_list_is_longer_than_the_column() {
+        let projects = synthetic(8);
+        let mut state = DeckState::new(8);
+
+        let head = render_long(&projects, &state, (144, 42));
+        let track = |buffer: &Buffer| {
+            (0..39u16)
+                .map(|row| buffer[(99u16, row)].symbol().to_owned())
+                .collect::<String>()
+        };
+        let thumb = |buffer: &Buffer| {
+            let rows: Vec<u16> = (0..39u16)
+                .filter(|row| buffer[(99u16, *row)].symbol() == "┃")
+                .collect();
+            (rows[0], rows[rows.len() - 1])
+        };
+        assert_eq!(track(&head).matches('┃').count(), 17, "3 of 7 previews");
+        assert_eq!(thumb(&head).0, 0, "the window is at the head of the list");
+        assert_eq!(head[(99u16, 0u16)].fg, HINT);
+        assert_eq!(head[(99u16, 38u16)].fg, IDLE_BORDER);
+        // The pane beside it keeps every column it had.
+        assert_eq!(head[(100u16, 0u16)].symbol(), "┌");
+
+        state.set_stack_offset(4);
+        let tail = render_long(&projects, &state, (144, 42));
+        assert_eq!(thumb(&tail).1, 38, "the window is at the end of the list");
     }
 
     #[test]

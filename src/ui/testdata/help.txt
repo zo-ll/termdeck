@@ -7,17 +7,17 @@
 │    VITE v5.4.8  ready in 412 ms                                                                │  │  12:05:58 /api/terminals ······ 11.4ms   │
 │                                                                                                │  │  12:06:01 /api/health ·········  3.0ms   │
 │    ➜  Local:   http://localhost:5173/                                                          │  │  12:06:07 queue ProcessLog ··· done      │
-│    ➜  Network: http://192.168.1.24:5173/                                                       │  │  12:06:09 /api/terminals/2/log  8.7ms    │
-│    ➜  press h + enter to show help      ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                         │
-│                                         │                                                          │─────────────────────────────────────────┘
-│  12:03:58 [vite] page reload src/main.ts│  NAVIGATE                                                │                                          
-│  12:04:12 [vite] hmr update /src/routes/│  ^g j  ^g k       promote next / previous                │ 3 app · …/app · ✕ exit 1 ────── 2m ago ─┐
-│  12:04:12 [vite] hmr update /src/styles/│  ^g ↓  ^g ↑       same, with arrow keys                  │ > idp-app@0.2.1 dev                     │
-│  12:04:29 [vite] hmr update /src/routes/│  ^g 1 … ^g 4      promote by configured position         │ > expo start --dev-client               │
-│  12:04:41 [vite] optimized dependencies │                                                          │                                         │
-│                                         │  VIEW                                                    │ ✖ Metro bundler failed to start         │
-│    VITE v5.4.8  ready in 268 ms         │  ^g z             toggle zoom                            │   Error: EADDRINUSE :::8081             │
-│                                         │  ^g c             collapse / expand previews             │   another process is bound to           │
+│    ➜  Network: http://192.168.1.24:5173/┌─ help ──────────────────────────────────────────── ^g ? ─┐ 12:06:09 /api/terminals/2/log  8.7ms    │
+│    ➜  press h + enter to show help      │                                                          │                                         │
+│                                         │  NAVIGATE                                                │─────────────────────────────────────────┘
+│  12:03:58 [vite] page reload src/main.ts│  ^g j  ^g k       promote next / previous                │                                          
+│  12:04:12 [vite] hmr update /src/routes/│  ^g ↓  ^g ↑       same, with arrow keys                  │ 3 app · …/app · ✕ exit 1 ────── 2m ago ─┐
+│  12:04:12 [vite] hmr update /src/styles/│  ^g 1 … ^g 4      promote by configured position         │ > idp-app@0.2.1 dev                     │
+│  12:04:29 [vite] hmr update /src/routes/│                                                          │ > expo start --dev-client               │
+│  12:04:41 [vite] optimized dependencies │  VIEW                                                    │                                         │
+│                                         │  ^g z             toggle zoom                            │ ✖ Metro bundler failed to start         │
+│    VITE v5.4.8  ready in 268 ms         │  ^g c             collapse / expand previews             │   Error: EADDRINUSE :::8081             │
+│                                         │  ^g pgup/pgdn     page the preview stack                 │   another process is bound to           │
 │  12:05:02 [vite] hmr update /src/compone│  ^g [             enter scrollback mode                  │   port 8081                             │
 │  12:05:09 warning  src/components/PaneTi│                                                          │                                         │
 │           'status' is declared but its v│  TERMINAL                                                │ ──────────────────────────────────────  │
