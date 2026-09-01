@@ -520,3 +520,6 @@ scope.
 - 2026-09-01: #34b integration done (claude; merge 307ca80, help.txt resolved
   from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
   close #34.
+- 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
+  once: cap lift + scrollable stack live). Release binary rebuilt +
+  reinstalled. Open tracker: only #33 (animations, parked).
