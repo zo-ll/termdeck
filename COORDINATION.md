@@ -412,3 +412,8 @@ scope.
   swap + double-click promote". Folds double-click-to-promote into the same
   mouse slice (shared capture + hit-testing with #25); gestures dispatch the
   existing frozen SelectPosition/Promote actions. Queues to codex after #25.
+- 2026-09-01: DIRECTIVE (user): DO NOT dispatch any new work to claude — keep
+  the critic as the reviewer only. #27 (collapse stack HEIGHT — clarified to
+  mean reducing the stack's height, master taller, not hiding previews) is
+  PARKED (not dispatched to anyone). #25 (codex wheel, 89 tests green) handed
+  to the critic for local review.
