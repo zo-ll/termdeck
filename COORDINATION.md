@@ -233,3 +233,9 @@ scope.
   written as the durable record + sandbox fallback (codex cannot reach tmux),
   (3) coordinator's standing order: read markers/events.log first thing every
   turn. Coordinator skill Phase 5b + FINISH-PROTOCOL.md updated accordingly.
+- 2026-09-01: FINISH PROTOCOL v4 cleanup: removed the obsolete "no watcher"
+  item from coordinator skill Phase 5b and the watcher mention from the
+  shipwright skill — no watcher is mentioned anywhere in the workflow now.
+  Protocol stands: worker/critic prompts the coordinator directly (primary) +
+  marker file (record/sandbox fallback) + coordinator reads markers first
+  thing every turn.
