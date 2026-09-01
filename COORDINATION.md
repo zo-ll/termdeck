@@ -268,3 +268,12 @@ scope.
   critic-passed and ready to merge (awaiting user approval in this wave).
   Remaining open question: codex ping channel (marker-only vs minimal inbox
   relay).
+- 2026-09-01: CODE-X PING CHANNEL FIXED (user: codex must ping in conversation
+  like claude/critic; scroll_marker stays as merged). Added a minimal INBOX
+  RELAY (window `relay`, /tmp/shipwright/termdeck/inbox/): sandboxed workers
+  write ONE line to a new <task>.ping file; the relay delivers it into the
+  coordinator conversation and consumes it (single-line, new-files-only,
+  guarded to the pi foreground command — unlike the removed watcher, no stale
+  re-fires or multiline injection). Self-test verified (DELIVER logged);
+  codex onboarded and confirmed. FINISH-PROTOCOL.md + coordinator skill Phase
+  5b updated. PRs #20/#21 remain open awaiting user merge approval.
