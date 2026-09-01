@@ -492,3 +492,5 @@ scope.
   gate 115) — in critic review. #32 still in flight (claude).
 - 2026-09-01: #31 critic PASS → committed → pushed → PR #31 (…) awaiting
   approval. #32 in flight (claude).
+- 2026-09-01: #32 done (claude, `48ab5d3`: always-visible markers + help ^g c;
+  gate 116) — in critic review.
