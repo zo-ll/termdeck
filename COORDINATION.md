@@ -512,3 +512,8 @@ scope.
   follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
   in critic review; branch base predates #36/#37, integration onto main after
   review.
+- 2026-09-01: #34b review PASS but branch integration onto main CONFLICTED in
+  src/ui/testdata/help.txt (both #32 and #34b edits) — conflict resolution
+  routed to claude (same worker; left in conflicted state, not hand-fixed).
+  FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
+  should use the deck's count after the cap lift.
