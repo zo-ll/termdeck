@@ -498,3 +498,8 @@ scope.
   (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
   #34b (scrollable stack list, UI) next — awaiting user choice (design-first
   vs direct) but queued to claude.
+- 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
+  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
+  defined carefully vs #25 wheel; hit-testing by list offset; scroll
+  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
+  working (#34a codex, #34b claude).
