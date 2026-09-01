@@ -1405,6 +1405,36 @@ mod tests {
     }
 
     #[test]
+    fn a_starting_terminal_renders_the_warning_ring_and_its_label() {
+        let mut engine = fixture::frontend_active();
+        engine.set_status(&TerminalId::new("frontend"), TerminalStatus::Starting);
+
+        let (buffer, _) = render(&engine, &DeckState::new(4), (144, 42));
+        let screen = text(&buffer);
+
+        // A wide master names the state it is in.
+        assert!(
+            screen.contains("> 1 frontend  ·  ~/idp/frontend  ·  ○ starting"),
+            "{screen}"
+        );
+        // The ring is warning, not the accent a running master takes, and the
+        // label follows the glyph's colour.
+        let ring = (0..144u16)
+            .find(|column| buffer[(*column, 0u16)].symbol() == "○")
+            .expect("the master title carries the starting ring");
+        assert_eq!(buffer[(ring, 0u16)].fg, WARNING);
+        assert_eq!(buffer[(ring + 2, 0u16)].fg, WARNING);
+        assert_eq!(buffer[(ring + 2, 0u16)].symbol(), "s");
+
+        // A preview shows the ring alone: the border resumes right after it.
+        let mut engine = fixture::frontend_active();
+        engine.set_status(&TerminalId::new("backend"), TerminalStatus::Starting);
+        let screen = text(&render(&engine, &DeckState::new(4), (144, 42)).0);
+
+        assert!(screen.contains("2 backend · …/backend · ○ ───"), "{screen}");
+    }
+
+    #[test]
     fn a_preview_holding_history_says_how_far_back_it_is() {
         let (buffer, _) = render(&fixture::backend_promoted(), &promote(1), (144, 42));
 
