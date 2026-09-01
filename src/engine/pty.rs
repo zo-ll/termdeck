@@ -127,40 +127,70 @@ impl PtyTransport {
             .unwrap_or_default()
     }
 
-    /// Terminates the shell's process group, then drops the receiver before
-    /// joining. Dropping it wakes a reader blocked by the bounded channel.
+    /// Terminates one process group and waits through the normal grace period.
     pub fn shutdown(&mut self) -> Result<(), String> {
         if self.events.is_none() {
             return Ok(());
         }
+        let result = self.request_shutdown();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while self.is_process_group_alive() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let kill_result = self
+            .is_process_group_alive()
+            .then(|| self.force_shutdown())
+            .transpose();
+        self.join();
+        result.and(kill_result.map(|_| ()))
+    }
+
+    /// Starts shutdown without waiting. This permits a multi-terminal owner to
+    /// send TERM to every process group before using one shared grace period.
+    pub fn request_shutdown(&mut self) -> Result<(), String> {
         self.events.take();
-        let result = self.terminate();
+        #[cfg(unix)]
+        if let Some(process_group) = self.process_group {
+            return send_signal(process_group, libc::SIGTERM);
+        }
+
+        self.killer.kill().map_err(|error| error.to_string())
+    }
+
+    /// Reports whether the owned process group still has a live member.
+    pub fn is_process_group_alive(&self) -> bool {
+        #[cfg(unix)]
+        if let Some(process_group) = self.process_group {
+            return process_group_alive(process_group);
+        }
+
+        false
+    }
+
+    /// Kills a process group that survived the TERM grace period.
+    pub fn force_shutdown(&mut self) -> Result<(), String> {
+        #[cfg(unix)]
+        if let Some(process_group) = self.process_group {
+            return send_signal(process_group, libc::SIGKILL);
+        }
+
+        self.killer.kill().map_err(|error| error.to_string())
+    }
+
+    /// Joins the reader and waiter after their owner has ended the process.
+    pub fn join(&mut self) {
+        self.events.take();
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
         }
         if let Some(waiter) = self.waiter.take() {
             let _ = waiter.join();
         }
-        result
     }
 
-    fn terminate(&mut self) -> Result<(), String> {
-        #[cfg(unix)]
-        if let Some(process_group) = self.process_group {
-            send_signal(process_group, libc::SIGTERM)?;
-            for _ in 0..20 {
-                if !process_group_alive(process_group) {
-                    return Ok(());
-                }
-                thread::sleep(Duration::from_millis(100));
-            }
-            if process_group_alive(process_group) {
-                send_signal(process_group, libc::SIGKILL)?;
-            }
-            return Ok(());
-        }
-
-        self.killer.kill().map_err(|error| error.to_string())
+    #[cfg(test)]
+    pub(crate) fn has_joined_threads(&self) -> bool {
+        self.reader.is_none() && self.waiter.is_none()
     }
 }
 
@@ -324,5 +354,6 @@ mod tests {
         transport.shutdown().unwrap();
 
         assert!(!super::process_group_alive(process_group));
+        assert!(transport.has_joined_threads());
     }
 }
