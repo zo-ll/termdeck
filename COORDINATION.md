@@ -449,3 +449,12 @@ scope.
   flagged). QUEUED claude_design MCP prompt then DELIVERED — claude is now
   importing/implementing `Termdeck TUI.dc.html` via the MCP. Design spec
   ready for user review before implementation.
+- 2026-09-01: USER authorized #27 IMPLEMENTATION in claude's lane (supersedes
+  the earlier "no claude dispatch" directive for this issue; design spec
+  accepted). claude's design work is done (spec 4af49d0; MCP artboard work
+  complete — screen 05 collapsed-preview is the only unimplemented part).
+  Claude selected option 1: implement per collapse-stack.md in
+  coord/27-collapse-stack (DeckState.collapsed, stack_layout(), strip
+  renderer, ^g c + marker click, status/footer, collapsed-stack.txt fixture;
+  screens 01-04 byte-identical; commit local, no push). R3 responsive
+  follow-on explicitly NOT included.
