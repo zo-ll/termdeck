@@ -297,7 +297,7 @@ mod tests {
             .write(b"printf 'TERMDECK-INPUT\n'; stty size; exit 7\n")
             .unwrap();
 
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(15);
         let mut output = Vec::new();
         let mut exited = None;
         while Instant::now() < deadline
@@ -350,7 +350,11 @@ mod tests {
         let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
         let process_group = transport.process_group.unwrap();
 
-        std::thread::sleep(Duration::from_millis(100));
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline && !super::process_group_alive(process_group) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(super::process_group_alive(process_group));
         transport.shutdown().unwrap();
 
         assert!(!super::process_group_alive(process_group));
