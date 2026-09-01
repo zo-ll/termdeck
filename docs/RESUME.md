@@ -52,10 +52,12 @@ Read, in order:
 Only recreate branches still marked active in `COORDINATION.md`. For example:
 
 ```bash
-mkdir -p ../termdeck-worktrees
-git worktree add ../termdeck-worktrees/01-contracts coord/01-contracts
-git worktree add ../termdeck-worktrees/03-ui coord/03-ui
+mkdir -p ~/.worktrees/termdeck
+git worktree add ~/.worktrees/termdeck/01-contracts coord/01-contracts
+git worktree add ~/.worktrees/termdeck/03-ui coord/03-ui
 ```
+
+Worktree location is a local convention; this machine uses `~/.worktrees/termdeck/`.
 
 If a branch only exists on the remote, create its local tracking branch first:
 
