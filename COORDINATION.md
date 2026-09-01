@@ -25,12 +25,12 @@ scope.
 | Issue | Slice | Blocked by | Status |
 |---|---|---|---|
 | [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | PR #15 merged (`4b4fec4`) |
-| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | done — local only (uncommitted), critic reviewing |
+| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | reviewed pass — pushed, [PR #17](https://github.com/zo-ll/termdeck/pull/17) |
 | [#9](https://github.com/zo-ll/termdeck/issues/9) | One-terminal native engine | #7, #8 | blocked |
 | [#10](https://github.com/zo-ll/termdeck/issues/10) | Native lifecycle | #9 | blocked |
 | [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | PR #16 merged (`ddb45f4`) |
-| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | done — commit `9606976` local, awaiting critic |
-| [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | #12 | in progress (claude window) |
+| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | reviewed pass — pushed, [PR #18](https://github.com/zo-ll/termdeck/pull/18) |
+| [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | #12 | done — `fe7922c` local (`coord/13-ui-chrome`), critic reviewing |
 | [#14](https://github.com/zo-ll/termdeck/issues/14) | Modal and input modes | #12, #13 | blocked |
 
 ## Waves
@@ -148,6 +148,17 @@ scope.
   `/tmp/shipwright/termdeck/critic/review-8.md` (single-line pointer, no
   paste fragmentation). Claude is implementing #13 with instructions to
   commit locally and stop for review.
+- 2026-09-01: Status correction + branch split. My prior report was wrong on
+  two points (critic was still working on #12, not delivered-yet-facts; claude
+  had FINISHED #13, not mid-work). Both critic verdicts are final and pass
+  (transcript turns: #8 verdict complete before push; #12 verdict pass with 3
+  non-blocking notes). #12/#13 had been committed on ONE shared branch —
+  split: `coord/12-ui-master-stack` reset to the exact reviewed commit
+  `9606976`, #13 preserved on new branch `coord/13-ui-chrome` (`fe7922c`) with
+  its own worktree. Pushed `coord/12-ui-master-stack` (PR #18); #8 stayed PR
+  #17. Claude was told to HOLD and not start #14 (unauthorized; #14 waits for
+  #12/#13 passes → merges). #13 handed to the critic for local review
+  (`/tmp/shipwright/termdeck/critic/review-13.md`).
 
 ## Durable resumption
 
