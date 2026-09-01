@@ -286,3 +286,13 @@ scope.
   `/tmp/shipwright/relay.log`. Repo-scoped copies deleted; codex re-onboarded
   with the global path (confirmed). Per-task state stays per shipwright
   convention under /tmp/shipwright/termdeck/<task>/.
+- 2026-09-01: FINISH PROTOCOL v5 — UNIFIED, harness-agnostic (user request):
+  the inbox relay is now the ONLY worker→coordinator ping channel for EVERY
+  harness (pi critic, Claude Code, Codex, future) — one line to
+  /tmp/shipwright/inbox/<task>.ping + the marker; no per-harness tmux
+  prompt-target pings anymore. Proven live: claude's protocol-adoption ping
+  arrived via the inbox, not tmux. Critic confirmed adoption. Protocol doc:
+  coordinator skill references/finish-protocol.md; relay: scripts/relay.sh
+  (committed in the skills repo). The reviewer for #14 reported pass (input
+  router and modals verified, c4f2b6c, 85 tests) — PR #21 open; PR #20 open;
+  both awaiting user merge approval.
