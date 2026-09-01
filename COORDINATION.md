@@ -263,3 +263,8 @@ scope.
   `unix-socket:`/`ipc:any`/`network:host` permission keys also fail, keys not
   documented in the installed binary) — marker-only unless the user picks the
   minimal inbox relay. #14 still in flight (claude).
+- 2026-09-01: #14 critic review PASS (direct ping landed; gate green 85
+  tests). Pushed `coord/14-modal-input` (`c4f2b6c`) → PR #21. Both #9 and #14
+  critic-passed and ready to merge (awaiting user approval in this wave).
+  Remaining open question: codex ping channel (marker-only vs minimal inbox
+  relay).
