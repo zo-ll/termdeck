@@ -378,3 +378,5 @@ scope.
   pre-warm fallback documented; flake hardened). Tracker DONE + loose ends
   closed; only remaining actions are the user's PR approvals/merges (#23
   awaiting? no — #23 merged; #24 new).
+- 2026-09-01: FINAL. #24 merged (`f456508`) — final main: fmt/clippy clean,
+  88 tests. Zero open issues, zero loose ends. Coordinated run complete.
