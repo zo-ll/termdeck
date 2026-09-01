@@ -389,3 +389,9 @@ scope.
   scrollback mode. Clean quit (`Ctrl+g q` → y) closed the app with NO orphaned
   shells. No code bug confirmed; awaiting user's expected behavior to decide
   if a UX/enhancement slice is wanted.
+- 2026-09-01: Finding "screens not scrollable" opened as issue #25 and
+  DISPATCHED to codex (coord/25-scrollback) — coordinator stopped doing
+  hands-on work (user correction) and delegated. Brief hands codex the
+  coordinator's probe as evidence-to-verify + asks it to choose the real
+  root cause and fix in scope (or route UI-owned fix to Claude). Finish
+  protocol applies (inbox 25-scrollback.ping + marker).
