@@ -5,12 +5,13 @@
 //! no terminal backend of its own: the caller supplies a Ratatui [`Frame`], a
 //! [`TerminalEngine`] to read from, and the state to render.
 //!
-//! The public surface is the renderer, its state, and the frozen contracts
-//! only. Reference fixtures and `FakeEngine` are test-only and never reach a
-//! release build.
+//! The public surface is the renderer, its state, its key handling, and the
+//! frozen contracts only. Reference fixtures and `FakeEngine` are test-only and
+//! never reach a release build.
 
 #[cfg(test)]
 mod fixture;
+mod input;
 mod state;
 
 use std::path::Path;
@@ -21,10 +22,11 @@ use ratatui::{
     layout::{Position, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Widget},
+    widgets::{Block, Clear, Widget},
 };
 
-pub use state::DeckState;
+pub use input::{Input, Key, Reaction};
+pub use state::{DeckState, Modal};
 
 use crate::contracts::{
     CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, TerminalEngine, TerminalFrame,
@@ -57,6 +59,11 @@ mod palette {
     pub const DEMOTED_FG: Color = Color::Rgb(0xa8, 0xb0, 0xba);
     /// Narrow-mode pane-strip chip background. Export screen 04.
     pub const CHIP_BG: Color = Color::Rgb(0x18, 0x1c, 0x22);
+    /// The interface behind an open modal. The supplement recedes it by
+    /// dimming foreground only: pane content drops to the separator value and
+    /// the key hints one step further, while the borders fall back to idle.
+    pub const UNDER_FG: Color = SEPARATOR;
+    pub const UNDER_HINT: Color = Color::Rgb(0x2a, 0x30, 0x38);
 }
 
 use palette::*;
@@ -80,6 +87,12 @@ const PADDING: u16 = 2;
 const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 /// Cells in the activity meter.
 const METER_CELLS: u64 = 6;
+/// Help overlay size, from the supplement: 60 columns by 21 rows.
+const HELP_SIZE: (u16, u16) = (60, 21);
+/// Quit confirmation size, from the supplement: 52 columns by 10 rows.
+const QUIT_SIZE: (u16, u16) = (52, 10);
+/// Column the help overlay's descriptions start at.
+const HELP_KEYS: usize = 17;
 
 /// How a single pane is dressed. Every pane draws the same chrome; the kind
 /// selects the colours and how much of the title the pane has room to say.
@@ -148,14 +161,17 @@ impl Deck<'_> {
             ..area
         };
         let layout = self.layout(body);
-        let master = match layout {
+        // The drawn panes, so an open modal knows which cells are pane chrome
+        // and which are the key hints between them.
+        let panes = match layout {
             Layout::Stacked { stack, preview } => {
                 let master = Rect {
                     width: body.width - GUTTER - stack,
                     ..body
                 };
                 self.draw_active(engine, frame.buffer_mut(), master, Pane::Master);
-                self.stack(
+                let mut panes = vec![master];
+                panes.extend(self.stack(
                     engine,
                     frame.buffer_mut(),
                     Rect {
@@ -164,14 +180,14 @@ impl Deck<'_> {
                         ..body
                     },
                     preview,
-                );
-                master
+                ));
+                panes
             }
             Layout::Zoom => {
                 self.draw_active(engine, frame.buffer_mut(), body, Pane::Zoomed);
-                body
+                vec![body]
             }
-            Layout::Narrow => self.narrow(engine, frame.buffer_mut(), body),
+            Layout::Narrow => vec![self.narrow(engine, frame.buffer_mut(), body)],
         };
         self.status_row(
             engine,
@@ -183,7 +199,15 @@ impl Deck<'_> {
             },
             layout,
         );
-        self.place_cursor(engine, frame, master);
+        // A modal takes focus: the interface recedes behind it and the master
+        // gives up both its accent border and its cursor.
+        match self.state.modal() {
+            Some(modal) => {
+                dim(frame.buffer_mut(), body, &panes);
+                self.modal(frame.buffer_mut(), area, modal);
+            }
+            None => self.place_cursor(engine, frame, panes[0]),
+        }
     }
 
     /// Narrow fallback wins over zoom: below a usable preview width the stack
@@ -223,14 +247,16 @@ impl Deck<'_> {
         self.draw_pane(engine, buffer, area, project, position, pane);
     }
 
+    /// Draws the previews top to bottom and returns the rects they took.
     fn stack(
         &self,
         engine: &dyn TerminalEngine,
         buffer: &mut Buffer,
         area: Rect,
         preview: u16,
-    ) -> Rect {
+    ) -> Vec<Rect> {
         let demoted = self.state.demoted(self.now);
+        let mut drawn = Vec::new();
         let mut top = area.y;
         for position in self.state.stack().iter().copied() {
             let Some(project) = self.projects.get(position) else {
@@ -244,18 +270,13 @@ impl Deck<'_> {
             } else {
                 Pane::Preview
             };
-            self.draw_pane(
-                engine,
-                buffer,
-                Rect {
-                    y: top,
-                    height: preview,
-                    ..area
-                },
-                project,
-                position,
-                kind,
-            );
+            let rect = Rect {
+                y: top,
+                height: preview,
+                ..area
+            };
+            self.draw_pane(engine, buffer, rect, project, position, kind);
+            drawn.push(rect);
             top += preview + 1;
         }
         buffer.set_line(
@@ -264,7 +285,7 @@ impl Deck<'_> {
             &Line::from(self.stack_hints(demoted)),
             area.width - 1,
         );
-        area
+        drawn
     }
 
     /// The stack footer names the promotion that just happened and the key
@@ -349,6 +370,65 @@ impl Deck<'_> {
             &Line::from(spans),
             area.width.saturating_sub(1),
         );
+    }
+
+    /// Draws the open overlay, centred on the canvas at the supplement's size.
+    ///
+    /// The box takes the accent border the master has just given up, and it
+    /// clears the cells beneath it: the reviewed dimming rule recedes the
+    /// interface, it does not show through the modal.
+    fn modal(&self, buffer: &mut Buffer, area: Rect, modal: Modal) {
+        let (width, height) = match modal {
+            Modal::Help => HELP_SIZE,
+            Modal::Quit => QUIT_SIZE,
+        };
+        let rect = Rect {
+            x: area.x + area.width.saturating_sub(width) / 2,
+            y: area.y + area.height.saturating_sub(height) / 2,
+            width: width.min(area.width),
+            height: height.min(area.height),
+        };
+        if rect.width < 2 * PADDING + 4 || rect.height < 3 {
+            return;
+        }
+        Clear.render(rect, buffer);
+        let style = Style::new().fg(ACCENT).bg(CANVAS);
+        Block::bordered()
+            .style(Style::new().bg(CANVAS))
+            .border_style(style)
+            .render(rect, buffer);
+
+        let left = rect.x + 1 + PADDING;
+        let right = rect.x + rect.width - 2 - PADDING;
+        let width = right - left + 1;
+        let (name, slot, lines) = match modal {
+            Modal::Help => ("help", Some("^g ?"), help_lines()),
+            Modal::Quit => ("quit", None, quit_lines(self.projects.len())),
+        };
+        buffer.set_line(
+            left - 1,
+            rect.y,
+            &Line::from(clear_around(
+                vec![Span::styled(name, Style::new().fg(ACCENT))],
+                style,
+            )),
+            width + 2,
+        );
+        if let Some(slot) = slot {
+            let slot_width = slot.chars().count() as u16;
+            buffer.set_line(
+                right - slot_width,
+                rect.y,
+                &Line::from(clear_around(
+                    vec![Span::styled(slot, Style::new().fg(HINT))],
+                    style,
+                )),
+                slot_width + 2,
+            );
+        }
+        for (row, line) in lines.iter().enumerate().take(rect.height as usize - 2) {
+            buffer.set_line(left, rect.y + 1 + row as u16, line, width);
+        }
     }
 
     /// Draws one bordered pane: border, title chrome, terminal cells, footer.
@@ -835,7 +915,11 @@ impl Deck<'_> {
     /// labels before keys and then collapses, per the export's responsive
     /// rule; the caller takes the first one that fits.
     fn key_hints(&self, layout: Layout) -> Vec<Line<'static>> {
-        // A mode states its own keys: nothing else is reachable while it runs.
+        // A modal or mode states its own keys: nothing else is reachable while
+        // it is open.
+        if let Some(modal) = self.state.modal() {
+            return vec![modal_hints(modal)];
+        }
         if self.state.scrollback() {
             return vec![
                 self.hints(&SCROLLBACK_HINTS, layout, true),
@@ -940,6 +1024,135 @@ fn clear_around(spans: Vec<Span<'static>>, style: Style) -> Vec<Span<'static>> {
     padded.push(Span::styled(" ", style));
     padded
 }
+
+/// Recedes the interface behind an open modal. The reviewed rule dims
+/// foreground only, so the two accepted background values are never
+/// supplemented with a scrim: pane borders fall back to idle, pane content
+/// drops to [`UNDER_FG`], and the key hints between the panes drop further.
+fn dim(buffer: &mut Buffer, body: Rect, panes: &[Rect]) {
+    for y in body.y..body.y + body.height {
+        for x in body.x..body.x + body.width {
+            let position = Position::new(x, y);
+            let colour = match panes.iter().find(|pane| pane.contains(position)) {
+                Some(pane) if on_border(*pane, position) => IDLE_BORDER,
+                Some(_) => UNDER_FG,
+                None => UNDER_HINT,
+            };
+            if let Some(cell) = buffer.cell_mut(position) {
+                cell.fg = colour;
+            }
+        }
+    }
+}
+
+fn on_border(pane: Rect, position: Position) -> bool {
+    position.x == pane.x
+        || position.x + 1 == pane.x + pane.width
+        || position.y == pane.y
+        || position.y + 1 == pane.y + pane.height
+}
+
+/// The help overlay's body, in the supplement's order: a blank row, then each
+/// section heading with its bindings, then the way out.
+fn help_lines() -> Vec<Line<'static>> {
+    let key = Style::new().fg(PREVIEW_FG);
+    let label = Style::new().fg(MUTED);
+    let mut lines = vec![Line::default()];
+    for (name, description) in HELP {
+        if description.is_empty() {
+            if lines.len() > 1 {
+                lines.push(Line::default());
+            }
+            lines.push(Line::styled(
+                name,
+                Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ));
+            continue;
+        }
+        lines.push(Line::from(vec![
+            Span::styled(format!("{name:<HELP_KEYS$}"), key),
+            Span::styled(description, label),
+        ]));
+    }
+    lines.push(Line::default());
+    lines.push(Line::from(vec![
+        Span::styled("esc  ", key),
+        Span::styled("close", Style::new().fg(HINT)),
+    ]));
+    lines
+}
+
+/// The quit confirmation's body. It states how many terminals close, not which
+/// ones, and confines the warning colour to the consequence line.
+fn quit_lines(terminals: usize) -> Vec<Line<'static>> {
+    let key = Style::new().fg(PREVIEW_FG);
+    let label = Style::new().fg(MUTED);
+    // The supplement's ten-column gaps, less one: a drawn border costs a whole
+    // cell where the supplement's hairline border costs none.
+    let gap = Span::styled(" ".repeat(9), Style::new().fg(HINT));
+    vec![
+        Line::default(),
+        Line::styled("quit termdeck?", Style::new().fg(MASTER_FG)),
+        Line::default(),
+        Line::styled(
+            format!("{terminals} terminal{} will be closed.", plural(terminals)),
+            key,
+        ),
+        Line::styled("SIGTERM, then SIGKILL after 2s.", Style::new().fg(WARNING)),
+        Line::default(),
+        Line::from(vec![
+            Span::styled("y  ", key),
+            Span::styled("quit", label),
+            gap.clone(),
+            Span::styled("n  ", key),
+            Span::styled("cancel", label),
+            gap,
+            Span::styled("esc  ", key),
+            Span::styled("cancel", label),
+        ]),
+    ]
+}
+
+/// The status row while a modal is open: it names the modal and its answers.
+fn modal_hints(modal: Modal) -> Line<'static> {
+    let hint = Style::new().fg(HINT).bg(STATUS_BG);
+    let key = Style::new().fg(PREVIEW_FG).bg(STATUS_BG);
+    match modal {
+        Modal::Help => Line::from(vec![
+            Span::styled("^g ?", Style::new().fg(ACCENT).bg(STATUS_BG)),
+            Span::styled(" help open", key),
+            Span::styled("  ·  ", hint),
+            Span::styled("esc", key),
+            Span::styled(" close", hint),
+        ]),
+        Modal::Quit => Line::from(vec![
+            Span::styled("confirm quit", Style::new().fg(WARNING).bg(STATUS_BG)),
+            Span::styled("  ·  ", hint),
+            Span::styled("y", key),
+            Span::styled(" quit  ", hint),
+            Span::styled("n", key),
+            Span::styled(" cancel", hint),
+        ]),
+    }
+}
+
+/// The help overlay's bindings, from the plan. An empty description marks a
+/// section heading.
+const HELP: [(&str, &str); 13] = [
+    ("NAVIGATE", ""),
+    ("^g j  ^g k", "promote next / previous"),
+    ("^g ↓  ^g ↑", "same, with arrow keys"),
+    ("^g 1 … ^g 4", "promote by configured position"),
+    ("VIEW", ""),
+    ("^g z", "toggle zoom"),
+    ("^g [", "enter scrollback mode"),
+    ("TERMINAL", ""),
+    ("^g r", "respawn active terminal"),
+    ("^g ^g", "send a literal ^g"),
+    ("SESSION", ""),
+    ("^g ?", "this help"),
+    ("^g q", "quit termdeck"),
+];
 
 /// Navigation keys captured while scrollback mode is active. The first four
 /// are the pane footer; the whole list is the status bar.
@@ -1139,8 +1352,8 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Position};
 
     use super::{
-        ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, STATUS_BG, WARNING,
-        fixture,
+        ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, IDLE_BORDER,
+        STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
     };
     use crate::{
         contracts::{ActionCommand, TerminalEngine, TerminalId, TerminalStatus},
@@ -1465,6 +1678,117 @@ mod tests {
             "{}",
             text(&collapsed)
         );
+    }
+
+    fn opened(action: ActionCommand) -> DeckState {
+        let mut state = DeckState::new(4);
+        state.apply(&action, &fixture::projects(), fixture::NOW);
+        state
+    }
+
+    #[test]
+    fn help_matches_the_supplement_canvas() {
+        let state = opened(ActionCommand::ShowHelp);
+
+        let (buffer, cursor) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        assert_snapshot("help", &buffer);
+        // The modal holds focus, so the master draws no cursor.
+        assert_eq!(cursor, Some(Position::new(0, 0)));
+    }
+
+    #[test]
+    fn the_help_overlay_takes_the_focus_the_master_gives_up() {
+        let state = opened(ActionCommand::ShowHelp);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // 60x21 centred on the canvas: columns 42..101, rows 10..30.
+        assert_eq!(buffer[(42u16, 10u16)].symbol(), "┌");
+        assert_eq!(buffer[(101u16, 30u16)].symbol(), "┘");
+        assert_eq!(buffer[(42u16, 10u16)].fg, ACCENT);
+        // Focus is singular: the master border is no longer the accent, and
+        // the underlay recedes by foreground alone.
+        assert_eq!(buffer[(0u16, 0u16)].fg, IDLE_BORDER);
+        assert_eq!(buffer[(5u16, 1u16)].fg, UNDER_FG);
+        assert_eq!(buffer[(5u16, 1u16)].bg, super::CANVAS);
+        // The stack hint row sits between the panes and dims one step further.
+        assert_eq!(buffer[(103u16, 39u16)].fg, UNDER_HINT);
+        // The status row keeps its colours and states the modal's keys.
+        assert_eq!(buffer[(2u16, 41u16)].bg, ACCENT);
+        assert!(
+            text(&buffer).contains("^g ? help open  ·  esc close"),
+            "{}",
+            text(&buffer)
+        );
+    }
+
+    #[test]
+    fn quit_matches_the_supplement_canvas() {
+        let state = opened(ActionCommand::RequestQuit);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        assert_snapshot("quit", &buffer);
+    }
+
+    #[test]
+    fn the_quit_confirmation_counts_terminals_and_warns_once() {
+        let state = opened(ActionCommand::RequestQuit);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        let screen = text(&buffer);
+
+        // 52x10 centred on the canvas: columns 46..97, rows 16..25.
+        assert_eq!(buffer[(46u16, 16u16)].symbol(), "┌");
+        assert_eq!(buffer[(97u16, 25u16)].symbol(), "┘");
+        // The count, not the names.
+        assert!(screen.contains("4 terminals will be closed."), "{screen}");
+        assert!(!screen.contains("frontend, backend"), "{screen}");
+        // A destructive modal keeps the accent border and carries the warning
+        // colour on its consequence line alone.
+        assert_eq!(buffer[(46u16, 16u16)].fg, ACCENT);
+        // The warning colour is confined to that one line: the count above it
+        // stays an ordinary key colour.
+        assert_eq!(buffer[(49u16, 21u16)].fg, WARNING);
+        assert_eq!(buffer[(49u16, 20u16)].fg, super::PREVIEW_FG);
+        assert!(screen.contains("y  quit         n  cancel         esc  cancel"));
+        assert!(
+            screen.contains("confirm quit  ·  y quit  n cancel"),
+            "{screen}"
+        );
+    }
+
+    #[test]
+    fn a_modal_does_not_disturb_the_interface_it_recedes() {
+        let mut state = opened(ActionCommand::ShowHelp);
+        assert!(state.close_modal());
+
+        let (restored, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        assert_eq!(text(&restored), text(&reference().0));
+    }
+
+    #[test]
+    fn a_modal_over_a_narrow_deck_still_fits_inside_the_canvas() {
+        let state = opened(ActionCommand::RequestQuit);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (84, 22));
+
+        // 52 columns fit in 84; the box is centred and the status row is clear.
+        assert_eq!(buffer[(16u16, 6u16)].symbol(), "┌");
+        assert!(text(&buffer).contains("confirm quit"));
+    }
+
+    #[test]
+    fn a_canvas_smaller_than_the_overlay_clips_it_to_the_canvas() {
+        let state = opened(ActionCommand::ShowHelp);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (20, 8));
+
+        // Clipped to the canvas rather than drawn past its edge.
+        assert_eq!(buffer[(0u16, 0u16)].symbol(), "┌");
+        assert_eq!(buffer[(19u16, 7u16)].symbol(), "┘");
     }
 
     #[test]
