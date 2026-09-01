@@ -319,15 +319,11 @@ impl Deck<'_> {
     /// head of a collapsed strip, one column further left because the strip
     /// has no border to inset past.
     ///
-    /// Markers exist only while a fold is in play, so with nothing collapsed
-    /// this never matches and those cells keep their ordinary drag and
-    /// double-click behaviour.
+    /// Every stack pane carries a marker, folded or not, so the cells are
+    /// live from the first frame — that is the affordance a fresh run has to
+    /// offer, and it takes precedence over drag and double-click there.
     pub fn marker_at(&self, area: Rect, pointer: Position) -> Option<usize> {
-        if self.state.collapsed_count() == 0
-            || !area.contains(pointer)
-            || area.width < GUTTER + 4
-            || area.height < 4
-        {
+        if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
         let body = Rect {
@@ -849,9 +845,10 @@ impl Deck<'_> {
         let separator = if wide { "  ·  " } else { " · " };
         let (glyph, glyph_colour) = status_glyph(status, metadata);
         let mut spans = Vec::new();
-        // The stack declares its disclosure state only once a fold is in play;
-        // with nothing collapsed the export draws no marker at all.
-        if !master && self.state.collapsed_count() > 0 {
+        // Every stack pane declares its disclosure state, folded or not: the
+        // open `▾` is the only thing on a fresh frame that says the stack
+        // folds at all, and it is the cell the pointer toggles.
+        if !master {
             spans.push(Span::styled("▾ ", Style::new().fg(HINT)));
         }
         if master {
@@ -1938,17 +1935,33 @@ mod tests {
         }
     }
 
-    /// With nothing folded the stack looks exactly as screens 01 and 02 draw
-    /// it: no disclosure markers anywhere.
+    /// Issue #32: a fresh run has to show the affordance. Every stack pane
+    /// carries `▾` before anything is folded, and the master carries none.
     #[test]
-    fn the_disclosure_markers_appear_only_once_a_fold_is_in_play() {
+    fn the_disclosure_markers_are_drawn_before_anything_is_folded() {
         let (plain, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
-        assert!(!text(&plain).contains("▾"));
-        assert!(!text(&plain).contains("▸"));
+        let rendered = text(&plain);
 
+        assert!(rendered.contains("▾ 2 backend"), "{rendered}");
+        assert!(rendered.contains("▾ 3 app"), "{rendered}");
+        assert!(rendered.contains("▾ 4 worker"), "{rendered}");
+        assert_eq!(rendered.matches('▾').count(), 3, "one per stacked preview");
+        assert!(!rendered.contains("▸"), "nothing is folded yet");
+        assert!(
+            !rendered.contains("▾ > 1 frontend"),
+            "the master never folds, so it never claims a marker"
+        );
+    }
+
+    /// The markers track each preview's own state once folds are in play.
+    #[test]
+    fn each_marker_states_its_own_panes_fold() {
         let (folded, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
-        assert!(text(&folded).contains("▾ 2 backend"), "the open pane opens");
-        assert!(text(&folded).contains("▸ 3 app"), "the folded panes close");
+        let rendered = text(&folded);
+
+        assert!(rendered.contains("▾ 2 backend"), "the open pane opens");
+        assert!(rendered.contains("▸ 3 app"), "the folded panes close");
+        assert!(rendered.contains("▸ 4 worker"), "{rendered}");
     }
 
     /// An exit outranks the live output, so a folded exited pane says so.
@@ -2074,19 +2087,38 @@ mod tests {
         assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
     }
 
-    /// With nothing folded the export draws no marker, so those cells keep
-    /// their ordinary drag and double-click behaviour.
+    /// Issue #32: the marker a fresh run draws is the marker a fresh run can
+    /// click. Every open preview's two cells fold that preview from frame one.
     #[test]
-    fn there_is_no_marker_to_click_until_a_fold_is_in_play() {
+    fn the_markers_are_clickable_before_anything_is_folded() {
         let projects = fixture::projects();
-        let state = DeckState::new(4);
-        let deck = deck_for(&projects, &state);
+        let mut state = DeckState::new(4);
         let area = Rect::new(0, 0, 144, 42);
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        assert_eq!(deck.marker_at(area, Position::new(103, 0)), None);
-        assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
-        // The pane underneath still answers, so the drag still starts there.
-        assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+        // Three open previews, each with its marker on its own top border.
+        for (position, row) in [(1usize, 0u16), (2, 13), (3, 26)] {
+            assert_eq!(buffer[(103u16, row)].symbol(), "▾", "row {row}");
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(103, row)),
+                Some(position)
+            );
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(104, row)),
+                Some(position)
+            );
+            // The border cell beside it is not the marker.
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(102, row)),
+                None
+            );
+        }
+
+        // Clicking one folds exactly that preview, from a stack with no folds.
+        state.toggle_collapse(2);
+        assert_eq!(state.collapsed_count(), 1);
+        let (folded, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        assert!(text(&folded).contains("▸ 3 app"), "{}", text(&folded));
     }
 
     /// Clicking a strip's marker expands that preview, and the rows it takes
@@ -2183,11 +2215,11 @@ mod tests {
         // Backend keeps its configured number 2 while holding the master.
         assert!(screen.contains("> 2 backend"), "{screen}");
         // Frontend keeps number 1 and lands in the slot backend vacated.
-        // Every pane number, in draw order, skipping the caret-marked master.
+        // Every pane number, in draw order. The disclosure marker is what
+        // tells a stacked preview from the caret-marked master.
         let stack: Vec<_> = screen
-            .match_indices("┌─ ")
+            .match_indices("┌─ ▾ ")
             .filter_map(|(at, marker)| screen[at + marker.len()..].split(' ').next())
-            .filter(|number| *number != ">")
             .collect();
         assert_eq!(stack, ["1", "3", "4"], "{screen}");
         assert!(screen.contains("promoted backend · ^g 1 back"), "{screen}");
@@ -2338,7 +2370,7 @@ mod tests {
         engine.set_status(&TerminalId::new("backend"), TerminalStatus::Starting);
         let screen = text(&render(&engine, &DeckState::new(4), (144, 42)).0);
 
-        assert!(screen.contains("2 backend · …/backend · ○ ───"), "{screen}");
+        assert!(screen.contains("▾ 2 backend · …/backend · ○ ─"), "{screen}");
     }
 
     #[test]
@@ -2389,6 +2421,25 @@ mod tests {
         assert_snapshot("help", &buffer);
         // The modal holds focus, so the master draws no cursor.
         assert_eq!(cursor, Some(Position::new(0, 0)));
+    }
+
+    /// Issue #32: the pointer has the marker, and the keyboard has the help
+    /// overlay. `^g c` is named there under VIEW, beside the zoom it sits with.
+    #[test]
+    fn the_help_overlay_names_the_collapse_key() {
+        let state = opened(ActionCommand::ShowHelp);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        let rendered = text(&buffer);
+
+        assert!(
+            rendered.contains("^g c             collapse / expand previews"),
+            "{rendered}"
+        );
+        let view = rendered.find("VIEW").expect("the VIEW section");
+        let zoom = rendered.find("^g z  ").expect("the zoom binding");
+        let collapse = rendered.find("^g c  ").expect("the collapse binding");
+        assert!(view < zoom && zoom < collapse, "collapse follows zoom");
     }
 
     #[test]
