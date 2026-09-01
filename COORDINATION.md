@@ -467,3 +467,6 @@ scope.
   routed to claude: integrate merged #26 into coord/27-collapse-stack (merge
   origin/main, resolve conflicts), implement the marker-click per spec §2 on
   the #26 mouse infra, gate green, commit local. Claude working.
+- 2026-09-01: #27 correction done (claude merged origin/main/#26 + marker click
+  `71233cc`, gate 114 tests, screens 01-04 byte-identical) — re-review handed
+  to the critic.
