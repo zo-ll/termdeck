@@ -25,11 +25,11 @@ scope.
 | Issue | Slice | Blocked by | Status |
 |---|---|---|---|
 | [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | PR #15 merged (`4b4fec4`) |
-| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | ready |
+| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | dispatched (`coord/08-pty-transport`) |
 | [#9](https://github.com/zo-ll/termdeck/issues/9) | One-terminal native engine | #7, #8 | blocked |
 | [#10](https://github.com/zo-ll/termdeck/issues/10) | Native lifecycle | #9 | blocked |
 | [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | PR #16 merged (`ddb45f4`) |
-| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | ready |
+| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | dispatched (`coord/12-ui-master-stack`) |
 | [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | — | ready |
 | [#14](https://github.com/zo-ll/termdeck/issues/14) | Modal and input modes | #12, #13 | blocked |
 
@@ -107,9 +107,22 @@ scope.
   intentionally kept (user decision); their stale worktrees stay too.
   GitHub labels on #12/#13 flipped `blocked` → `ready-for-agent` (the #11
   merge opened both).
-- Next: dispatch the next wave in parallel — #8 (single-shell PTY transport,
-  Codex-owned) and #12→#13 (UI promotion/zoom/narrow, then status/scrollback
-  chrome, Claude-owned). #9/#10 remain blocked on #8; #14 on #12/#13.
+- 2026-09-01: Next wave dispatched in tmux session `personal` (control plane
+  is tmux; Herdr not installed). Window `coordinator` hosts this session;
+  `codex` (worktree `~/.worktrees/termdeck/08-pty-transport`, branch
+  `coord/08-pty-transport`, Codex 0.152 interactive, gpt-5.6-terra/high,
+  workspace-write sandbox) received issue #8; `claude` (worktree
+  `~/.worktrees/termdeck/12-ui-master-stack`, branch `coord/12-ui-master-stack`,
+  Claude Code 2.1.251, opus/effort high, bypass permissions) received issue
+  #12 and must checkpoint after it — #13 waits for the coordinator's
+  go-ahead; `critic` (pi with `critic` + `ponytail` skills loaded via
+  `--skill`) is a shipwright-supervised review pane, booted with its full
+  operational contract (`/tmp/shipwright/termdeck/critic/contract.md`) and
+  standing by for complete review assignments. Task contracts live in
+  `/tmp/shipwright/termdeck/<task>/`; prompts and logs retained there until
+  integration. Workers commit on their branches but never merge/push/PR —
+  the coordinator pushes branches, opens PRs, and merges only after review
+  and user approval.
 
 ## Durable resumption
 
