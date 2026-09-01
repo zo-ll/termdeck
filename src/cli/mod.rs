@@ -1,8 +1,13 @@
 //! Command-line parsing and configuration inspection.
 
-use std::{env, error::Error, fmt, path::PathBuf};
+use std::{
+    env,
+    error::Error,
+    fmt,
+    path::{Path, PathBuf},
+};
 
-use crate::config::load;
+use crate::config::{Config, Workspace, load};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CliEnvironment {
@@ -121,17 +126,48 @@ const fn usage() -> &'static str {
 pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>, Box<dyn Error>> {
     let intent = parse(arguments)?;
     let config = load(&intent.config_path)?;
-    match intent.command {
+    Ok(inspect(&intent, &config)?)
+}
+
+/// Returns the configured workspace that an interactive session will open.
+/// A single workspace is unambiguous; multiple workspaces require the existing
+/// positional selector until the planned picker has a dedicated UI surface.
+pub fn select_workspace(
+    config: &Config,
+    config_path: &Path,
+    requested: Option<&str>,
+) -> Result<Workspace, CliError> {
+    match requested {
+        Some(name) => config.workspaces.get(name).cloned().ok_or_else(|| {
+            CliError::new(format!(
+                "{}: workspace '{name}' is not configured",
+                config_path.display()
+            ))
+        }),
+        None if config.workspaces.len() == 1 => Ok(config
+            .workspaces
+            .values()
+            .next()
+            .cloned()
+            .expect("one workspace")),
+        None => Err(CliError::new(format!(
+            "{}: choose a workspace ({})",
+            config_path.display(),
+            config
+                .workspaces
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
+/// Formats the non-interactive commands and validates a launch selection.
+pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, CliError> {
+    match &intent.command {
         CliCommand::Launch { workspace } => {
-            if let Some(workspace) = workspace
-                && !config.workspaces.contains_key(&workspace)
-            {
-                return Err(CliError::new(format!(
-                    "{}: workspace '{workspace}' is not configured",
-                    intent.config_path.display()
-                ))
-                .into());
-            }
+            select_workspace(config, &intent.config_path, workspace.as_deref())?;
             Ok(None)
         }
         CliCommand::Check => Ok(Some(format!(
