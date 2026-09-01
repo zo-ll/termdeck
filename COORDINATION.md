@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: active — #15/#16 merged; #8 PTY transport next
+Status: DONE — all 14 issues closed; full repo delivered
 
 ## Goal
 
@@ -351,3 +351,12 @@ scope.
   per user: investigate after its last turn). Flaky observation recorded:
   one engine real-shell test flaked once under load (87/1) — follow-up
   robustness candidate.
+- 2026-09-01: TRACKER COMPLETE. #23 merged (`60546a3`, final main gate:
+  fmt/clippy clean, 88 tests). Closed #4 (production integration) and epics
+  #2/#3 — zero open issues remain on zo-ll/termdeck. The deliverable:
+  termdeck CLI/config/contracts (#1/#5), VT adapter (#7/#15), PTY transport
+  (#8/#17), native engine (#9/#20), lifecycle (#10/#22), master-stack UI
+  (#11/#16, #12/#18, #13/#19, #14/#21), production integration (#4/#23).
+  Loose ends (not blocking): codex crates.io permission for future sessions;
+  one flaky real-shell engine test (green on reruns); scroll_marker chrome
+  kept per user (decision open).
