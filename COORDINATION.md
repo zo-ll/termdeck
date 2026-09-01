@@ -485,3 +485,6 @@ scope.
   #34b scrollable stack list (UI, claude, design-first). Cap located:
   config/mod.rs:161 + native.rs MAX_TERMINALS=4; engine internals Vec-based.
   Queues after #31/#32. #33 (animations) still awaiting user's choice.
+- 2026-09-01: #33 (animations) parked by user (library answer given: tweening +
+  render tick, no full ratatui animation framework). Focus: #31/#32 in flight;
+  #34a/#34b queued.
