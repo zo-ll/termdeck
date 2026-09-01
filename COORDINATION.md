@@ -166,6 +166,17 @@ scope.
   with the smallest real resolution, commit locally, no push. After codex
   hands back, the critic re-checks ONLY the delta (re-review mode), then the
   coordinator pushes the amended `coord/08-pty-transport` (PR #17).
+- 2026-09-01: FINISH PROTOCOL adopted (part of the coordinator skill
+  workflow under test, not Termdeck-specific — patched into the coordinator
+  and shipwright skills). Workers/reviewers no longer just go idle: every
+  finished turn writes a one-line task-tagged timestamped marker at
+  `<checkout>/.scratch/status/<task-slug>.done` (format:
+  `/tmp/shipwright/termdeck/FINISH-PROTOCOL.md`) and best-effort pings
+  `personal:coordinator`. New `watcher` window polls marker dirs every 4s and
+  turns markers into a bell + banner ping plus a timestamped task-tagged row
+  in `/tmp/shipwright/termdeck/events.log` (smoke-tested). Clauide adopted
+  it while idle; codex/critic adopt from their next turn (in-flight turns not
+  interrupted). `.scratch/` already gitignored — no repo change needed.
 
 ## Durable resumption
 
