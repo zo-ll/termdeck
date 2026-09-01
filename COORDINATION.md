@@ -430,3 +430,35 @@ scope.
 - 2026-09-01: #26 critic PASS (gate 92 tests). Committed `112b1a5` → pushed
   `coord/26-mouse-actions` → PR #29, awaiting user approval. #27 collapse
   parked pending user's Claude design step.
+- 2026-09-01: User replaced the design mockups (Windows Desktop zip →
+  repo reference) with collapsed-stack states; reference synced into
+  docs/design/termdeck/reference/ (commit 438bff8) — the updated visual
+  authority. #27 DESIGN phase dispatched to CLAUDE (supersedes the earlier
+  "no claude dispatch" hold for this task): study the new reference, produce
+  docs/design/termdeck/collapse-stack.md spec (geometry/control/states/
+  interplay/edges/what-to-implement), design-only. Claude working in
+  coord/27-collapse-stack. #29 (mouse actions) pending merge approval.
+- 2026-09-01: QUEUED for delivery to claude (after its #27 design turn settles —
+  no mid-turn interruption): the claude_design MCP prompt (import project
+  8aa66d51-…, focus Termdeck TUI.dc.html, read support.js, "Implement:
+  Termdeck TUI.dc.html"). Staged at
+  /tmp/shipwright/termdeck/27-collapse-stack/mcp-prompt.md.
+- 2026-09-01: #27 DESIGN SPEC committed by claude `4af49d0`
+  (docs/design/termdeck/collapse-stack.md, 568 lines: geometry, `^g c` +
+  chevron control, states, interplay, edge cases, coder list, 11 ambiguities
+  flagged). QUEUED claude_design MCP prompt then DELIVERED — claude is now
+  importing/implementing `Termdeck TUI.dc.html` via the MCP. Design spec
+  ready for user review before implementation.
+- 2026-09-01: USER authorized #27 IMPLEMENTATION in claude's lane (supersedes
+  the earlier "no claude dispatch" directive for this issue; design spec
+  accepted). claude's design work is done (spec 4af49d0; MCP artboard work
+  complete — screen 05 collapsed-preview is the only unimplemented part).
+  Claude selected option 1: implement per collapse-stack.md in
+  coord/27-collapse-stack (DeckState.collapsed, stack_layout(), strip
+  renderer, ^g c + marker click, status/footer, collapsed-stack.txt fixture;
+  screens 01-04 byte-identical; commit local, no push). R3 responsive
+  follow-on explicitly NOT included.
+- 2026-09-01: #27 implementation committed by claude `eb28a42` (gate 106
+  tests, clean tree). NOTED: marker/chevron-click deferred (pending #26 which
+  has merged) — critic asked to rule blocking vs non-blocking against the
+  accepted spec. In critic review.
