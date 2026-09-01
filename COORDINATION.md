@@ -115,14 +115,25 @@ scope.
   `~/.worktrees/termdeck/12-ui-master-stack`, branch `coord/12-ui-master-stack`,
   Claude Code 2.1.251, opus/effort high, bypass permissions) received issue
   #12 and must checkpoint after it — #13 waits for the coordinator's
-  go-ahead; `critic` (pi with `critic` + `ponytail` skills loaded via
-  `--skill`) is a shipwright-supervised review pane, booted with its full
-  operational contract (`/tmp/shipwright/termdeck/critic/contract.md`) and
-  standing by for complete review assignments. Task contracts live in
-  `/tmp/shipwright/termdeck/<task>/`; prompts and logs retained there until
-  integration. Workers commit on their branches but never merge/push/PR —
-  the coordinator pushes branches, opens PRs, and merges only after review
-  and user approval.
+  go-ahead. Task contracts live in `/tmp/shipwright/termdeck/<task>/`;
+  prompts and logs retained there until integration. Workers commit on their
+  branches but never merge/push/PR — the coordinator pushes branches, opens
+  PRs, and merges only after review and user approval.
+- 2026-09-01: Workflow fix (shipwright is WIP — tested, changed). Found via
+  the pi critic session transcript: pi's TUI composer submits on every newline
+  received, so tmux `paste-buffer` of a multi-line prompt becomes one USER
+  message per line (~74 fragments for the contract). Codex/Claude tolerate
+  multi-line paste; pi does not. Rule: never multi-line-paste into a pi
+  interactive composer. The critic is a FULL interactive pi session (like
+  codex/claude panes), launched with the complete role contract as its
+  initial message argument (`launch-critic.sh` cats the contract into the
+  launch command — one message, no composer). Later review assignments will
+  be written to a full assignment file and handed to the critic as a short
+  single-line read-this-file pointer via `prompt-target`, keeping every
+  assignment complete and the transcript clean. Interim headless run removed;
+  its log kept (`/tmp/shipwright/termdeck/critic/boot.log`) and the
+  diagnostic transcript retained at
+  `~/.pi/agent/sessions/--home-andrea-personal-termdeck--/...01a05bf3*.jsonl`.
 
 ## Durable resumption
 
