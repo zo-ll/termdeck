@@ -41,5 +41,3 @@ workspaces:
         cwd: backends/iqc
       - name: ba-pdf
         cwd: backends/pdf
-      - name: ba-test
-        cwd: backends/test
