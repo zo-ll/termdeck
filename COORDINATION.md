@@ -330,3 +330,11 @@ scope.
   promotion/zoom/scrollback/resize/Ctrl+C/respawn, invalid-config-fails-
   before-partial-startup, terminal restoration on exit/signals/panics,
   documented WSL manual acceptance. Codex window replaced and working.
+- 2026-09-01: PENDING (user): after the current codex #4 turn finishes, give
+  codex permissions to reach crates.io (fetch new deps) WITHOUT full access —
+  relay stays as the ping channel. Probes so far: `sandbox_permissions`
+  network keys and `network.allowed_domains`/`network.enabled` config keys all
+  failed to open network in the workspace-write sandbox; codex binary strings
+  hint at a newer `permissions`/`PermissionProfile` model — re-investigate
+  when codex is idle (or fallback: pre-warm new deps into the shared cargo
+  cache from the coordinator shell so sandboxed builds resolve offline).
