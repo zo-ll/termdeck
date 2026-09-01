@@ -100,10 +100,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                         text.into_bytes()
                                     }
                                 };
-                                engine.dispatch(EngineCommand::Input {
-                                    terminal: workspace.projects[active].terminal.clone(),
+                                dispatch_live_input(
+                                    &mut engine,
+                                    workspace.projects[active].terminal.clone(),
                                     bytes,
-                                });
+                                );
                             }
                         }
                         Some(Reaction::Send(UserCommand::Action(_))) => {}
@@ -148,20 +149,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         .filter(|position| !deck.collapsed(*position))
                         .and_then(|position| workspace.projects.get(position))
                         .map(|project| project.terminal.clone());
-                        let active = deck
-                            .active()
-                            .and_then(|position| workspace.projects.get(position))
-                            .map(|project| &project.terminal);
-                        if terminal.as_ref() == active
-                            && !deck.scrollback()
-                            && command == ScrollCommand::Up(WHEEL_LINES)
-                        {
-                            deck.apply(
-                                &crate::contracts::ActionCommand::ToggleScrollback,
-                                &workspace.projects,
-                                now(),
-                            );
-                        }
                         if let Some(terminal) = terminal {
                             engine.dispatch(EngineCommand::Scroll { terminal, command });
                         }
@@ -228,10 +215,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         && deck.modal().is_none()
                         && !deck.scrollback()
                     {
-                        engine.dispatch(EngineCommand::Input {
-                            terminal: workspace.projects[active].terminal.clone(),
-                            bytes: text.into_bytes(),
-                        });
+                        dispatch_live_input(
+                            &mut engine,
+                            workspace.projects[active].terminal.clone(),
+                            text.into_bytes(),
+                        );
                     }
                 }
             }
@@ -265,6 +253,20 @@ fn now() -> Timestamp {
             .as_millis()
             .min(u128::from(u64::MAX)) as u64,
     }
+}
+
+/// Live shell input always resumes the active terminal at its tail. Wheel
+/// scrolling deliberately has no modal state, unlike keyboard scrollback.
+fn dispatch_live_input(
+    engine: &mut dyn TerminalEngine,
+    terminal: crate::contracts::TerminalId,
+    bytes: Vec<u8>,
+) {
+    engine.dispatch(EngineCommand::Scroll {
+        terminal: terminal.clone(),
+        command: ScrollCommand::Bottom,
+    });
+    engine.dispatch(EngineCommand::Input { terminal, bytes });
 }
 
 fn screen_size() -> io::Result<ScreenSize> {
@@ -736,9 +738,13 @@ fn colour(colour: Color, foreground: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{InputEvent, KeyReader, MouseAction, mouse_action};
+    use super::{InputEvent, KeyReader, MouseAction, dispatch_live_input, mouse_action};
     use crate::{
-        contracts::{ActionCommand, ScrollCommand, Timestamp},
+        contracts::{
+            ActionCommand, ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId,
+            TerminalMetadata, Timestamp,
+        },
+        engine::FakeEngine,
         ui::{DeckState, Key},
     };
     use ratatui::layout::Position;
@@ -786,6 +792,30 @@ mod tests {
             }
         ));
         assert!(matches!(events[8], InputEvent::Key(Key::Char('界'))));
+    }
+
+    #[test]
+    fn live_input_returns_a_wheel_scrolled_terminal_to_its_tail() {
+        let terminal = TerminalId::new("frontend");
+        let mut engine = FakeEngine::new([terminal.clone()]);
+        engine.set_metadata(
+            &terminal,
+            TerminalMetadata {
+                scrollback: ScrollbackPosition {
+                    lines_above: 2_179,
+                    lines_below: 214,
+                },
+                ..TerminalMetadata::default()
+            },
+        );
+
+        dispatch_live_input(&mut engine, terminal.clone(), b"echo live\r".to_vec());
+
+        assert_eq!(
+            engine.metadata(&terminal).unwrap().scrollback.lines_below,
+            0
+        );
+        assert_eq!(engine.input(), &[(terminal, b"echo live\r".to_vec())]);
     }
 
     #[test]
