@@ -303,3 +303,11 @@ scope.
   blocked on #9 — NOW UNBLOCKED, codex lane), #2/#3 epics in progress, #4
   production integration (blocked on #2/#3). Worker branches kept (user
   preference).
+- 2026-09-01: #10 (native multi-terminal lifecycle) DISPATCHED to codex —
+  worktree ~/.worktrees/termdeck/10-native-lifecycle, branch
+  `coord/10-native-lifecycle` off main `e926a5e`; brief includes the FINISH
+  PROTOCOL (inbox ping `/tmp/shipwright/inbox/10-native-lifecycle.ping` +
+  marker). Coverage: 1–4 configured terminals w/ stable identity, exited
+  frame/scrollback preservation + respawn, SIGTERM→2s→SIGKILL shutdown, no
+  owned processes/threads after shutdown. Codex window replaced (was #9) and
+  working.
