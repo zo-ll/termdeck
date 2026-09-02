@@ -39,4 +39,4 @@
 │                                                                                                │  │  o  nothing selected                     │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
                                                                                                                                                 
-   ↑↓ move  ⏎ select  → inside  ← back  +/- instance  a all repos here  / filter                                             o open  esc quit   
+   ↑↓ move  ⏎ select  ⇧↑↓ range  → inside  ← back  +/- instance  a all repos  / filter                                       o open  esc quit   

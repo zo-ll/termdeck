@@ -447,6 +447,33 @@ impl PickerState {
         added
     }
 
+    /// `⇧↓` / `⇧↑` — everything selectable from the cursor to the end of the
+    /// listing, or from the start of it to the cursor.
+    ///
+    /// Additive and idempotent, exactly like `a`: a row already selected keeps
+    /// the instances it has, so leaning on the key cannot multiply what a
+    /// deliberate `+` built. Rows are taken in listing order whichever way the
+    /// range runs, so the pane numbers read top to bottom the way the screen
+    /// does.
+    pub fn select_range(&mut self, rows: &[Entry], downward: bool) -> bool {
+        if rows.is_empty() {
+            return false;
+        }
+        let cursor = self.cursor.min(rows.len() - 1);
+        let range = if downward {
+            &rows[cursor..]
+        } else {
+            &rows[..=cursor]
+        };
+        let mut added = false;
+        for entry in range.iter().filter(|entry| entry.selectable()) {
+            if self.instances(&entry.path) == 0 {
+                added |= self.add(entry);
+            }
+        }
+        added
+    }
+
     /// `m` — the cursor's path takes the master frame: its first instance
     /// moves to pane 1 and everything above it shifts down.
     pub fn set_master(&mut self, entry: &Entry) -> bool {
@@ -818,10 +845,11 @@ impl Picker<'_> {
             &[
                 ("↑↓", " move  "),
                 ("⏎", " select  "),
+                ("⇧↑↓", " range  "),
                 ("→", " inside  "),
                 ("←", " back  "),
                 ("+/-", " instance  "),
-                ("a", " all repos here  "),
+                ("a", " all repos  "),
                 ("/", " filter"),
             ]
         };
@@ -1620,6 +1648,14 @@ pub fn press(
     match key {
         Key::Down | Key::Char('j') => {
             state.move_cursor(1, rows.len());
+        }
+        // Shift plus an arrow takes everything from here to that end of the
+        // listing. The cursor stays put: the range is what moved, not it.
+        Key::ShiftDown => {
+            state.select_range(rows, true);
+        }
+        Key::ShiftUp => {
+            state.select_range(rows, false);
         }
         Key::Up | Key::Char('k') => {
             state.move_cursor(-1, rows.len());
@@ -2426,6 +2462,159 @@ mod tests {
         let names: Vec<_> = rows.iter().map(|entry| entry.name.as_str()).collect();
         assert!(names.contains(&"horizon-docs"), "{names:?}");
         assert!(!names.contains(&"termdeck"), "{names:?}");
+    }
+
+    /// `⇧↓` takes everything selectable from the cursor to the end of the
+    /// listing — folders as much as repositories, since any directory can be
+    /// a terminal — and leaves files and `..` alone.
+    #[test]
+    fn shift_down_selects_everything_below_the_cursor() {
+        let mut state = browsing();
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-infra")
+            .unwrap();
+        state.point_at(index, rows.len());
+
+        press(&mut state, &rows, &roots, Key::ShiftDown);
+
+        let names: Vec<_> = state
+            .selection()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        // From the cursor down: the repo it is on, the folder under it, the
+        // next repo, the last folder. README.md is a file, so it is not here.
+        assert_eq!(
+            names,
+            ["horizon-infra", "notes", "termdeck", "vendor"],
+            "{names:?}"
+        );
+        assert!(
+            !names.contains(&"README.md") && !names.contains(&".."),
+            "a file and the way out are not terminals"
+        );
+        assert!(
+            names.contains(&"notes") && names.contains(&"vendor"),
+            "folders are in the range"
+        );
+
+        // Additive and idempotent: pressing it again changes nothing, and a
+        // deliberate instance is not multiplied by a bulk key.
+        let before = state.selection().len();
+        press(&mut state, &rows, &roots, Key::ShiftDown);
+        assert_eq!(state.selection().len(), before);
+    }
+
+    /// `⇧↑` is the same thing upward, and takes its rows in listing order so
+    /// the pane numbers read the way the screen does.
+    #[test]
+    fn shift_up_selects_everything_above_the_cursor() {
+        let mut state = browsing();
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-backend")
+            .unwrap();
+        state.point_at(index, rows.len());
+
+        press(&mut state, &rows, &roots, Key::ShiftUp);
+
+        let names: Vec<_> = state
+            .selection()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            ["archive", "horizon-frontend", "horizon-backend"],
+            "{names:?}"
+        );
+        assert_eq!(
+            state.selection()[0].name,
+            "archive",
+            "the topmost of the range is pane 1, so the panes read downwards"
+        );
+    }
+
+    /// A range that starts on an already-selected row keeps what is there and
+    /// adds the rest — the two keys accumulate rather than replace.
+    #[test]
+    fn a_range_adds_to_what_is_already_selected() {
+        let mut state = browsing();
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+        select(&mut state, "termdeck");
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-app")
+            .unwrap();
+        state.point_at(index, rows.len());
+
+        press(&mut state, &rows, &roots, Key::ShiftDown);
+
+        let names: Vec<_> = state
+            .selection()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        assert_eq!(names[0], "termdeck", "what was already selected stays put");
+        assert_eq!(state.instances(&entry(&state, "termdeck").path), 1);
+        assert!(names.contains(&"horizon-app"), "{names:?}");
+        assert!(names.contains(&"vendor"), "{names:?}");
+    }
+
+    /// The pointer selects a folder exactly as `⏎` does, and a second click
+    /// on it descends — the row semantics do not care what kind it is.
+    #[test]
+    fn a_click_selects_a_folder_and_a_second_click_goes_inside() {
+        let mut state = browsing();
+        let rows = rows_of(&state);
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "archive")
+            .unwrap();
+
+        click(&mut state, &rows, Hit::Row(index));
+
+        assert_eq!(state.selection().len(), 1, "a folder is selectable");
+        assert_eq!(state.selection()[0].name, "archive");
+
+        assert!(descend(&mut state, &rows, Hit::Row(index)));
+        assert_eq!(state.cwd(), Some(code().join("archive").as_path()));
+        assert!(state.selection().is_empty(), "the click was navigation");
+    }
+
+    /// Every column of a folder's row is the row, since the name stopped
+    /// being its own hit region when a click came to mean select.
+    #[test]
+    fn every_column_of_a_folder_row_is_the_row() {
+        let state = browsing();
+        let listing = state.listing(&Fixture);
+        let roots = Fixture.roots();
+        let picker = Picker {
+            state: &state,
+            listing: &listing,
+            roots: &roots,
+            home: Some(Path::new("/home/dev")),
+        };
+        let area = ratatui::layout::Rect::new(0, 0, 144, 42);
+
+        // `archive/` is the second row drawn, under the header and its rule.
+        for column in [1u16, 8, 20, 40] {
+            assert_eq!(
+                picker.hit(area, Position::new(column, 6)),
+                Some(if column <= 2 {
+                    Hit::Box(1)
+                } else {
+                    Hit::Row(1)
+                }),
+                "column {column}"
+            );
+        }
     }
 
     /// The pointer follows the same two keys: one click selects, a second on

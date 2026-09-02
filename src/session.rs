@@ -741,6 +741,10 @@ impl KeyReader {
                 continue;
             }
             let sequence = [
+                // The modified arrows come first: `\x1b[1;2A` must not be
+                // read as an escape followed by junk.
+                (b"\x1b[1;2A".as_slice(), Key::ShiftUp),
+                (b"\x1b[1;2B".as_slice(), Key::ShiftDown),
                 (b"\x1b[A".as_slice(), Key::Up),
                 (b"\x1b[B".as_slice(), Key::Down),
                 (b"\x1b[C".as_slice(), Key::Right),
@@ -755,6 +759,15 @@ impl KeyReader {
                 self.bytes.drain(..bytes.len());
                 events.push(InputEvent::Key(*key));
                 continue;
+            }
+            // Half of a sequence is not an escape key: wait for the rest
+            // rather than tearing `\x1b[1;2B` into an escape and `1;2B`.
+            if !flush_escape
+                && sequence
+                    .iter()
+                    .any(|(bytes, _)| bytes.starts_with(self.bytes.as_slice()))
+            {
+                break;
             }
             if self.bytes[0] == 0x1b {
                 if self.bytes.len() == 1 && !flush_escape {
