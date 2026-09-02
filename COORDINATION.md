@@ -99,3 +99,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   codex window resumed with --last (may be a fresh context — the uncommitted
   M src/ui/picker.rs in the 49-range-toggle worktree is the real continuity;
   continuation.md staged). USER checking resume manually before any nudge.
+- 2026-09-02: RESPAWN RECIPE FIXED (user catch): codex restores must keep
+  `-c model_reasoning_effort=high` (a restore dropped it to medium). The
+  49-nb2 test was produced by the medium session (accepted, test-only).
