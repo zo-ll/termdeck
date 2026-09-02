@@ -89,3 +89,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   the active slice (49-range-toggle) to codex. Monitor running detached
   (claude-monitor.sh, 30s interval): pings the inbox at >=99% or if the pane dies;
   log /tmp/shipwright/claude-monitor.log.
+- 2026-09-02: USER stopped claude (was 93%+ usage) — 49-range-toggle routed to
+  CODEX on a fresh clean branch (claude's uncommitted partial picker.rs
+  discarded per precedent); claude window closed; usage monitor stopped.
+  codex working (same session, absolute worktree path).
