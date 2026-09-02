@@ -534,3 +534,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   keyboard nudge bindings as equivalence, no regression of wheel/drag/
   promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
   hint/help label should read "expand" while folded.
+- 2026-09-02: #41 S1 correction done (claude `1f47d6c`: dup resizing
+  deleted, paste-release added — key/wheel already released per doc, cross-
+  check test for ratio constants; 152 tests). Re-review handed to the critic.
+  (Skills: lean rewrite committed+pushed.)
