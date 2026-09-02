@@ -2,15 +2,45 @@
 
 Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible.
 
-- 2026-08-31: Claude received a read-only design preflight. Implementation stays
-- 2026-08-31: Claude's missing-state supplement committed as `2a3cf24` and
 - 2026-08-31: Codex received issue 1 with its acceptance commands and commit-only
-- 2026-08-31: Draft PR #6 opened for issue 3 so design and later UI work remain
-- 2026-08-31: Independent review blocked issue 1 on CLI/plan mismatch, combining
-- 2026-08-31: Issue 1 PR #5 opened for user review; no merge performed.
+  handoff requirement.
+- 2026-08-31: Claude received a read-only design preflight. Implementation stays
+  blocked until issue 1 freezes the shared contract.
 - 2026-08-31: Issue 1 checkpoint `8fc4b96` was independently verified and
-- 2026-08-31: Issue 1 corrections committed as `52fa845` and pushed through
+  pushed through branch tip `3e1b78b`. Format, all-feature tests (5 passed),
+  Clippy with warnings denied, `check`, and `list` passed. Issue 1 remains in
+  progress pending the UI contract gaps found by Claude.
+- 2026-08-31: Independent review blocked issue 1 on CLI/plan mismatch, combining
+  character loss, and duplicate exit-code authority. Claude preflight was
+  blocked on three missing reference states and contradictory access wording.
+  Corrections were routed back to the same workers.
 - 2026-08-31: Migrated the four original local workstream issues to GitHub after
-- 2026-08-31: Ponytail re-review passed after `0691fd7` reduced FakeEngine by
+  the private remote became available; issues #1–#4 are now the visible tracker.
+- 2026-08-31: Issue 1 corrections committed as `52fa845` and pushed through
+  branch tip `8d0b12a`. Independent format, Clippy, 17-test, `check`, and `list`
+  verification passed with no remaining blocking findings.
+- 2026-08-31: Issue 1 PR #5 opened for user review; no merge performed.
+- 2026-08-31: Claude's missing-state supplement committed as `2a3cf24` and
+  pushed through `9364643`. Source/structural review passed: three artboards,
+  no external resources, accepted palette only, clean HTML structure, original
+  export untouched. Human browser inspection remains available before UI work.
+- 2026-08-31: Draft PR #6 opened for issue 3 so design and later UI work remain
+  visible on the same branch and review thread.
 - 2026-08-31: Pre-merge ponytail review found one simplification: consolidate
+  FakeEngine's three parallel state maps. Normal seam tracing also found no
+  native-output drain method. Both narrow corrections were returned to Codex;
+  PR #5 remains unmerged.
+- 2026-08-31: Ponytail re-review passed after `0691fd7` reduced FakeEngine by
+  three net lines and added the neutral event-drain seam. PR #5 was squash-
+  merged as `b880b60` under the user's conditional approval; 18 post-merge
+  tests passed. Issue #1 remains open for user-controlled closure.
 - 2026-08-31: Replaced broad next-wave implementation with GitHub slices #7–#14.
+  #7 and #8 are ready; UI slice #11 waits only for draft PR #6 approval/merge.
+- 2026-08-31: Reviewed design PR #6 squash-merged as `12bd431`. Fresh worktrees
+  were created from that `main`; #7 and #11 were dispatched in new visible tmux
+  windows `codex-vt` and `claude-ui`. Historical worker panes remain intact.
+- 2026-08-31 (evening): Previous coordinator (Codex session in `visura:0`, now out of tokens) opened PR #15 and PR #16 and routed the fixture-cleanup correction to Claude. New coordinator session took over from its written handoff.
+- 2026-08-31 (evening): Independent review from source. PR #15 (`coord/07-vt-adapter`): adapter code verified against alacritty 0.26 sources (`point_to_viewport` semantics match); fmt/clippy clean, 23 tests pass in the worktree. PR #16 (`coord/11-ui-master-stack`): fixture cleanup verified (`pub mod fixture` → `#[cfg(test)] mod fixture`, docs updated, `termdeck::ui` exports only `Deck`, release build clean); fmt/clippy clean, 21 tests pass with cleanup applied. Main checks: fmt/clippy clean, 18 tests pass. No blocking findings in either PR.
+- 2026-08-31 (evening): Found both PR branches one docs commit behind `main` (merge-base `12bd431`, main has `ffe0b2a`), so both PR diffs show a stale revert of COORDINATION.md. Neither worker edited it — a rebase onto `main` resolves cleanly. Rebase + push rounds dispatched to the same workers (`codex-vt`, `claude-ui`). Merges remain blocked on explicit user approval.
+- 2026-08-31 (evening): Claude committed the fixture cleanup (`1e84402` → rebased `d70e853`) and pushed; codex-vt's pane froze with the rebase prompt unsent in its composer, so the coordinator performed the docs-only rebase directly (worker deliverables untouched): `coord/07-vt-adapter` → `4996827`, `coord/11-ui-master-stack` → `d70e853`, both on top of `f57555f`. Both PR diffs are now code-only (no COORDINATION.md). Final verification: PR #15 — fmt/clippy clean, 23 tests; PR #16 — fmt/clippy clean, 21 tests, release build clean, `termdeck::ui` exports only `Deck`. Both PRs ready for user review; merge order #15 then #16 (both touch Cargo.lock).
+- 2026-08-31 (evening): User approved both merges. #15 squash-merged as `4b4fec4` under user approval. #16 then reported a Cargo.lock/Cargo.toml conflict; rebased onto `4b4fec4` keeping both `alacritty_terminal` and `ratatui` deps (lock regenerated by cargo, verified both present), full checks passed (26 combined tests), and #16 squash-merged as `ddb45f4`. Post-merge main: fmt/clippy `-D warnings` clean, 26 tests pass, release build clean. Worktrees for the two merged branches are clean and can be removed; tmux worker panes left intact.
