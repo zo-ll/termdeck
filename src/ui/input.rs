@@ -179,6 +179,18 @@ impl Input {
                 deck.toggle_collapse_all();
                 return None;
             }
+            // The keyboard half of the split divider (#41): the same
+            // adjustment the pointer makes by dragging it, in whole steps.
+            // `=` widens the master, `-` narrows it; the shifted twins are
+            // taken too, because `+` is what a hand reaches for.
+            Key::Char('=' | '+') => {
+                deck.nudge_master_ratio(1);
+                return None;
+            }
+            Key::Char('-' | '_') => {
+                deck.nudge_master_ratio(-1);
+                return None;
+            }
             Key::Char('[') => ActionCommand::ToggleScrollback,
             Key::Char('r') => ActionCommand::RespawnActive,
             Key::Char('?') => ActionCommand::ShowHelp,
@@ -335,6 +347,39 @@ mod tests {
         input.press(Key::Char('c'), &mut deck, &projects, NOW);
 
         assert_eq!(deck.collapsed_count(), 3);
+    }
+
+    /// #41: the keyboard half of the split divider. Like collapse, it is the
+    /// deck's own geometry, so it carries no frozen action and reaches the
+    /// shell not at all.
+    #[test]
+    fn the_split_keys_nudge_the_divider_without_a_frozen_action() {
+        let mut input = Input::new(10);
+        let mut deck = DeckState::new(4);
+        let projects = fixture::projects();
+        let press = |input: &mut Input, deck: &mut DeckState, key| {
+            input.press(Key::Ctrl('g'), deck, &projects, NOW);
+            input.press(key, deck, &projects, NOW)
+        };
+
+        assert_eq!(press(&mut input, &mut deck, Key::Char('-')), None);
+        assert_eq!(deck.master_ratio(), 0.65);
+        assert_eq!(press(&mut input, &mut deck, Key::Char('=')), None);
+        assert_eq!(deck.master_ratio(), 0.70);
+        // The shifted twins are the same keys: `+` is what a hand reaches for.
+        press(&mut input, &mut deck, Key::Char('+'));
+        assert_eq!(deck.master_ratio(), 0.75);
+        press(&mut input, &mut deck, Key::Char('_'));
+        assert_eq!(deck.master_ratio(), 0.70);
+
+        // Unprefixed they are ordinary input and reach the shell untouched.
+        assert_eq!(
+            input.press(Key::Char('-'), &mut deck, &projects, NOW),
+            Some(Reaction::Send(UserCommand::Input(InputCommand::Bytes(
+                Key::Char('-').bytes()
+            ))))
+        );
+        assert_eq!(deck.master_ratio(), 0.70);
     }
 
     /// The page keys are the keyboard half of the scrollable stack. Only the

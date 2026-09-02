@@ -1,42 +1,42 @@
-┌─ > 1 frontend  ·  ~/idp/frontend  ·  ● running  ·  pnpm dev ───────────────── [####··] MASTER ─┐    ▸ 2 backend · ● · 12:06:09 /api/termina…  
-│  $ pnpm dev                                                                                    │                                              
-│                                                                                                │    ▸ 3 app · ✕ · exit 1                      
-│  > idp-frontend@0.4.2 dev                                                                      │                                              
-│  > vite --host                                                                                 │    ▸ 4 worker · ○ · idle 6m                  
-│                                                                                                │                                              
-│    VITE v5.4.8  ready in 412 ms                                                                │                                              
-│                                                                                                │                                              
-│    ➜  Local:   http://localhost:5173/                                                          │                                              
-│    ➜  Network: http://192.168.1.24:5173/                                                       │                                              
-│    ➜  press h + enter to show help                                                             │                                              
-│                                                                                                │                                              
-│  12:03:58 [vite] page reload src/main.tsx                                                      │                                              
-│  12:04:12 [vite] hmr update /src/routes/WorkspaceList.tsx                                      │                                              
-│  12:04:12 [vite] hmr update /src/styles/tokens.css                                             │                                              
-│  12:04:29 [vite] hmr update /src/routes/WorkspaceList.tsx                                      │                                              
-│  12:04:41 [vite] optimized dependencies chan┌─ quit ───────────────────────────────────────────┐                                              
-│                                             │                                                  │                                              
-│    VITE v5.4.8  ready in 268 ms             │  quit termdeck?                                  │                                              
-│                                             │                                                  │                                              
-│  12:05:02 [vite] hmr update /src/components/│  4 terminals will be closed.                     │                                              
-│  12:05:09 warning  src/components/PaneTitle.│  SIGTERM, then SIGKILL after 2s.                 │                                              
-│           'status' is declared but its value│                                                  │                                              
-│  12:05:17 [vite] hmr update /src/components/│  y  quit         n  cancel         esc  cancel   │                                              
-│  12:05:33 [vite] hmr update /src/components/│                                                  │                                              
-│  12:05:58 [vite] hmr update /src/routes/Dash└──────────────────────────────────────────────────┘                                              
-│  12:06:04 [vite] hmr invalidate /src/hooks/useTerminals.ts — could not Fast Refresh            │                                              
-│  12:06:04 [vite] page reload src/hooks/useTerminals.ts                                         │                                              
-│  12:06:11 [vite] hmr update /src/routes/Dashboard.tsx                                          │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-│                                                                                                │                                              
-└────────────────────────────────────────────────────────────────────────────────────────────────┘   3 collapsed · ^g c expand all              
+┌─ > 1 frontend  ·  ~/idp/frontend  ·  ● running  ·  pnpm dev ───────────────── [####··] MASTER ─┐│   ▸ 2 backend · ● · 12:06:09 /api/termina…  
+│  $ pnpm dev                                                                                    ││                                             
+│                                                                                                ││   ▸ 3 app · ✕ · exit 1                      
+│  > idp-frontend@0.4.2 dev                                                                      ││                                             
+│  > vite --host                                                                                 ││   ▸ 4 worker · ○ · idle 6m                  
+│                                                                                                ││                                             
+│    VITE v5.4.8  ready in 412 ms                                                                ││                                             
+│                                                                                                ││                                             
+│    ➜  Local:   http://localhost:5173/                                                          ││                                             
+│    ➜  Network: http://192.168.1.24:5173/                                                       ││                                             
+│    ➜  press h + enter to show help                                                             ││                                             
+│                                                                                                ││                                             
+│  12:03:58 [vite] page reload src/main.tsx                                                      ││                                             
+│  12:04:12 [vite] hmr update /src/routes/WorkspaceList.tsx                                      ││                                             
+│  12:04:12 [vite] hmr update /src/styles/tokens.css                                             ││                                             
+│  12:04:29 [vite] hmr update /src/routes/WorkspaceList.tsx                                      ││                                             
+│  12:04:41 [vite] optimized dependencies chan┌─ quit ───────────────────────────────────────────┐│                                             
+│                                             │                                                  ││                                             
+│    VITE v5.4.8  ready in 268 ms             │  quit termdeck?                                  ││                                             
+│                                             │                                                  │┃                                             
+│  12:05:02 [vite] hmr update /src/components/│  4 terminals will be closed.                     │┃                                             
+│  12:05:09 warning  src/components/PaneTitle.│  SIGTERM, then SIGKILL after 2s.                 │┃                                             
+│           'status' is declared but its value│                                                  ││                                             
+│  12:05:17 [vite] hmr update /src/components/│  y  quit         n  cancel         esc  cancel   ││                                             
+│  12:05:33 [vite] hmr update /src/components/│                                                  ││                                             
+│  12:05:58 [vite] hmr update /src/routes/Dash└──────────────────────────────────────────────────┘│                                             
+│  12:06:04 [vite] hmr invalidate /src/hooks/useTerminals.ts — could not Fast Refresh            ││                                             
+│  12:06:04 [vite] page reload src/hooks/useTerminals.ts                                         ││                                             
+│  12:06:11 [vite] hmr update /src/routes/Dashboard.tsx                                          ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
+└────────────────────────────────────────────────────────────────────────────────────────────────┘│  3 collapsed · ^g c expand all              
                                                                                                                                                 
    idp   4 terminals   > 1 frontend  ·  0 open  ·  3 collapsed                                               confirm quit  ·  y quit  n cancel  
