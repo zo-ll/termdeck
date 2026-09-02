@@ -3218,26 +3218,47 @@ mod tests {
         assert_eq!(sheet.marked().len(), 1, "`-` sheds one");
     }
 
-    /// The add sheet borrows the picker's range state: marking from an
-    /// unselected row adds every repository through the end of its listing.
+    /// The add sheet's advertised keys move, mark, add instances, switch
+    /// roots, filter, and commit those marks — without a range-select path.
     #[test]
-    fn add_sheet_range_marks_every_repository_below_the_cursor() {
+    fn the_add_sheet_keys_drive_its_selection_state() {
         let mut sheet = sheet_state();
         let rows = sheet_rows(&sheet);
-        let app = rows
-            .iter()
-            .position(|entry| entry.name == "horizon-app")
-            .unwrap();
-        sheet.state_mut().point_at(app, rows.len());
+        let roots = Fixture.roots();
+        let open = open_two();
 
-        assert!(sheet.state_mut().select_range(&rows, true));
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Up);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
+        assert_eq!(rows[sheet.state().cursor()].name, "horizon-app");
 
-        let names: Vec<_> = sheet
-            .marked()
-            .iter()
-            .map(|instance| instance.name.as_str())
-            .collect();
-        assert_eq!(names, ["horizon-app", "horizon-infra", "termdeck"]);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert_eq!(sheet.marked().len(), 1, "enter marks the row");
+        assert_eq!(sheet.marked()[0].name, "horizon-app");
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert!(sheet.marked().is_empty(), "enter unmarks it again");
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('+'));
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('+'));
+        assert_eq!(sheet.marked().len(), 2, "plus adds instances");
+        assert_eq!(sheet.marked()[1].name, "horizon-app-2");
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert!(sheet.marked().is_empty(), "enter unmarks every instance");
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::ShiftTab);
+        assert_eq!(sheet.root(), 1, "shift-tab switches roots");
+        assert_eq!(sheet.marked().len(), 1, "marks survive the switch");
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('/'));
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('t'));
+        assert_eq!(sheet.state().filter(), Some("t"));
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Escape);
+        assert_eq!(
+            sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('o')),
+            Some(PickerReaction::Launch),
+            "o commits the marked rows"
+        );
     }
 
     /// `⇧⇥` cycles the configured roots in place, and the marks survive it —
