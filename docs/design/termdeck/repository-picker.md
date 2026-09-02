@@ -81,8 +81,8 @@ panel without moving focus there.
 
 **Ambiguity.** The export never draws the selection panel focused, and offers
 no key that would focus it. **Chosen:** there is no focus switch. One cursor,
-always in the listing; the selection panel is operated at a distance. This also
-keeps `⇥` free for "enter folder", which the key map assigns it.
+always in the listing; the selection panel is operated at a distance. `⇥`
+toggles that cursor row, alongside the row's checkbox.
 
 **Ambiguity.** 98/2/44 is `master_ratio` 0.70, but since #44 a *session* starts
 at 0.85 (the stack at its minimum width). **Chosen:** the picker's split is its
@@ -98,7 +98,7 @@ Every listing row in the browse panel, in columns relative to the panel's inner
 left edge:
 
 ```
-col 0–2   selection box: [ ]  [1]  [+]  [·]   (three blanks for a plain file)
+col 0–2   checkbox: [ ]  [x]   (three blanks for `..` and a plain file)
 col 3     blank
 col 4     kind glyph: ◆ ▸ ▴ ·
 col 5–6   blank
@@ -186,12 +186,12 @@ the cursor as the user selects, which nothing in the export suggests.
 
 ## 3. The selection model
 
-This is the part the export is most specific about, and it is the good idea in
-the screen: **the ordinal is the pane number.**
+The selection panel's ordinal is the pane number; the listing keeps its
+per-row checkbox focused on whether the path is selected.
 
 ```
 [ ]   unselected
-[1]   selected — the number IS the pane number, and [1] is the master
+[x]   selected — its pane position is shown in the selection panel
 [+]   marked to append (runtime add only)
 [·]   already open, not selectable (runtime add only)
 ```
@@ -225,13 +225,12 @@ the first-selected-is-master rule and the ordering coherent when a path appears
 twice.
 
 ```
-[1] ◆  horizon-frontend       ×2 · git · main          2h ago
+[x] ◆  horizon-frontend       ×2 · git · main          2h ago
 ```
 
-- **The box holds the instance the path was *first* selected as.** Three cells
-  cannot hold two ordinals, and the selection panel is the authority for the
-  full mapping, so the row states where the path enters the order and the badge
-  states how many times it is in it.
+- **The checkbox states whether the path has any instance.** The selection
+  panel is the authority for order; the badge states how many instances share
+  that path.
 - **`+` adds another instance of the cursor row; `-` removes the most recent
   one.** The new instance appends at the end of the order, exactly as a fresh
   selection would — `+` is "another one of these", never a reordering.
@@ -435,44 +434,51 @@ those three ambiguous was removed rather than kept beside them.
 | Keys | Action | Pointer |
 | --- | --- | --- |
 | `↑↓` / `j` `k` | move cursor | hover |
-| `⏎` / `space` | select the row · press again to let go | click row — **any row**, folder or repository |
-| `⇧↓` / `⇧↑` | select every selectable row from the cursor to the end · to the start | **shift-click** a row: the same span, bounded by where it landed |
-| `→` / `l` `⇥` | go inside — a folder **or a repository** | click the row again |
+| `⏎` / `space` / `⇥` | toggle the cursor row | click row — **any row**, folder or repository |
+| `⇧↓` / `⇧↑` | toggle every selectable row from the cursor to the end · to the start | **shift-click** a row: the same span, bounded by where it landed |
+| `→` / `l` | go inside — a folder **or a repository** | click the row again |
 | `←` / `h` | back one level | — |
 | `~` / `g` | home · root | click crumb |
 | `a` | all repos here | click count |
 | `m` | set master | click pane number |
-| `x` `X` | remove the path · clear all | click `[n]` |
+| `x` `X` | remove the path · clear all | click the checkbox to toggle its path |
 | `+` | another instance of this path | click the `×N` badge |
 | `-` | drop the most recent instance | click the badge with the secondary button |
 | `/` | filter | click the filter slot |
 | `o` | open the selection as terminals | click the button |
 | `esc` | clear the filter · quit | click away |
 
-**Amended again by the user: `⇧↓` and `⇧↑` range-select.** They take every
+**Amended again by the user: `⇧↓` and `⇧↑` range-toggle.** They take every
 selectable row between the cursor and that end of the listing — repositories
 and folders alike, never a file and never `..`. Three properties keep them
 predictable:
 
-- **Additive**, never a toggle: a row already selected keeps the instances it
-  has, so leaning on the key cannot multiply what a deliberate `+` built. It
-  is the same rule `a` follows.
+- **First-row rule.** The first selectable row in the span decides the whole
+  gesture: if it is selected, remove every path in the span (and every one of
+  those paths' instances); otherwise, add each missing path once. Thus the
+  same gesture selects, deselects, then selects again without multiplying a
+  deliberate `+` instance.
 - **Listing order**, whichever way the range runs, so pane numbers read top to
   bottom the way the screen does. `⇧↑` from the fifth row makes the *first*
   row pane 1, not the fifth.
 - **The cursor does not move.** The range is what travelled, not the cursor.
 
 **The pointer twin is shift-click**, not a drag. Holding shift and clicking a
-row selects everything between the highlight and that row, in the same listing
-order and on the same additive terms, and then moves the highlight there — so
-a second shift-click carries on from where the first stopped rather than
-starting again. A drag was the other candidate and was refused: dragging would
-give the press that already selects a second meaning, and the rule here is that
-when two actions collide the simple one wins. Shift is a modifier on a gesture
-the pointer already has, which costs the plain click nothing.
+row toggles everything between the highlight and that row, in the same listing
+order and on the same first-row terms, and then moves the highlight there. A
+drag was the other candidate and was refused: dragging would give the press
+that already selects a second meaning, and the rule here is that when two
+actions collide the simple one wins. Shift is a modifier on a gesture the
+pointer already has, which costs the plain click nothing.
 
 The bottom bar states the keys (`⇧↑↓ range`); shift-click needs no row of its
 own, because it is the same gesture the table pairs it with.
+
+Every selectable repository and folder also starts with a three-column
+checkbox, `[ ]` or `[x]`; files and `..` leave those columns blank. Its hit
+region is separate from the row body: clicking it toggles the whole path, just
+as `space`, `⇥`, and `x` do, including removing all `×N` instances. It never
+descends; only a second click on the row body does that.
 
 Two consequences of the revision, both **Chosen** because the export cannot
 answer them:

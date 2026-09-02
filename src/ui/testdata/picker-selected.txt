@@ -3,10 +3,10 @@
 ┌── > browse  ·  ~/code  ·  ← back · → inside · ~ home · g root ───────── filter (/ to search) ──┐  ┌── selected · 3 ────── order = pane no. ──┐
 │   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ 1 horizon-frontend  MASTER               │
 │   ────────────────────────────────────────────────────────────────────────────────────────     │  │   ~/code/horizon-frontend                │
-│[ ] ▴  ..                                                                                       │  │                                          │
+│    ▴  ..                                                                                       │  │                                          │
 │[ ] ▸  archive/                  · 3 items · no repos                                           │  │ 2 horizon-backend                        │
-│[1] ◆  horizon-frontend       ×2 · git · main          2h ago                                   │  │   ~/code/horizon-backend                 │
-│[2] ◆  horizon-backend           · git · main +3       18m ago                                  │  │                                          │
+│[x] ◆  horizon-frontend       ×2 · git · main          2h ago                                   │  │   ~/code/horizon-backend                 │
+│[x] ◆  horizon-backend           · git · main +3       18m ago                                  │  │                                          │
 │[ ] ◆  horizon-app               · git · feat/rn-0.75  4d ago                                   │  │ 3 horizon-frontend-2                     │
 │[ ] ◆  horizon-infra             · git · main          3w ago                                   │  │   ~/code/horizon-frontend                │
 │[ ] ▸  notes/                    · 14 items · no repos                                          │  │                                          │
@@ -39,4 +39,4 @@
 │                                                                                                │  │  o  Open 3 as terminals                  │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
                                                                                                                                                 
-   ↑↓ move  ⏎ select  ⇧↑↓ range  → inside  ← back  +/- instance  a all repos  / filter                                       o open  esc quit   
+   ↑↓ move  ⏎/⇥ toggle  ⇧↑↓ range  → inside  ← back  +/- instance  a all repos  / filter                                     o open  esc quit   

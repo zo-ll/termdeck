@@ -3,7 +3,7 @@
 ┌── > browse  ·  ~/code  ·  ← back · → inside · ~ home · g root ───────── filter (/ to search) ──┐  ┌── selected · 0 ────── order = pane no. ──┐
 │   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ nothing selected · o disabled            │
 │   ────────────────────────────────────────────────────────────────────────────────────────     │  │                                          │
-│[ ] ▴  ..                                                                                       │  │                                          │
+│    ▴  ..                                                                                       │  │                                          │
 │[ ] ▸  archive/                  · 3 items · no repos                                           │  │                                          │
 │[ ] ◆  horizon-frontend          · git · main          2h ago                                   │  │                                          │
 │[ ] ◆  horizon-backend           · git · main +3       18m ago                                  │  │                                          │
@@ -39,4 +39,4 @@
 │                                                                                                │  │  o  nothing selected                     │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
                                                                                                                                                 
-   ↑↓ move  ⏎ select  ⇧↑↓ range  → inside  ← back  +/- instance  a all repos  / filter                                       o open  esc quit   
+   ↑↓ move  ⏎/⇥ toggle  ⇧↑↓ range  → inside  ← back  +/- instance  a all repos  / filter                                     o open  esc quit   
