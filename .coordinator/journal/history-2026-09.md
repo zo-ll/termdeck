@@ -538,3 +538,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   deleted, paste-release added — key/wheel already released per doc, cross-
   check test for ratio constants; 152 tests). Re-review handed to the critic.
   (Skills: lean rewrite committed+pushed.)
+- 2026-09-02: #44 (stacked previews start at minimal width) dispatched to claude (same session; coord/44-min-stack).
