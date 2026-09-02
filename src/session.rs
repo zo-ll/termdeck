@@ -40,7 +40,7 @@ static SAVED_PANIC_HOOK: OnceLock<Mutex<Option<PanicHook>>> = OnceLock::new();
 pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let _panic = PanicGuard::install();
     let _signals = SignalGuard::install()?;
-    let _outer = OuterTerminal::enter()?;
+    let outer = OuterTerminal::enter()?;
     let mut size = screen_size()?;
     let mut engine = NativeEngine::spawn(&workspace.projects, size)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
@@ -293,6 +293,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             dirty = false;
         }
     }
+    // The interface is finished, so give the terminal back before the engine
+    // takes its time: a pane that ignores the polite signals holds shutdown
+    // for the whole grace period, and the user should not be looking at a
+    // frozen deck while it does (#46).
+    drop(outer);
     engine.dispatch(EngineCommand::Shutdown);
     Ok(())
 }
