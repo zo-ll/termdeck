@@ -59,9 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
-  once: cap lift + scrollable stack live). Release binary rebuilt +
-  reinstalled. Open tracker: only #33 (animations, parked).
 - 2026-09-02 (POST-REBOOT RESTORE): environment restored — tmux session
   personal with coordinator/critic/codex/claude windows; relay restarted
   detached (inbox live, self-test delivered); critic booted fresh (ready,
@@ -167,6 +164,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #44 critic PASS → pushed coord/44-min-stack → PR #45, awaiting user approval.
 - 2026-09-02: #46 (quit modal 'y' doesn't quit) dispatched to claude (same session; coord/46-quit-modal).
 - 2026-09-02: #46 done (claude `76c82c0`: root cause = shutdown sent only SIGTERM which shells ignore; now HUP+TERM, quit exits ~20ms, escalation/no-orphan unchanged; 158 tests) — in critic review.
+- 2026-09-02: #46 critic PASS → pushed coord/46-quit-modal → PR #47, awaiting user approval.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

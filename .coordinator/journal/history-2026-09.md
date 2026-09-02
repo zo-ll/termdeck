@@ -435,3 +435,6 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   routed to claude (same worker; left in conflicted state, not hand-fixed).
   FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
   should use the deck's count after the cap lift.
+- 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
+  once: cap lift + scrollable stack live). Release binary rebuilt +
+  reinstalled. Open tracker: only #33 (animations, parked).
