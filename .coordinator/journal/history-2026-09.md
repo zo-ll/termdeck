@@ -413,3 +413,5 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
   #34b (scrollable stack list, UI) next — awaiting user choice (design-first
   vs direct) but queued to claude.
+- 2026-09-01: #34a critic PASS → committed → pushed → PR (#34a), merge
+  before #34b. #34b still with claude.

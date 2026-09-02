@@ -56,11 +56,9 @@ scope.
 
 ## Handoffs
 
-Rotated history: `.coordinator/journal/` (latest archives: 2026-08 (18), 2026-09 (62)).
+Rotated history: `.coordinator/journal/` (latest archives: see journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-01: #34a critic PASS → committed → pushed → PR (#34a), merge
-  before #34b. #34b still with claude.
 - 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
   critic review.
 - 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
@@ -180,8 +178,11 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   keyboard nudge bindings as equivalence, no regression of wheel/drag/
   promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
   hint/help label should read "expand" while folded.
+- 2026-09-02: #41 S1 correction done (claude `1f47d6c`: dup resizing
+  deleted, paste-release added — key/wheel already released per doc, cross-
+  check test for ratio constants; 152 tests). Re-review handed to the critic.
+  (Skills: lean rewrite committed+pushed.)
 
-## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
 - Before changing machines, commit worker changes and push `main` plus every
