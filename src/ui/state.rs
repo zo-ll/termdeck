@@ -26,7 +26,13 @@ pub const MAX_MASTER_RATIO: f64 = 0.85;
 pub const MASTER_RATIO_STEP: f64 = 0.05;
 /// The split a deck starts at until the configuration says otherwise, and the
 /// configuration's own default.
-pub const DEFAULT_MASTER_RATIO: f64 = 0.70;
+///
+/// It is the top of the range on purpose (#44): a fresh run gives the stack
+/// its minimum width and the master everything else, because the previews
+/// start folded (#39) and a strip needs no more than its title. Dragging the
+/// divider or `^g -` opens the stack back up, and a configured
+/// `defaults.master_ratio` still overrides this outright.
+pub const DEFAULT_MASTER_RATIO: f64 = MAX_MASTER_RATIO;
 
 /// An overlay that takes focus from the deck. Only one can be open, and it
 /// captures every key until it closes: focus stays singular, so the modal
@@ -649,15 +655,23 @@ mod tests {
     #[test]
     fn the_split_steps_by_whole_notches_and_stops_at_the_range_ends() {
         let mut state = DeckState::new(4);
-        assert_eq!(state.master_ratio(), 0.70, "the configuration's default");
+        assert_eq!(
+            state.master_ratio(),
+            super::MAX_MASTER_RATIO,
+            "#44: a fresh deck starts with the stack at its minimum width"
+        );
+        assert!(
+            !state.nudge_master_ratio(1),
+            "there is nothing above the top of the range"
+        );
 
-        assert!(state.nudge_master_ratio(1));
-        assert_eq!(state.master_ratio(), 0.75);
-        assert!(state.nudge_master_ratio(-2));
+        assert!(state.nudge_master_ratio(-1));
+        assert_eq!(state.master_ratio(), 0.80);
+        assert!(state.nudge_master_ratio(-3));
         assert_eq!(state.master_ratio(), 0.65);
 
-        // Three more steps reach the end of the range and stop there.
-        for _ in 0..3 {
+        // Two more steps reach the other end of the range and stop there.
+        for _ in 0..2 {
             state.nudge_master_ratio(-1);
         }
         assert_eq!(state.master_ratio(), super::MIN_MASTER_RATIO);
@@ -693,12 +707,18 @@ mod tests {
         assert_eq!(state.master_ratio(), super::MIN_MASTER_RATIO);
     }
 
-    /// The configuration seeds the split, within the same range.
+    /// The configuration seeds the split, within the same range, and what it
+    /// says overrides the minimum-width default a fresh deck starts at (#44).
     #[test]
     fn the_configured_split_seeds_the_deck() {
         assert_eq!(
             DeckState::new(4).with_master_ratio(0.60).master_ratio(),
             0.60
+        );
+        assert_eq!(
+            DeckState::new(4).with_master_ratio(0.70).master_ratio(),
+            0.70,
+            "a configured split is not the default it replaces"
         );
         assert_eq!(
             DeckState::new(4).with_master_ratio(0.95).master_ratio(),

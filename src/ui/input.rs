@@ -362,15 +362,19 @@ mod tests {
             input.press(key, deck, &projects, NOW)
         };
 
+        // A fresh deck starts at the top of the range (#44), so the first
+        // step it has anywhere to take is the one that opens the stack.
+        assert_eq!(deck.master_ratio(), 0.85);
         assert_eq!(press(&mut input, &mut deck, Key::Char('-')), None);
-        assert_eq!(deck.master_ratio(), 0.65);
+        assert_eq!(deck.master_ratio(), 0.80);
         assert_eq!(press(&mut input, &mut deck, Key::Char('=')), None);
-        assert_eq!(deck.master_ratio(), 0.70);
+        assert_eq!(deck.master_ratio(), 0.85);
         // The shifted twins are the same keys: `+` is what a hand reaches for.
-        press(&mut input, &mut deck, Key::Char('+'));
-        assert_eq!(deck.master_ratio(), 0.75);
         press(&mut input, &mut deck, Key::Char('_'));
-        assert_eq!(deck.master_ratio(), 0.70);
+        press(&mut input, &mut deck, Key::Char('_'));
+        assert_eq!(deck.master_ratio(), 0.75);
+        press(&mut input, &mut deck, Key::Char('+'));
+        assert_eq!(deck.master_ratio(), 0.80);
 
         // Unprefixed they are ordinary input and reach the shell untouched.
         assert_eq!(
@@ -379,7 +383,7 @@ mod tests {
                 Key::Char('-').bytes()
             ))))
         );
-        assert_eq!(deck.master_ratio(), 0.70);
+        assert_eq!(deck.master_ratio(), 0.80);
     }
 
     /// The page keys are the keyboard half of the scrollable stack. Only the

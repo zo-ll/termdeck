@@ -43,7 +43,8 @@ It must not expose Ratatui, Alacritty, or PTY types.
 - Below a usable preview width, use master-only mode with a compact terminal
   status line.
 - Support one or more configured terminals. The first starts as master.
-- `master_ratio` defaults to `0.70` and accepts `0.55..=0.85`. It seeds the
+- `master_ratio` defaults to `0.85` — the stack starts at its minimum width,
+  since the previews start folded — and accepts `0.55..=0.85`. It seeds the
   split; the divider between the master and the stack moves it for the session,
   by drag or by `Ctrl+g -` / `Ctrl+g =`, within the same range. Nothing is
   written back to the configuration file (#41).
