@@ -467,3 +467,8 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
   reusable across worktrees; tmux pings + crates.io work directly. No
   sandbox exception remains in the reuse policy.
+- 2026-09-02: WORKFLOW (user-driven): reuse LONG-LIVED worker sessions per
+  LANE (preserve context) — fresh sessions only on quota exhaustion or
+  sandbox-scoped worktrees (codex). Patched into the coordinator skill
+  (Phase 4, "reuse, don't relaunch"). Consequence: claude/critic keep one
+  session each; codex engine slices serialize in one worktree where possible.

@@ -59,11 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: WORKFLOW (user-driven): reuse LONG-LIVED worker sessions per
-  LANE (preserve context) — fresh sessions only on quota exhaustion or
-  sandbox-scoped worktrees (codex). Patched into the coordinator skill
-  (Phase 4, "reuse, don't relaunch"). Consequence: claude/critic keep one
-  session each; codex engine slices serialize in one worktree where possible.
 - 2026-09-02: correction for #41 S1's 3 non-blocking findings routed to
   claude (same session, coord/41-mouse-ratio): drop dup resizing, wheel
   releases the divider (doc+code aligned), cross-check test for
@@ -147,6 +142,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #48 A1 critic PASS (contracts empty; 2 non-blocking: redundant DEFAULT_SCROLLBACK, expect() invariants) → pushed coord/48-cli-discovery → PR #52. A2 (folder picker) now unblocks — user's Claude Design pass next.
 - 2026-09-02: synced updated mockups (picker) into reference `63c5b4c`; dispatached claude_design MCP prompt to claude for the A2 picker design (import project, implement Termdeck TUI.dc.html).
 - 2026-09-02: A2 picker DESIGN NOTE done (claude, coord/42-picker-spec `5b7a759` docs-only, off main): MCP import no-op — repo reference already matches live project (additive screens 06-08 + 5 boards); note fixes grid/colors/ordinal model/^g a sheet/click parity, answers 4 ambiguities, flags 1 export contradiction (/ root vs / filter+g root). Follow-up handed: same-path MULTI-INSTANCE support in picker + runtime-add (per-path counts, -2/-3 suffixes).
+- 2026-09-02: A2 design accepted (user: / = filter, g = root); design note pushed+merged `2bdaf5f`. #49 A2 DISPATCHED to claude (coord/49-picker): implement the picker per the note incl. multi-instance same-path.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
