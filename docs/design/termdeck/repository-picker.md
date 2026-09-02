@@ -293,7 +293,7 @@ in what order; everything else about a terminal stays configuration's business.
 `/` opens a query line **pinned to the bottom of the listing — never a modal**:
 
 ```
-   /hor                                              esc clear · ⏎ select
+   /hor                                         esc clear · ⏎/⇥ toggle
 ```
 
 - Matching substrings highlight in `ACCENT` inside the row's name
@@ -307,7 +307,7 @@ in what order; everything else about a terminal stays configuration's business.
   implementation: the query has to reach every configured root, not just the
   current listing.
 - The top bar reflects the mode (`filtering · 3 selected`), and the bottom bar
-  swaps to filter keys (`type to narrow · ↑↓ move · ⏎ select · +/- instance ·
+  swaps to filter keys (`type to narrow · ↑↓ move · ⏎/⇥ toggle · +/- instance ·
   esc clear filter`, with `o open · esc esc quit` on the right). The export
   wrote that row before the key map was revised; §7 is what it says now.
 

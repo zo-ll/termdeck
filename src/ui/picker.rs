@@ -1298,7 +1298,7 @@ impl Picker<'_> {
                 ]),
                 content.width,
             );
-            let escape = "esc clear · ⏎ select";
+            let escape = "esc clear · ⏎/⇥ toggle";
             buffer.set_line(
                 content.x + content.width - escape.chars().count() as u16 - INSET,
                 y,
@@ -2371,6 +2371,33 @@ mod tests {
             Some(code().as_path()),
             "and neither press moved anywhere"
         );
+    }
+
+    /// `+` is deliberately distinct from `⏎`: it appends another named
+    /// instance of the cursor path instead of merging it into the first.
+    #[test]
+    fn plus_adds_a_second_named_instance_to_the_picker_selection() {
+        let mut state = browsing();
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+        state.point_at(index, rows.len());
+
+        press(&mut state, &rows, &roots, Key::Enter);
+        press(&mut state, &rows, &roots, Key::Char('+'));
+
+        let names: Vec<_> = state
+            .selection()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        assert_eq!(names, ["horizon-frontend", "horizon-frontend-2"]);
+        let rendered = text(&render(&state));
+        assert!(rendered.contains("horizon-frontend-2"), "{rendered}");
+        assert!(rendered.contains("o  Open 2 as terminals"), "{rendered}");
     }
 
     /// `→` goes inside whatever the cursor is on, repository or not — the
