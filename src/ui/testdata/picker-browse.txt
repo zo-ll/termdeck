@@ -1,0 +1,42 @@
+    termdeck   no workspace open  ·  pick repositories to start                                                   ~/code › 3 roots configured   
+                                                                                                                                                
+┌── > browse  ·  ~/code  ·  h up · l enter · ~ home · g root ──────────── filter (/ to search) ──┐  ┌── selected · 0 ────── order = pane no. ──┐
+│   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ nothing selected · ⏎ disabled            │
+│   ────────────────────────────────────────────────────────────────────────────────────────     │  │                                          │
+│[ ] ▴  ..                                                                                       │  │                                          │
+│[ ] ▸  archive/                  · 3 items · no repos                                           │  │                                          │
+│[ ] ◆  horizon-frontend          · git · main          2h ago                                   │  │                                          │
+│[ ] ◆  horizon-backend           · git · main +3       18m ago                                  │  │                                          │
+│[ ] ◆  horizon-app               · git · feat/rn-0.75  4d ago                                   │  │                                          │
+│[ ] ◆  horizon-infra             · git · main          3w ago                                   │  │                                          │
+│[ ] ▸  notes/                    · 14 items · no repos                                          │  │                                          │
+│[ ] ◆  termdeck                  · git · main          just now                                 │  │                                          │
+│[ ] ▸  vendor/                   · 6 items · no repos                                           │  │                                          │
+│    ·  README.md                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │ ──────────────────────────────────────── │
+│                                                                                                │  │ workspace name                           │
+│   ─── cursor on .. ────────────────────────────────────────────────────────────────────        │  │  code   e rename                         │
+│   ~                                                                                            │  │                                          │
+│                                                                                                │  │  ⏎  nothing selected                     │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
+                                                                                                                                                
+   ↑↓ move  space toggle  +/- instance  l/⇥ enter  h up  a all repos here  / filter                                          ⏎ open  esc quit   

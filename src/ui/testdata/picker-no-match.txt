@@ -1,0 +1,42 @@
+    termdeck   filtering  ·  1 selected                                                                                    ~/code › all roots   
+                                                                                                                                                
+┌── > browse  ·  ~/code  ·  ⌫ edit · esc clear ─────────────────────────────────── filter /zzq ──┐  ┌── selected · 1 ────── order = pane no. ──┐
+│   MATCH zzq  ·  0 matching · recursive from ~/code                                             │  │ 1 termdeck  MASTER                       │
+│   ────────────────────────────────────────────────────────────────────────────────────────     │  │   ~/code/termdeck                        │
+│   no match for zzq                                                                             │  │                                          │
+│   in ~/code or 2 other roots                                                                   │  │ ──────────────────────────────────────── │
+│   selection kept (1)                                                                           │  │ K/J reorder · m set master               │
+│                                                                                                │  │ x remove · X clear all                   │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │                                          │
+│                                                                                                │  │ ──────────────────────────────────────── │
+│                                                                                                │  │ workspace name                           │
+│                                                                                                │  │  code   e rename                         │
+│                                                                                                │  │                                          │
+│   /zzq                                                                  esc clear · ⏎ accept   │  │  ⏎  Open 1 as terminal                   │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
+                                                                                                                                                
+   type to narrow  ↑↓ move  space toggle  +/- instance  esc clear filter                                                 ⏎ open  esc esc quit   

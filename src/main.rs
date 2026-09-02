@@ -17,7 +17,18 @@ fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
             termdeck::session::run(&workspace)?;
             Ok(None)
         }
-        termdeck::cli::CliCommand::Picker => Err("folder picker pending A2".into()),
+        termdeck::cli::CliCommand::Picker => {
+            // No path: the picker chooses the workspace, then the session
+            // opens it. Leaving the picker without a selection is not an
+            // error — the user asked for nothing.
+            match termdeck::session::pick(termdeck::cli::picker_roots())? {
+                Some(workspace) => {
+                    termdeck::session::run(&workspace)?;
+                    Ok(None)
+                }
+                None => Ok(None),
+            }
+        }
         termdeck::cli::CliCommand::Launch { workspace } => {
             let config_path = intent.config_path.as_deref().expect("config command");
             let config = termdeck::config::load(config_path)?;
