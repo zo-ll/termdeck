@@ -3090,7 +3090,7 @@ mod tests {
         assert!(rendered.contains("ROOT ~/code"), "{rendered}");
         assert!(rendered.contains("2 already open"), "{rendered}");
         assert!(
-            rendered.contains("[·] ◆  horizon-frontend       · already open · pane 1"),
+            rendered.contains("[·] ◆  horizon-frontend    +  · already open · pane 1"),
             "{rendered}"
         );
         assert!(
@@ -3233,6 +3233,222 @@ mod tests {
         assert_eq!(
             unique_name(taken.as_ref(), "horizon-frontend"),
             "horizon-frontend-3"
+        );
+    }
+
+    /// Mouse parity in the sheet (#50 NB): every gesture drives the state
+    /// its key drives, and the keys are untouched by any of it.
+    #[test]
+    fn the_pointer_marks_a_row_exactly_as_enter_does() {
+        let roots = Fixture.roots();
+        let open = open_two();
+        let rows = sheet_rows(&sheet_state());
+        let termdeck = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
+        let frontend = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+
+        let mut by_key = sheet_state();
+        by_key.state_mut().point_at(termdeck, rows.len());
+        sheet_press(&mut by_key, &rows, &roots, &open, Key::Enter);
+
+        let mut by_pointer = sheet_state();
+        sheet_click(
+            &mut by_pointer,
+            &rows,
+            &roots,
+            &open,
+            SheetHit::Row(termdeck),
+        );
+
+        assert_eq!(by_pointer.marked(), by_key.marked());
+        assert_eq!(by_pointer.state().cursor(), termdeck, "and it points there");
+
+        // The lock holds for the pointer too.
+        sheet_click(
+            &mut by_pointer,
+            &rows,
+            &roots,
+            &open,
+            SheetHit::Row(frontend),
+        );
+        assert_eq!(
+            by_pointer.marked().len(),
+            1,
+            "an open repo is not re-marked"
+        );
+    }
+
+    /// The instance slot is `+`, and `-` on the secondary button — including
+    /// on a locked row, which is the only way the pointer can ask for another
+    /// instance of a repository the session already holds.
+    #[test]
+    fn the_instance_slot_is_the_pointers_plus_and_minus() {
+        let roots = Fixture.roots();
+        let open = open_two();
+        let rows = sheet_rows(&sheet_state());
+        let frontend = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+
+        let mut by_key = sheet_state();
+        by_key.state_mut().point_at(frontend, rows.len());
+        sheet_press(&mut by_key, &rows, &roots, &open, Key::Char('+'));
+        sheet_press(&mut by_key, &rows, &roots, &open, Key::Char('+'));
+
+        let mut by_pointer = sheet_state();
+        sheet_click(
+            &mut by_pointer,
+            &rows,
+            &roots,
+            &open,
+            SheetHit::Instance(frontend),
+        );
+        sheet_click(
+            &mut by_pointer,
+            &rows,
+            &roots,
+            &open,
+            SheetHit::Instance(frontend),
+        );
+
+        assert_eq!(by_pointer.marked().len(), 2, "a locked row still appends");
+        assert_eq!(by_pointer.marked(), by_key.marked());
+
+        // And the secondary button sheds one, as `-` does.
+        sheet_press(&mut by_key, &rows, &roots, &open, Key::Char('-'));
+        assert!(sheet_click_secondary(
+            &mut by_pointer,
+            &rows,
+            SheetHit::Instance(frontend)
+        ));
+        assert_eq!(by_pointer.marked(), by_key.marked());
+        assert_eq!(by_pointer.marked().len(), 1);
+    }
+
+    /// The header's switch label is `⇧⇥`, and the query line is `/`.
+    #[test]
+    fn the_header_and_query_line_answer_the_pointer() {
+        let roots = Fixture.roots();
+        let open = open_two();
+        let rows = sheet_rows(&sheet_state());
+
+        let mut by_key = sheet_state();
+        sheet_press(&mut by_key, &rows, &roots, &open, Key::ShiftTab);
+        let mut by_pointer = sheet_state();
+        sheet_click(&mut by_pointer, &rows, &roots, &open, SheetHit::Root);
+        assert_eq!(by_pointer.root(), by_key.root());
+        assert_eq!(by_pointer.root(), 1);
+        // And it keeps going round, as the key does.
+        for expected in [2, 0, 1] {
+            sheet_click(&mut by_pointer, &rows, &roots, &open, SheetHit::Root);
+            assert_eq!(by_pointer.root(), expected, "three roots, cycled");
+        }
+
+        let mut by_key = sheet_state();
+        sheet_press(&mut by_key, &rows, &roots, &open, Key::Char('/'));
+        let mut by_pointer = sheet_state();
+        sheet_click(&mut by_pointer, &rows, &roots, &open, SheetHit::Filter);
+        assert_eq!(by_pointer.state().filter(), by_key.state().filter());
+        assert_eq!(by_pointer.state().filter(), Some(""));
+    }
+
+    /// The button is `o`, and it refuses the same press the key refuses.
+    #[test]
+    fn the_button_commits_exactly_as_o_does() {
+        let roots = Fixture.roots();
+        let open = open_two();
+        let rows = sheet_rows(&sheet_state());
+        let mut sheet = sheet_state();
+
+        assert_eq!(
+            sheet_click(&mut sheet, &rows, &roots, &open, SheetHit::Add),
+            None,
+            "nothing marked, nothing to add"
+        );
+
+        let termdeck = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
+        sheet_click(&mut sheet, &rows, &roots, &open, SheetHit::Row(termdeck));
+
+        assert_eq!(
+            sheet_click(&mut sheet, &rows, &roots, &open, SheetHit::Add),
+            Some(PickerReaction::Launch)
+        );
+    }
+
+    /// The targets are where the sheet draws them: found in the rendered
+    /// buffer rather than assumed, so the hit test cannot drift from the
+    /// glyph it belongs to.
+    #[test]
+    fn every_sheet_target_sits_on_what_it_is_drawn_as() {
+        let sheet = sheet_state();
+        let open = open_two();
+        let buffer = render_sheet(&sheet, &open);
+        let rows = sheet_rows(&sheet);
+        let roots = Fixture.roots();
+        let view = Sheet {
+            state: &sheet,
+            rows: &rows,
+            roots: &roots,
+            open: &open,
+            home: Some(Path::new("/home/dev")),
+            next_pane: 3,
+        };
+        let area = ratatui::layout::Rect::new(0, 0, 144, 42);
+        let find = |needle: &str, row: u16| -> u16 {
+            (0..144u16)
+                .find(|column| buffer[(*column, row)].symbol() == needle)
+                .unwrap_or_else(|| panic!("{needle} is drawn on row {row}"))
+        };
+
+        // The first listed row: its `+` is the instance slot, and the name
+        // beside it is the row.
+        let first = view.rect(area).y + 3;
+        let plus = find("+", first);
+        assert_eq!(
+            view.hit(area, Position::new(plus, first)),
+            Some(SheetHit::Instance(0))
+        );
+        assert_eq!(
+            view.hit(area, Position::new(plus + 1, first)),
+            Some(SheetHit::Instance(0)),
+            "two columns wide, so the click needs no precision"
+        );
+        assert_eq!(
+            view.hit(area, Position::new(plus - 4, first)),
+            Some(SheetHit::Row(0)),
+            "the name is still the row"
+        );
+
+        // The header's switch label, the query line and the button.
+        let header = view.rect(area).y + 1;
+        let switch = find("⇧", header);
+        assert_eq!(
+            view.hit(area, Position::new(switch, header)),
+            Some(SheetHit::Root)
+        );
+        assert_eq!(
+            view.hit(area, Position::new(switch - 20, header)),
+            None,
+            "the census beside it is not a control"
+        );
+        let bottom = view.rect(area).y + view.rect(area).height;
+        assert_eq!(
+            view.hit(area, Position::new(switch, bottom - 4)),
+            Some(SheetHit::Filter)
+        );
+        let button = find("o", bottom - 3);
+        assert_eq!(
+            view.hit(area, Position::new(button, bottom - 3)),
+            Some(SheetHit::Add)
         );
     }
 
@@ -3420,6 +3636,8 @@ pub struct Sheet<'a> {
 const SHEET_COLUMNS: u16 = 78;
 /// Its listing grid is the picker's, with the separator pulled in to fit.
 const SHEET_SEPARATOR: u16 = 30;
+/// The instance slot's column: `+`, or `×N` once there is more than one.
+const SHEET_INSTANCE: u16 = SHEET_SEPARATOR - 3;
 
 impl Sheet<'_> {
     /// Where the sheet sits on `area`.
@@ -3600,14 +3818,20 @@ impl Sheet<'_> {
                 Style::new().fg(MASTER_FG).bg(background),
             )],
         );
-        if marks > 1 {
-            let badge = format!("×{marks}");
-            put(
-                buffer,
-                SHEET_SEPARATOR - 3,
-                vec![Span::styled(badge, Style::new().fg(ACCENT).bg(background))],
-            );
-        }
+        // The instance slot. It is a `+` until there is more than one, then
+        // the count — and it is drawn on every row, including a locked one,
+        // because it is the pointer's only way to ask for another instance
+        // of a repository the session already holds.
+        let (badge, colour) = match marks {
+            0 => ("+".to_owned(), HINT),
+            1 => ("+".to_owned(), ACCENT),
+            _ => (format!("×{marks}"), ACCENT),
+        };
+        put(
+            buffer,
+            SHEET_INSTANCE,
+            vec![Span::styled(badge, Style::new().fg(colour).bg(background))],
+        );
         let meta = match (open, entry.branch.as_deref()) {
             (Some(pane), _) => vec![Span::styled(
                 format!("already open · pane {pane}"),
@@ -3661,11 +3885,7 @@ impl Sheet<'_> {
                 content.width,
             );
         }
-        let label = match marked {
-            0 => " o  nothing marked ".to_owned(),
-            1 => " o  Add 1 terminal ".to_owned(),
-            _ => format!(" o  Add {marked} terminals "),
-        };
+        let label = self.button_label();
         buffer.set_line(
             content.x + 1,
             bottom - 2,
@@ -3695,11 +3915,49 @@ impl Sheet<'_> {
         );
     }
 
-    /// The row under `pointer`, for the sheet's own mouse parity.
-    pub fn row_at(&self, area: Rect, pointer: Position) -> Option<usize> {
+    /// What the add button says, which is also how wide its target is.
+    fn button_label(&self) -> String {
+        match self.state.marked().len() {
+            0 => " o  nothing marked ".to_owned(),
+            1 => " o  Add 1 terminal ".to_owned(),
+            marked => format!(" o  Add {marked} terminals "),
+        }
+    }
+
+    /// What the pointer is over, in the same terms as the sheet's keys.
+    ///
+    /// Every action the sheet has now has a target: the row is `⏎`, the
+    /// instance slot is `+` (and `-` on the secondary button), the header's
+    /// switch label is `⇧⇥`, the query line is `/`, and the button is `o`.
+    pub fn hit(&self, area: Rect, pointer: Position) -> Option<SheetHit> {
         let rect = self.rect(area);
         if !rect.contains(pointer) {
             return None;
+        }
+        let content = Rect {
+            x: rect.x + 1,
+            y: rect.y + 1,
+            width: rect.width.saturating_sub(2),
+            height: rect.height.saturating_sub(2),
+        };
+        let bottom = content.y + content.height;
+        // The header's own control, right-aligned where it is drawn.
+        if pointer.y == content.y && self.roots.len() > 1 {
+            let hint = "⇧⇥ switch root".chars().count() as u16;
+            let start = content.x + content.width - hint - 1;
+            if (start..start + hint).contains(&pointer.x) {
+                return Some(SheetHit::Root);
+            }
+        }
+        if pointer.y == bottom - 3 {
+            return Some(SheetHit::Filter);
+        }
+        if pointer.y == bottom - 2 {
+            let label = self.button_label().chars().count() as u16;
+            let start = content.x + 1;
+            return (start..start + label)
+                .contains(&pointer.x)
+                .then_some(SheetHit::Add);
         }
         let top = rect.y + 3;
         let room = rect.height.saturating_sub(8);
@@ -3707,14 +3965,87 @@ impl Sheet<'_> {
             return None;
         }
         let index = self.state.state().offset() + (pointer.y - top) as usize;
-        (index < self.rows.len()).then_some(index)
+        if index >= self.rows.len() {
+            return None;
+        }
+        // The instance slot is two columns of the row and takes precedence
+        // over it, the way the picker's marker cells do.
+        let slot = content.x + 1 + SHEET_INSTANCE;
+        Some(if (slot..slot + 2).contains(&pointer.x) {
+            SheetHit::Instance(index)
+        } else {
+            SheetHit::Row(index)
+        })
     }
+}
 
-    /// Whether `pointer` is on the sheet's add button.
-    pub fn add_at(&self, area: Rect, pointer: Position) -> bool {
-        let rect = self.rect(area);
-        pointer.y + 3 == rect.y + rect.height && rect.contains(pointer)
+/// What the pointer is over inside the sheet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SheetHit {
+    /// The row's body — `⏎`.
+    Row(usize),
+    /// Its instance slot — `+`, or `-` on the secondary button.
+    Instance(usize),
+    /// The header's `⇧⇥ switch root`.
+    Root,
+    /// The query line — `/`.
+    Filter,
+    /// The add button — `o`.
+    Add,
+}
+
+/// One pointer gesture inside the sheet, in the same terms as its keys. Each
+/// arm drives exactly the state its key drives; nothing here is a shortcut
+/// the keyboard cannot take.
+pub fn sheet_click(
+    sheet: &mut SheetState,
+    rows: &[Entry],
+    roots: &[Entry],
+    open: &[Open],
+    hit: SheetHit,
+) -> Option<PickerReaction> {
+    match hit {
+        // `⏎`: mark the row, unless the session already holds it.
+        SheetHit::Row(index) => {
+            let entry = rows.get(index).cloned()?;
+            sheet.state_mut().point_at(index, rows.len());
+            if open_pane(open, &entry).is_none() {
+                sheet.state_mut().toggle(&entry);
+            }
+        }
+        // `+`: another instance, locked row or not.
+        SheetHit::Instance(index) => {
+            let entry = rows.get(index).cloned()?;
+            sheet.state_mut().point_at(index, rows.len());
+            sheet.state_mut().add(&entry);
+        }
+        SheetHit::Root => {
+            sheet.next_root(roots);
+        }
+        SheetHit::Filter => {
+            sheet.state_mut().begin_filter();
+        }
+        SheetHit::Add => {
+            if !sheet.marked().is_empty() {
+                return Some(PickerReaction::Launch);
+            }
+        }
     }
+    None
+}
+
+/// The secondary button inside the sheet: on an instance slot it is `-`,
+/// which sheds the most recent instance of that row. Everywhere else it does
+/// nothing, so a stray right-click cannot change what is about to be added.
+pub fn sheet_click_secondary(sheet: &mut SheetState, rows: &[Entry], hit: SheetHit) -> bool {
+    let (SheetHit::Instance(index) | SheetHit::Row(index)) = hit else {
+        return false;
+    };
+    let Some(entry) = rows.get(index).cloned() else {
+        return false;
+    };
+    sheet.state_mut().point_at(index, rows.len());
+    sheet.state_mut().drop_one(&entry)
 }
 
 /// One key inside the sheet. `⏎` marks the row, `+` marks another instance of

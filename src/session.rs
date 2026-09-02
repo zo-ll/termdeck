@@ -269,30 +269,25 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     }
                     InputEvent::Mouse {
                         pointer,
-                        action: MouseAction::Up,
+                        action: action @ (MouseAction::Up | MouseAction::SecondaryUp),
                     } => {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
-                        let view = Sheet {
+                        let hit = Sheet {
                             state: open_sheet,
                             rows: &rows,
                             roots: &roots,
                             open: &open,
                             home: browser.home(),
                             next_pane: projects.len() + 1,
-                        };
-                        let hit = view.row_at(area, pointer);
-                        let add = view.add_at(area, pointer);
-                        match (hit, add) {
-                            (Some(index), _) => {
-                                let entry = rows[index].clone();
-                                open_sheet.state_mut().point_at(index, rows.len());
-                                if picker::open_pane(&open, &entry).is_none() {
-                                    open_sheet.state_mut().toggle(&entry);
-                                }
-                                None
+                        }
+                        .hit(area, pointer);
+                        match (hit, action) {
+                            (Some(hit), MouseAction::Up) => {
+                                picker::sheet_click(open_sheet, &rows, &roots, &open, hit)
                             }
-                            (None, true) if !open_sheet.marked().is_empty() => {
-                                Some(PickerReaction::Launch)
+                            (Some(hit), _) => {
+                                picker::sheet_click_secondary(open_sheet, &rows, hit);
+                                None
                             }
                             _ => None,
                         }
