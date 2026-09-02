@@ -59,13 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02 (POST-REBOOT RESTORE): environment restored — tmux session
-  personal with coordinator/critic/codex/claude windows; relay restarted
-  detached (inbox live, self-test delivered); critic booted fresh (ready,
-  idle, boot ping landed); codex standby; #39 re-dispatched to claude on a
-  FRESH branch coord/39-collapsed-default (stale 35-collapsed-default left
-  untouched per user). /tmp was wiped by the reboot — task briefs recreated
-  from issue bodies/COORDINATION records.
 - 2026-09-02: #39 critic PASS → pushed → PR opened. Awaiting user approval.
 - 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
   expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
@@ -165,6 +158,12 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #46 (quit modal 'y' doesn't quit) dispatched to claude (same session; coord/46-quit-modal).
 - 2026-09-02: #46 done (claude `76c82c0`: root cause = shutdown sent only SIGTERM which shells ignore; now HUP+TERM, quit exits ~20ms, escalation/no-orphan unchanged; 158 tests) — in critic review.
 - 2026-09-02: #46 critic PASS → pushed coord/46-quit-modal → PR #47, awaiting user approval.
+- 2026-09-02: #42 PLANNING APPROVED — final spec on the issue (entry points:
+  no-path folder browser / <folder> root+single-terminal / --config file;
+  runtime add via '+' + ^g a from choice of roots; first selected = master;
+  stable fe/be order). Slices opened: #48 A1 (codex, ready), #49 A2 (claude,
+  blocked A1), #50 A3 (both; blocked A1), #51 A4 (codex; blocked A1+A2+A3).
+  Waves: A1 → A2(+A3-prep) → A3 → A4.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

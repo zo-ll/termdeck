@@ -438,3 +438,10 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
 - 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
   once: cap lift + scrollable stack live). Release binary rebuilt +
   reinstalled. Open tracker: only #33 (animations, parked).
+- 2026-09-02 (POST-REBOOT RESTORE): environment restored — tmux session
+  personal with coordinator/critic/codex/claude windows; relay restarted
+  detached (inbox live, self-test delivered); critic booted fresh (ready,
+  idle, boot ping landed); codex standby; #39 re-dispatched to claude on a
+  FRESH branch coord/39-collapsed-default (stale 35-collapsed-default left
+  untouched per user). /tmp was wiped by the reboot — task briefs recreated
+  from issue bodies/COORDINATION records.
