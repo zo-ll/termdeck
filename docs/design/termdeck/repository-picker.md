@@ -212,8 +212,9 @@ Rules, all stated on the spec boards:
   ("selection survives filtering and navigation — it is workspace-wide, not
   per-folder"), which makes it a promise to the user, not just an
   implementation note.
-- **With nothing selected the launch button renders `disabled`**, and `⏎` on a
-  folder navigates into it instead of launching.
+- **With nothing selected the launch button renders `disabled`.** (Since the
+  key map was revised, `⏎` on a folder selects it rather than navigating, and
+  `→` is what goes inside — §7.)
 
 ### 3.1 More than one terminal for the same path
 
@@ -377,23 +378,49 @@ update.
 ## 7. Key map and mouse parity
 
 The export gives every picker key a click equivalent, which makes this the
-first screen designed to the mouse-first epic's parity rule from the start:
+first screen designed to the mouse-first epic's parity rule from the start.
+
+**Revised by the user, after A2 shipped.** The export's map gave `⏎` two jobs
+(launch, and navigate when nothing was selected) and left entering a folder to
+`l`/`⇥`, which meant a repository could not be looked inside at all — a
+repository holding `projects/` was a dead end. The revision is three keys and
+one rule: **`⏎` selects, `→` goes inside, `←` comes back**. Anything that made
+those three ambiguous was removed rather than kept beside them.
 
 | Keys | Action | Pointer |
 | --- | --- | --- |
 | `↑↓` / `j` `k` | move cursor | hover |
-| `space` | toggle repo | click row |
-| `l` `⇥` `→` | enter folder | click name |
-| `h` `←` | go up | click `..` |
+| `⏎` / `space` | select the row · press again to let go | click row |
+| `→` / `l` `⇥` | go inside — a folder **or a repository** | click the row again |
+| `←` / `h` | back one level | — |
 | `~` / `g` | home · root | click crumb |
-| `a` `A` | all · recurse | click count |
+| `a` | all repos here | click count |
 | `m` | set master | click pane number |
-| `x` `X` | remove · clear | click `[n]` |
+| `x` `X` | remove the path · clear all | click `[n]` |
 | `+` | another instance of this path | click the `×N` badge |
 | `-` | drop the most recent instance | click the badge with the secondary button |
 | `/` | filter | click the filter slot |
-| `⏎` | launch | click the button |
-| `esc` | clear · quit | click away |
+| `o` | open the selection as terminals | click the button |
+| `esc` | clear the filter · quit | click away |
+
+Two consequences of the revision, both **Chosen** because the export cannot
+answer them:
+
+- **Launch moved to `o`.** `⏎` cannot both select a row and open the
+  selection, and select is the job the user gave it. The launch button reads
+  ` o  Open N as terminals ` and the status bar says `o open`, so the key is
+  stated wherever the action is.
+- **Any directory can be selected, not only a repository.** `⏎` selects "the
+  row's path", and a plain folder is a perfectly good working directory. `◆`
+  and `▸` still mean what they meant — the glyph says whether git is there,
+  not whether the row may be picked. A plain file still cannot be selected,
+  and neither can `..`.
+
+Because a single click selects, the pointer's "go inside" is a **second click
+on the same row**, which undoes the selection the first click made: the click
+was the user reaching for the folder, not for a pane. `click name` leaves the
+table for the same reason — with one click meaning select, a separate hit
+region inside the row would have made half of it do something else.
 
 `+` and `-` are **Chosen** (§0). They read as "one more of this / one fewer",
 they pair with the `+ add` affordance the export already puts in the session's
@@ -410,8 +437,8 @@ picker must not reuse: `^g z`, `^g c`, `^g [`, `^g 1-4`, `^g q`.
 **Contradiction in the export.** Screen 06's browse-panel title hint reads
 `h up · l enter · ~ home · / root`, but both the bottom bar and the key-map
 board give `/` to the filter and `~ / g` to `home · root`. **Chosen:** the key
-map board wins — `~` is home, `g` is root, `/` is filter. The panel hint is a
-typo for `g root`, and the implementation should draw it that way.
+map board wins — `~` is home, `g` is root, `/` is filter. The panel hint now
+reads `← back · → inside · ~ home · g root`, which is the revised map.
 
 ---
 

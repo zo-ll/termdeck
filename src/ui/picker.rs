@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 /// does whether it can be selected at all.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EntryKind {
-    /// `◆` — a git repository, the only selectable kind.
+    /// `◆` — a git repository.
     Repository,
     /// `▸` — a folder to enter.
     Folder,
@@ -89,15 +89,21 @@ impl Entry {
         self
     }
 
-    /// Only a repository joins a workspace. A folder is somewhere to go and a
-    /// file is only ever context.
+    /// Any directory can be a terminal's working directory, so a folder joins
+    /// a workspace on the same terms as a repository. A plain file is only
+    /// ever context, and `..` is a way out rather than a place to work.
     pub fn selectable(&self) -> bool {
-        self.kind == EntryKind::Repository
+        matches!(self.kind, EntryKind::Repository | EntryKind::Folder)
     }
 
-    /// Whether entering this row is what `⏎` and `l` mean on it.
+    /// Whether `→` can go inside this row. Every directory can be entered,
+    /// including a repository: a repository that holds `projects/` is a
+    /// perfectly ordinary folder to look inside.
     pub fn enterable(&self) -> bool {
-        matches!(self.kind, EntryKind::Folder | EntryKind::Parent)
+        matches!(
+            self.kind,
+            EntryKind::Repository | EntryKind::Folder | EntryKind::Parent
+        )
     }
 }
 
@@ -430,7 +436,10 @@ impl PickerState {
     /// left at the count it has.
     pub fn select_all(&mut self, rows: &[Entry]) -> bool {
         let mut added = false;
-        for entry in rows.iter().filter(|entry| entry.selectable()) {
+        for entry in rows
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Repository)
+        {
             if self.instances(&entry.path) == 0 {
                 added |= self.add(entry);
             }
@@ -635,10 +644,9 @@ const NAME_COLUMNS: usize = (COL_BADGE - COL_NAME) as usize;
 /// regions are named after the keys they stand in for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Hit {
-    /// The row's body — `space`.
+    /// The row's body — `⏎`. A second click on the same row descends into it,
+    /// which is the pointer's `→`.
     Row(usize),
-    /// The name of an enterable row — `l`.
-    Name(usize),
     /// The selection box — `x`.
     Box(usize),
     /// The `×N` badge — `+`.
@@ -802,17 +810,17 @@ impl Picker<'_> {
             &[
                 ("type", " to narrow  "),
                 ("↑↓", " move  "),
-                ("space", " toggle  "),
+                ("⏎", " select  "),
                 ("+/-", " instance  "),
                 ("esc", " clear filter"),
             ]
         } else {
             &[
                 ("↑↓", " move  "),
-                ("space", " toggle  "),
+                ("⏎", " select  "),
+                ("→", " inside  "),
+                ("←", " back  "),
                 ("+/-", " instance  "),
-                ("l/⇥", " enter  "),
-                ("h", " up  "),
                 ("a", " all repos here  "),
                 ("/", " filter"),
             ]
@@ -831,7 +839,7 @@ impl Picker<'_> {
     fn actions(&self, key: Style, hint: Style) -> Vec<Span<'static>> {
         vec![
             Span::styled(
-                "⏎",
+                "o",
                 if self.state.launchable() {
                     Style::new().fg(ACCENT).bg(STATUS_BG)
                 } else {
@@ -880,7 +888,7 @@ impl Picker<'_> {
         let hints = if self.state.filtering() {
             "⌫ edit · esc clear"
         } else {
-            "h up · l enter · ~ home · g root"
+            "← back · → inside · ~ home · g root"
         };
         self.inset(
             buffer,
@@ -944,7 +952,7 @@ impl Picker<'_> {
                             .count(),
                         self.entries()
                             .iter()
-                            .filter(|entry| entry.selectable())
+                            .filter(|entry| entry.kind == EntryKind::Repository)
                             .count()
                     ),
                     hint,
@@ -1028,7 +1036,7 @@ impl Picker<'_> {
             return vec![
                 (format!("cannot read {path}"), Style::new().fg(ERROR)),
                 (error.to_owned(), muted),
-                ("h go up · ~ home".to_owned(), muted),
+                ("← back · ~ home".to_owned(), muted),
             ];
         }
         if self.state.filtering() && self.entries().is_empty() {
@@ -1053,7 +1061,7 @@ impl Picker<'_> {
         if self.listing.is_empty_folder() {
             return vec![
                 ("empty folder".to_owned(), muted),
-                ("h go up · ~ home".to_owned(), muted),
+                ("← back · ~ home".to_owned(), muted),
             ];
         }
         Vec::new()
@@ -1329,7 +1337,7 @@ impl Picker<'_> {
                     content.x + 1,
                     y,
                     &Line::from(Span::styled(
-                        "nothing selected · ⏎ disabled",
+                        "nothing selected · o disabled",
                         Style::new().fg(MUTED),
                     )),
                     content.width,
@@ -1427,10 +1435,11 @@ impl Picker<'_> {
         );
         let count = self.state.selection().len();
         let label = match count {
-            // The export's own words for the disabled button.
-            0 => " ⏎  nothing selected ".to_owned(),
-            1 => " ⏎  Open 1 as terminal ".to_owned(),
-            _ => format!(" ⏎  Open {count} as terminals "),
+            // `o`, not `⏎`: since the picker's keys were simplified, `⏎` is
+            // what selects a row and `o` is what opens the selection.
+            0 => " o  nothing selected ".to_owned(),
+            1 => " o  Open 1 as terminal ".to_owned(),
+            _ => format!(" o  Open {count} as terminals "),
         };
         buffer.set_line(
             content.x + 1,
@@ -1533,7 +1542,6 @@ impl Picker<'_> {
         let column = pointer.x.saturating_sub(content.x);
         Some(match column {
             0..=2 => Hit::Box(index),
-            COL_NAME..COL_BADGE if entry.enterable() => Hit::Name(index),
             COL_BADGE..COL_SEPARATOR if self.state.instances(&entry.path) > 0 => Hit::Badge(index),
             _ => Hit::Row(index),
         })
@@ -1599,6 +1607,8 @@ pub fn press(
     }
     // While the query line is open the alphabet belongs to it, so the
     // selection keys are the ones that stay reachable.
+    // While the query line is open the alphabet belongs to it, so only the
+    // keys that are not letters stay reachable.
     if state.filtering()
         && let Key::Char(character) = key
         && !matches!(character, ' ' | '+' | '-')
@@ -1614,9 +1624,18 @@ pub fn press(
         Key::Up | Key::Char('k') => {
             state.move_cursor(-1, rows.len());
         }
-        Key::Char(' ') => {
+        // `⏎` selects the row under the cursor, and a second press on the
+        // same row lets it go again. `space` is the same key by another name.
+        Key::Enter | Key::Char(' ') => {
             if let Some(entry) = cursor.as_ref() {
                 state.toggle(entry);
+            }
+        }
+        // `o` opens what has been selected. `⏎` used to, and cannot any
+        // more: it is the select key now.
+        Key::Char('o') => {
+            if state.launchable() {
+                return Some(PickerReaction::Launch);
             }
         }
         Key::Char('+') => {
@@ -1629,11 +1648,14 @@ pub fn press(
                 state.drop_one(entry);
             }
         }
+        // `→` goes inside whatever the cursor is on — a folder or a
+        // repository, since a repository is a folder that also holds a `.git`.
         Key::Right | Key::Tab | Key::Char('l') => {
             if let Some(entry) = cursor.as_ref() {
                 state.enter(entry);
             }
         }
+        // `←` comes back out.
         Key::Left | Key::Char('h') => {
             state.up(roots);
         }
@@ -1669,23 +1691,26 @@ pub fn press(
             state.pop_filter();
         }
         // The note: `esc` clears the filter, and only a second one quits.
-        Key::Escape => {
-            if !state.clear_filter() {
-                return Some(PickerReaction::Quit);
-            }
-        }
-        Key::Enter => {
-            if state.launchable() {
-                return Some(PickerReaction::Launch);
-            }
-            // "With nothing selected … ⏎ on a folder navigates instead."
-            if let Some(entry) = cursor.as_ref() {
-                state.enter(entry);
-            }
-        }
+        Key::Escape if !state.clear_filter() => return Some(PickerReaction::Quit),
+        Key::Escape => {}
         _ => {}
     }
     None
+}
+
+/// The pointer's `→`: a second click on a row it is already on goes inside
+/// it. One click selects (the pointer's `⏎`), two descend.
+pub fn descend(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
+    let Hit::Row(index) = hit else {
+        return false;
+    };
+    let Some(entry) = rows.get(index).cloned() else {
+        return false;
+    };
+    // The first click of the pair selected it; going inside undoes that,
+    // because the click was the user reaching for the folder, not for a pane.
+    state.toggle(&entry);
+    state.enter(&entry)
 }
 
 /// The secondary button's own gesture: on the `×N` badge it is `-`, which
@@ -1710,11 +1735,6 @@ pub fn click(state: &mut PickerState, rows: &[Entry], hit: Hit) -> Option<Picker
             let entry = rows.get(index).cloned()?;
             state.point_at(index, rows.len());
             state.toggle(&entry);
-        }
-        Hit::Name(index) => {
-            let entry = rows.get(index).cloned()?;
-            state.point_at(index, rows.len());
-            state.enter(&entry);
         }
         Hit::Box(index) => {
             let entry = rows.get(index).cloned()?;
@@ -2227,16 +2247,98 @@ mod tests {
         assert_eq!(state.selection().len(), 6, "5 repos, one of them twice");
     }
 
-    /// Only a repository joins a workspace; a folder is somewhere to go.
+    /// Any directory can be a terminal, so a folder joins a workspace on the
+    /// same terms as a repository. A plain file cannot, and neither can `..`.
     #[test]
-    fn folders_and_files_are_not_selectable() {
+    fn any_directory_can_be_selected_but_a_file_cannot() {
         let mut state = browsing();
 
-        assert!(!state.toggle(&entry(&state, "archive")));
-        assert!(!state.toggle(&entry(&state, "README.md")));
+        assert!(!state.toggle(&entry(&state, "README.md")), "a file");
+        assert!(!state.toggle(&entry(&state, "..")), "a way out, not a pane");
         assert!(!state.launchable());
-        assert!(state.toggle(&entry(&state, "termdeck")));
+
+        assert!(state.toggle(&entry(&state, "archive")), "a plain folder");
+        assert!(state.toggle(&entry(&state, "termdeck")), "a repository");
+        assert_eq!(state.selection().len(), 2);
         assert!(state.launchable());
+    }
+
+    /// `⏎` selects the row under the cursor, and pressing it again lets go.
+    #[test]
+    fn enter_selects_the_row_and_a_second_press_deselects_it() {
+        let mut state = browsing();
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+        state.point_at(index, rows.len());
+
+        assert_eq!(press(&mut state, &rows, &roots, Key::Enter), None);
+        assert_eq!(state.selection().len(), 1);
+        assert_eq!(state.selection()[0].name, "horizon-frontend");
+
+        assert_eq!(press(&mut state, &rows, &roots, Key::Enter), None);
+        assert!(state.selection().is_empty(), "the second press lets go");
+        assert_eq!(
+            state.cwd(),
+            Some(code().as_path()),
+            "and neither press moved anywhere"
+        );
+    }
+
+    /// `→` goes inside whatever the cursor is on, repository or not — the
+    /// case a repository holding `projects/` used to make impossible.
+    #[test]
+    fn the_right_arrow_goes_inside_a_repository_as_well_as_a_folder() {
+        let roots = Fixture.roots();
+        for (name, expected) in [
+            ("termdeck", code().join("termdeck")),
+            ("archive", code().join("archive")),
+        ] {
+            let mut state = browsing();
+            let rows = rows_of(&state);
+            let index = rows.iter().position(|entry| entry.name == name).unwrap();
+            state.point_at(index, rows.len());
+
+            press(&mut state, &rows, &roots, Key::Right);
+
+            assert_eq!(state.cwd(), Some(expected.as_path()), "inside {name}");
+            assert!(state.selection().is_empty(), "going inside selects nothing");
+        }
+    }
+
+    /// `←` comes back out again.
+    #[test]
+    fn the_left_arrow_goes_back_one_level() {
+        let mut state = PickerState::at(code().join("termdeck"));
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+
+        press(&mut state, &rows, &roots, Key::Left);
+
+        assert_eq!(state.cwd(), Some(code().as_path()));
+    }
+
+    /// `o` is what opens the selection now that `⏎` selects.
+    #[test]
+    fn o_opens_the_selection_and_only_once_there_is_one() {
+        let mut state = browsing();
+        let roots = Fixture.roots();
+        let rows = rows_of(&state);
+
+        assert_eq!(
+            press(&mut state, &rows, &roots, Key::Char('o')),
+            None,
+            "nothing selected, nothing to open"
+        );
+
+        select(&mut state, "termdeck");
+        assert_eq!(
+            press(&mut state, &rows, &roots, Key::Char('o')),
+            Some(PickerReaction::Launch)
+        );
     }
 
     /// Navigation: `l` enters, `h` climbs, `~` returns to the roots, and none
@@ -2326,28 +2428,25 @@ mod tests {
         assert!(!names.contains(&"termdeck"), "{names:?}");
     }
 
-    /// `⏎` launches once something is selected; with nothing selected it
-    /// navigates instead, and the button says it is disabled.
+    /// The pointer follows the same two keys: one click selects, a second on
+    /// the same row goes inside it.
     #[test]
-    fn enter_launches_only_once_something_is_selected() {
+    fn a_second_click_on_a_row_goes_inside_it() {
         let mut state = browsing();
-        let roots = Fixture.roots();
         let rows = rows_of(&state);
-        state.point_at(1, rows.len());
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
 
-        assert_eq!(press(&mut state, &rows, &roots, Key::Enter), None);
-        assert_eq!(
-            state.cwd(),
-            Some(code().join("archive").as_path()),
-            "it entered the folder under the cursor"
-        );
+        click(&mut state, &rows, Hit::Row(index));
+        assert_eq!(state.selection().len(), 1, "one click selects");
 
-        let mut state = browsing();
-        select(&mut state, "termdeck");
-        let rows = rows_of(&state);
-        assert_eq!(
-            press(&mut state, &rows, &roots, Key::Enter),
-            Some(PickerReaction::Launch)
+        assert!(descend(&mut state, &rows, Hit::Row(index)));
+        assert_eq!(state.cwd(), Some(code().join("termdeck").as_path()));
+        assert!(
+            state.selection().is_empty(),
+            "the click that opened it was not a selection after all"
         );
     }
 
@@ -2419,7 +2518,7 @@ mod tests {
         let rendered = text(&render(&state));
         assert!(rendered.contains("cannot read ~/code/secret"), "{rendered}");
         assert!(rendered.contains("Permission denied"), "{rendered}");
-        assert!(rendered.contains("h go up · ~ home"), "the way out");
+        assert!(rendered.contains("← back · ~ home"), "the way out");
         assert!(!rendered.contains("empty folder"), "{rendered}");
         // And the row that leads out of it is still drawn.
         assert!(rendered.contains("▴  .."), "{rendered}");
@@ -2437,7 +2536,7 @@ mod tests {
 
         let rendered = text(&render(&state));
         assert!(rendered.contains("empty folder"), "{rendered}");
-        assert!(rendered.contains("h go up · ~ home"), "{rendered}");
+        assert!(rendered.contains("← back · ~ home"), "{rendered}");
         assert!(!rendered.contains("cannot read"), "{rendered}");
         assert!(rendered.contains("▴  .."), "{rendered}");
     }
@@ -2605,7 +2704,7 @@ mod tests {
             rendered.contains("horizon-frontend-2"),
             "the panel lists it"
         );
-        assert!(rendered.contains("⏎  Open 3 as terminals"), "{rendered}");
+        assert!(rendered.contains("o  Open 3 as terminals"), "{rendered}");
         assert_snapshot("picker-selected", &buffer);
     }
 
@@ -2635,7 +2734,7 @@ mod tests {
 
         assert!(rendered.contains("ROOTS"), "{rendered}");
         assert!(
-            rendered.contains("nothing selected · ⏎ disabled"),
+            rendered.contains("nothing selected · o disabled"),
             "{rendered}"
         );
         assert_snapshot("picker-roots", &buffer);

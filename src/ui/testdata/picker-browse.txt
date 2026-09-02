@@ -1,7 +1,7 @@
     termdeck   no workspace open  ·  pick repositories to start                                                   ~/code › 3 roots configured   
                                                                                                                                                 
-┌── > browse  ·  ~/code  ·  h up · l enter · ~ home · g root ──────────── filter (/ to search) ──┐  ┌── selected · 0 ────── order = pane no. ──┐
-│   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ nothing selected · ⏎ disabled            │
+┌── > browse  ·  ~/code  ·  ← back · → inside · ~ home · g root ───────── filter (/ to search) ──┐  ┌── selected · 0 ────── order = pane no. ──┐
+│   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ nothing selected · o disabled            │
 │   ────────────────────────────────────────────────────────────────────────────────────────     │  │                                          │
 │[ ] ▴  ..                                                                                       │  │                                          │
 │[ ] ▸  archive/                  · 3 items · no repos                                           │  │                                          │
@@ -36,7 +36,7 @@
 │                                                                                                │  │ workspace name                           │
 │   ─── cursor on .. ────────────────────────────────────────────────────────────────────        │  │  code   e rename                         │
 │   ~                                                                                            │  │                                          │
-│                                                                                                │  │  ⏎  nothing selected                     │
+│                                                                                                │  │  o  nothing selected                     │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
                                                                                                                                                 
-   ↑↓ move  space toggle  +/- instance  l/⇥ enter  h up  a all repos here  / filter                                          ⏎ open  esc quit   
+   ↑↓ move  ⏎ select  → inside  ← back  +/- instance  a all repos here  / filter                                             o open  esc quit   

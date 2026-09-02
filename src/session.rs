@@ -56,6 +56,8 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
     let mut keys = KeyReader::default();
     let browser = FsBrowse::new(roots);
     let mut state = PickerState::new();
+    // The pointer's `→`: a second click on the row it is already on.
+    let mut last_click: Option<(usize, Timestamp)> = None;
     let mut dirty = true;
     let chosen = 'picker: loop {
         if SIGNAL.swap(0, Ordering::SeqCst) != 0 {
@@ -97,7 +99,27 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
                     };
                     let hit = view.hit(area, pointer);
                     match (hit, action) {
-                        (Some(hit), MouseAction::Up) => picker::click(&mut state, &rows, hit),
+                        (Some(hit), MouseAction::Up) => {
+                            // One click selects; a second on the same row
+                            // goes inside it, which is what `→` does.
+                            let now = now();
+                            let again = matches!((hit, last_click), (
+                                crate::ui::Hit::Row(row),
+                                Some((previous, at)),
+                            ) if row == previous
+                                && now.unix_millis.saturating_sub(at.unix_millis)
+                                    < DOUBLE_CLICK_WINDOW);
+                            last_click = match hit {
+                                crate::ui::Hit::Row(row) if !again => Some((row, now)),
+                                _ => None,
+                            };
+                            if again {
+                                picker::descend(&mut state, &rows, hit);
+                                None
+                            } else {
+                                picker::click(&mut state, &rows, hit)
+                            }
+                        }
                         (Some(hit), _) => {
                             picker::click_secondary(&mut state, &rows, hit);
                             None
