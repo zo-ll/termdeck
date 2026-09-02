@@ -423,9 +423,11 @@ mod tests {
     #[test]
     fn shutdown_terms_all_groups_then_kills_survivors_and_joins_threads() {
         let terminal = TerminalId::new("stubborn");
+        // Ignores both signals shutdown asks with (#46 added HUP beside
+        // TERM), so it is still the pane that has to be killed.
         let projects = [project(
             terminal.clone(),
-            "trap '' TERM; printf READY; while :; do sleep 1; done",
+            "trap '' TERM HUP; printf READY; while :; do sleep 1; done",
         )];
         let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
         wait_for_frame(&mut engine, &terminal, "READY");
@@ -443,6 +445,40 @@ mod tests {
         ));
         let transport = engine.terminals[0].transport.as_ref().unwrap();
         assert!(!transport.is_process_group_alive());
+        assert!(transport.has_joined_threads());
+    }
+
+    /// Issue #46: a confirmed quit waited out the whole grace period, because
+    /// every pane is an interactive shell and an interactive shell ignores
+    /// SIGTERM by design. Shutdown hangs up as well, which is the signal a
+    /// shell answers, so a workspace of shells closes at once.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_workspace_of_interactive_shells_closes_without_waiting_out_the_grace() {
+        // The real thing, not `sh -c`: only an interactive shell ignores TERM.
+        let terminal = TerminalId::new("shell");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec!["/bin/sh".to_owned()],
+        }];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: b"printf READY\n".to_vec(),
+        });
+        wait_for_frame(&mut engine, &terminal, "READY");
+        let started = Instant::now();
+
+        engine.dispatch(EngineCommand::Shutdown);
+
+        assert!(
+            started.elapsed() < SHUTDOWN_GRACE / 2,
+            "an interactive shell should hang up at once, took {:?}",
+            started.elapsed()
+        );
+        let transport = engine.terminals[0].transport.as_ref().unwrap();
+        assert!(!transport.is_process_group_alive(), "no orphaned shell");
         assert!(transport.has_joined_threads());
     }
 

@@ -127,7 +127,8 @@ impl PtyTransport {
             .unwrap_or_default()
     }
 
-    /// Terminates one process group and waits through the normal grace period.
+    /// Hangs up and terminates one process group, then waits through the
+    /// normal grace period.
     pub fn shutdown(&mut self) -> Result<(), String> {
         if self.events.is_none() {
             return Ok(());
@@ -146,12 +147,26 @@ impl PtyTransport {
     }
 
     /// Starts shutdown without waiting. This permits a multi-terminal owner to
-    /// send TERM to every process group before using one shared grace period.
+    /// signal every process group before using one shared grace period.
+    ///
+    /// Both HUP and TERM go out, in that order, because a workspace's panes
+    /// are shells and **an interactive shell ignores SIGTERM by design**
+    /// (POSIX: an interactive shell shall ignore SIGTERM so that a stray kill
+    /// cannot drop the user's session). TERM alone therefore leaves every
+    /// pane running until the grace period expires and SIGKILL lands, which
+    /// is what made a confirmed quit hang for the full two seconds (#46).
+    ///
+    /// HUP is what a closing terminal delivers, and it is the signal a shell
+    /// does answer: it exits, running its logout path on the way out. TERM
+    /// still follows it, so a pane running something that cleans up on TERM
+    /// gets what it expects, and the grace period and the SIGKILL escalation
+    /// behind it are unchanged.
     pub fn request_shutdown(&mut self) -> Result<(), String> {
         self.events.take();
         #[cfg(unix)]
         if let Some(process_group) = self.process_group {
-            return send_signal(process_group, libc::SIGTERM);
+            let hangup = send_signal(process_group, libc::SIGHUP);
+            return hangup.and(send_signal(process_group, libc::SIGTERM));
         }
 
         self.killer.kill().map_err(|error| error.to_string())
