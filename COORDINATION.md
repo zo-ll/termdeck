@@ -59,11 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-01: #34b done (claude, `3a9175a`: scrolled window over preview
-  list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
-  follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
-  in critic review; branch base predates #36/#37, integration onto main after
-  review.
 - 2026-09-01: #34b integration done (claude; merge 307ca80, help.txt resolved
   from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
   close #34.
@@ -177,6 +172,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   (Skills: lean rewrite committed+pushed.)
 - 2026-09-02: #44 (stacked previews start at minimal width) dispatched to claude (same session; coord/44-min-stack).
 - 2026-09-02: #44 done (claude `c1d614f`: min-width start 0.85, examples stop pinning 0.70 so override works, strip degrades at 15% instead of truncating, zero fixtures re-blessed, fresh-start.txt; 157 tests) — in critic review.
+- 2026-09-02: #44 critic PASS → pushed coord/44-min-stack → PR #45, awaiting user approval.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

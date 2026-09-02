@@ -422,3 +422,8 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   defined carefully vs #25 wheel; hit-testing by list offset; scroll
   indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
   working (#34a codex, #34b claude).
+- 2026-09-01: #34b done (claude, `3a9175a`: scrolled window over preview
+  list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
+  follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
+  in critic review; branch base predates #36/#37, integration onto main after
+  review.
