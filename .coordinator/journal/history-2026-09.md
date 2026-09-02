@@ -417,3 +417,8 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   before #34b. #34b still with claude.
 - 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
   critic review.
+- 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
+  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
+  defined carefully vs #25 wheel; hit-testing by list offset; scroll
+  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
+  working (#34a codex, #34b claude).

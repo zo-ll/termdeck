@@ -59,11 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
-  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
-  defined carefully vs #25 wheel; hit-testing by list offset; scroll
-  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
-  working (#34a codex, #34b claude).
 - 2026-09-01: #34b done (claude, `3a9175a`: scrolled window over preview
   list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
   follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
@@ -181,6 +176,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   check test for ratio constants; 152 tests). Re-review handed to the critic.
   (Skills: lean rewrite committed+pushed.)
 - 2026-09-02: #44 (stacked previews start at minimal width) dispatched to claude (same session; coord/44-min-stack).
+- 2026-09-02: #44 done (claude `c1d614f`: min-width start 0.85, examples stop pinning 0.70 so override works, strip degrades at 15% instead of truncating, zero fixtures re-blessed, fresh-start.txt; 157 tests) — in critic review.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
