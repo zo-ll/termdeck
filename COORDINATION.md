@@ -558,3 +558,4 @@ scope.
 - 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
   expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
   critic review.
+- 2026-09-02: #39 critic PASS → pushed → PR opened. Awaiting user approval.
