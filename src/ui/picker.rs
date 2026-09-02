@@ -556,7 +556,7 @@ impl PickerState {
         renaming
     }
 
-    /// Whether `⏎` can launch. The note: with nothing selected the button
+    /// Whether `o` can launch. The note: with nothing selected the button
     /// renders `disabled`.
     pub fn launchable(&self) -> bool {
         !self.selection.is_empty()
@@ -653,7 +653,7 @@ pub enum Hit {
     Badge(usize),
     /// A pane number in the selection panel — `m`.
     Pane(usize),
-    /// The launch button — `⏎`.
+    /// The launch button — `o`.
     Launch,
     /// The filter slot — `/`.
     Filter,
@@ -774,7 +774,7 @@ impl Picker<'_> {
                 Style::new().fg(PREVIEW_FG).bg(STATUS_BG),
             ));
             spans.push(Span::styled("  ·  ", hint));
-            spans.push(Span::styled("⏎ opens them", hint));
+            spans.push(Span::styled("o opens them", hint));
         } else {
             spans.push(Span::styled("  no workspace open  ·  ", hint));
             spans.push(Span::styled(
@@ -1236,7 +1236,7 @@ impl Picker<'_> {
                 ]),
                 content.width,
             );
-            let escape = "esc clear · ⏎ accept";
+            let escape = "esc clear · ⏎ select";
             buffer.set_line(
                 content.x + content.width - escape.chars().count() as u16 - INSET,
                 y,

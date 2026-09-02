@@ -244,7 +244,7 @@ twice.
 - **`a` and `A` stay idempotent.** Selecting every repo in a folder leaves a
   repo that is already selected at whatever count it has: a bulk key must not
   multiply what a deliberate one built.
-- **Every count is an instance count.** `selected · 4`, `⏎ Open 4 as
+- **Every count is an instance count.** `selected · 4`, `o Open 4 as
   terminals`, and `selection kept (4)` all count panes, not distinct repos.
   The listing's own `9 items · 5 repos` still counts what is on disk.
 
@@ -271,8 +271,9 @@ by exactly the thing that distinguishes the panes:
 ```
 
 The selection panel also carries the **workspace name** — a chip in accent,
-`e` to rename — and the launch button `⏎  Open N as terminals`, both pinned to
-the bottom of the panel.
+`e` to rename — and the launch button `o  Open N as terminals`, both pinned to
+the bottom of the panel. (The export drew `⏎` on that button; §7's revision
+moved launch to `o`, and everything that names the key follows it.)
 
 **Ambiguity.** The export shows the name `idp` for a selection of `horizon-*`
 repos under `~/code`, so the default name is derivable from neither the root
@@ -293,7 +294,7 @@ in what order; everything else about a terminal stays configuration's business.
 `/` opens a query line **pinned to the bottom of the listing — never a modal**:
 
 ```
-   /hor                                              esc clear · ⏎ accept
+   /hor                                              esc clear · ⏎ select
 ```
 
 - Matching substrings highlight in `ACCENT` inside the row's name
@@ -307,8 +308,9 @@ in what order; everything else about a terminal stays configuration's business.
   implementation: the query has to reach every configured root, not just the
   current listing.
 - The top bar reflects the mode (`filtering · 3 selected`), and the bottom bar
-  swaps to filter keys (`type to narrow · ↑↓ move · space toggle · esc clear
-  filter · ⏎ open · esc esc quit`).
+  swaps to filter keys (`type to narrow · ↑↓ move · ⏎ select · +/- instance ·
+  esc clear filter`, with `o open · esc esc quit` on the right). The export
+  wrote that row before the key map was revised; §7 is what it says now.
 
 `esc` clears the filter; a second `esc` quits — the export spells out the
 double press, so a filtered picker never quits on the first `esc`.
@@ -324,7 +326,7 @@ of them clears the selection**:
 | --- | --- | --- |
 | Zero results | `MATCH zzq · 0 of 9`, `no match for zzq`, `in ~/code or 3 other roots` | `⌫ edit · esc clear`, and `selection kept (3)` is printed |
 | Empty folder | the path, `..`, `empty folder` | `h go up · ~ home` |
-| At root, nothing selected | `ROOTS` and the configured roots as folder rows with repo counts (`~/code · 5 repos`) | `nothing selected · ⏎ disabled` |
+| At root, nothing selected | `ROOTS` and the configured roots as folder rows with repo counts (`~/code · 5 repos`) | `nothing selected · o disabled` |
 | **Unreadable folder** (added in A2) | `cannot read ~/code/secret` in `ERROR`, then the reason the filesystem gave | `h go up · ~ home` |
 
 The root list is the picker's own top level: the configured roots are drawn as
@@ -365,8 +367,9 @@ three differences, per the spec board:
 
 `⇧⇥` cycles configured roots in place (the sheet has no room for a browse
 crumb), the sheet header reads `ROOT ~/work · 12 repos · 4 already open`, and
-the filter line works exactly as in §4. The launch line reads `⏎  Add N
-terminal(s)`.
+the filter line works exactly as in §4. The launch line reads `o  Add N
+terminal(s)` — A3 inherits §7's revised map, so `⏎` marks a row there too and
+`o` is what commits the sheet.
 
 The affordance lives in the **status bar**: `> 1 frontend · + add`, and the
 spec board says clicking the `+` opens the same sheet — *"No corner buttons, no

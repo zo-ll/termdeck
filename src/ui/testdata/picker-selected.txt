@@ -1,4 +1,4 @@
-    termdeck   3 selected  ·  ⏎ opens them                                                                        ~/code › 3 roots configured   
+    termdeck   3 selected  ·  o opens them                                                                        ~/code › 3 roots configured   
                                                                                                                                                 
 ┌── > browse  ·  ~/code  ·  ← back · → inside · ~ home · g root ───────── filter (/ to search) ──┐  ┌── selected · 3 ────── order = pane no. ──┐
 │   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ 1 horizon-frontend  MASTER               │
