@@ -102,3 +102,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: RESPAWN RECIPE FIXED (user catch): codex restores must keep
   `-c model_reasoning_effort=high` (a restore dropped it to medium). The
   49-nb2 test was produced by the medium session (accepted, test-only).
+- 2026-09-02: #63 BLOCK (critic): the NB test over-claimed sheet range
+  (no input route exists) — re-scope to a state-level parity pin routed to
+  codex (correction). Critic finish-protocol slipped (no ping/marker) —
+  reminder re-sent. Target: re-review then merge #63.
