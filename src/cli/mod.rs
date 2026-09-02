@@ -154,6 +154,25 @@ pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>
     }
 }
 
+/// The roots the picker browses when `termdeck` is given no path.
+///
+/// The picker's design note leaves the schema to configuration and consumes a
+/// resolved list; until a `roots:` key exists, that list is the working
+/// directory and the user's home, which is where a folder browser opened with
+/// no argument is expected to start.
+pub fn picker_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(cwd) = env::current_dir() {
+        roots.push(cwd);
+    }
+    if let Some(home) = CliEnvironment::from_environment().home
+        && !roots.contains(&home)
+    {
+        roots.push(home);
+    }
+    roots
+}
+
 /// Finds direct repositories and repositories in the conventional component
 /// folders. The returned projects can be passed directly to `Workspace`.
 pub fn discover(root: &Path) -> Result<Vec<Project>, CliError> {

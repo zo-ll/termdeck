@@ -21,9 +21,15 @@ use ratatui::{
 
 use crate::{
     config::Workspace,
-    contracts::{EngineCommand, ScreenSize, ScrollCommand, TerminalEngine, Timestamp, UserCommand},
+    contracts::{
+        EngineCommand, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId, Timestamp,
+        UserCommand,
+    },
     engine::NativeEngine,
-    ui::{Deck, DeckState, Input, Key, Reaction},
+    ui::{
+        Browse, Deck, DeckState, FsBrowse, Input, Key, Picker, PickerReaction, PickerState,
+        Reaction, picker,
+    },
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
@@ -34,6 +40,100 @@ static SIGNAL: AtomicI32 = AtomicI32::new(0);
 static SAVED_TERMIOS: OnceLock<Mutex<Option<libc::termios>>> = OnceLock::new();
 type PanicHook = Box<dyn Fn(&panic::PanicHookInfo<'_>) + Send + Sync + 'static>;
 static SAVED_PANIC_HOOK: OnceLock<Mutex<Option<PanicHook>>> = OnceLock::new();
+
+/// Runs the repository picker: what `termdeck` opens when it is given no
+/// path (#42 A2). Returns the workspace the user chose, or `None` if they
+/// left without choosing one.
+///
+/// No engine is spawned here — nothing has been picked yet, so there is
+/// nothing to run. The picker only reads the filesystem through its browser
+/// and hands back an ordered list of terminals.
+pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn Error>> {
+    let _panic = PanicGuard::install();
+    let _signals = SignalGuard::install()?;
+    let outer = OuterTerminal::enter()?;
+    let mut terminal = Terminal::new(AnsiBackend::new()?)?;
+    let mut keys = KeyReader::default();
+    let browser = FsBrowse::new(roots);
+    let mut state = PickerState::new();
+    let mut dirty = true;
+    let chosen = 'picker: loop {
+        if SIGNAL.swap(0, Ordering::SeqCst) != 0 {
+            break None;
+        }
+        let roots = Browse::roots(&browser);
+        let rows = state.rows(&browser);
+        let size = screen_size()?;
+        if dirty {
+            let height = usize::from(size.rows.saturating_sub(12));
+            state.follow_cursor(height);
+            terminal.autoresize()?;
+            terminal.draw(|frame| {
+                Picker {
+                    state: &state,
+                    rows: &rows,
+                    roots: &roots,
+                    home: browser.home(),
+                    elsewhere: 0,
+                }
+                .render(frame);
+            })?;
+            dirty = false;
+        }
+        for event in keys.read(POLL_INTERVAL)? {
+            dirty = true;
+            let reaction = match event {
+                InputEvent::Key(key) => picker::press(&mut state, &rows, &roots, key),
+                InputEvent::Mouse {
+                    pointer,
+                    action: MouseAction::Up,
+                } => {
+                    let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
+                    let view = Picker {
+                        state: &state,
+                        rows: &rows,
+                        roots: &roots,
+                        home: browser.home(),
+                        elsewhere: 0,
+                    };
+                    view.hit(area, pointer)
+                        .and_then(|hit| picker::click(&mut state, &rows, hit))
+                }
+                _ => None,
+            };
+            match reaction {
+                Some(PickerReaction::Launch) => break 'picker Some(workspace_of(&state)),
+                Some(PickerReaction::Quit) => break 'picker None,
+                None => {}
+            }
+        }
+    };
+    drop(outer);
+    Ok(chosen)
+}
+
+/// Turns the picker's ordered `(name, path)` pairs into the workspace the
+/// session opens. The first pair is pane 1 and therefore the master.
+fn workspace_of(state: &PickerState) -> Workspace {
+    let projects: Vec<Project> = state
+        .launch()
+        .into_iter()
+        .map(|(name, path)| Project {
+            terminal: TerminalId::new(name),
+            path,
+            command: vec!["bash".to_owned(), "-l".to_owned()],
+        })
+        .collect();
+    let root = projects
+        .first()
+        .map(|project| project.path.clone())
+        .unwrap_or_default();
+    let mut workspace = Workspace::discovered(root, projects);
+    if !state.workspace().is_empty() {
+        workspace.name = state.workspace().to_owned();
+    }
+    workspace
+}
 
 /// Runs an already validated workspace. Configuration is deliberately loaded
 /// before this point, so no PTY exists when validation fails.
