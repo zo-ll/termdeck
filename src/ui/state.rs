@@ -29,7 +29,8 @@ pub enum Modal {
 ///
 /// `collapsed` is indexed by configured position rather than by slot, so a
 /// fold travels with its terminal: the export's "collapse state persists per
-/// workspace and survives promotion".
+/// workspace and survives promotion". Every terminal starts folded except the
+/// one that opens as master, per issue #39.
 ///
 /// `stack_offset` is the index into `stack()` of the first preview the stack
 /// column draws. The list can hold more previews than the column has rows, so
@@ -48,11 +49,23 @@ pub struct DeckState {
 }
 
 impl DeckState {
-    /// Starts with the first configured terminal as master, per the plan.
+    /// Starts with the first configured terminal as master, per the plan, and
+    /// every preview folded to its strip, per issue #39.
+    ///
+    /// The invariant the fold flags carry is "a pane that has held the master
+    /// frame is open": [`DeckState::promote`] clears the flag of whatever it
+    /// promotes, and the terminal that opens as master has held the frame
+    /// since the first one, so it carries no fold to come back to when it is
+    /// demoted. Every other terminal has only ever been a preview, and a
+    /// preview now starts folded.
     pub fn new(terminals: usize) -> Self {
+        let mut collapsed = vec![true; terminals];
+        if let Some(master) = collapsed.first_mut() {
+            *master = false;
+        }
         Self {
             order: (0..terminals).collect(),
-            collapsed: vec![false; terminals],
+            collapsed,
             zoomed: false,
             scrollback: false,
             modal: None,
@@ -123,6 +136,8 @@ impl DeckState {
 
     /// `^g c`: the master is always the selected pane, so this collapses every
     /// preview at once, and expands them all again once none is left open.
+    /// Previews now start folded (#39), so on a fresh run the first press is
+    /// the expand-all half of that toggle.
     pub fn toggle_collapse_all(&mut self) -> bool {
         let stack = self.stack().to_vec();
         if stack.is_empty() {
@@ -506,16 +521,19 @@ mod tests {
         assert!(!state.close_modal());
     }
 
+    /// #39 inverted the default, so the same toggle now opens the stack on
+    /// its first press and folds it again on the second.
     #[test]
-    fn collapse_all_folds_every_preview_then_expands_them_again() {
+    fn collapse_all_expands_every_preview_then_folds_them_again() {
         let mut state = DeckState::new(4);
+        assert_eq!(state.collapsed_count(), 3, "a fresh deck is all strips");
+
+        assert!(state.toggle_collapse_all());
+        assert_eq!(state.collapsed_count(), 0);
 
         assert!(state.toggle_collapse_all());
         assert_eq!(state.collapsed_count(), 3);
         assert!(state.collapsed(1) && state.collapsed(2) && state.collapsed(3));
-
-        assert!(state.toggle_collapse_all());
-        assert_eq!(state.collapsed_count(), 0);
     }
 
     /// From a mixed stack the first press finishes the job rather than
@@ -523,7 +541,9 @@ mod tests {
     #[test]
     fn collapse_all_closes_what_is_left_open_before_it_reopens_anything() {
         let mut state = DeckState::new(4);
+        // One preview open against two default folds is a mixed stack.
         state.toggle_collapse(2);
+        assert_eq!(state.collapsed_count(), 2);
 
         assert!(state.toggle_collapse_all());
 
@@ -536,7 +556,12 @@ mod tests {
 
         assert!(!state.toggle_collapse(0));
         assert!(!state.toggle_collapse(9));
-        assert_eq!(state.collapsed_count(), 0);
+        assert!(!state.collapsed(0), "the master is drawn open either way");
+        assert_eq!(
+            state.collapsed_count(),
+            3,
+            "the refused toggles left the stack as it started"
+        );
     }
 
     #[test]
@@ -551,31 +576,34 @@ mod tests {
     /// it takes the master frame."
     #[test]
     fn promoting_a_folded_preview_expands_it_and_leaves_the_others_folded() {
+        // Since #39 a fresh deck is already the folded stack this describes.
         let mut state = DeckState::new(4);
-        state.toggle_collapse_all();
 
         apply(&mut state, ActionCommand::SelectPosition(2));
 
         assert_eq!(state.active(), Some(2));
         assert!(!state.collapsed(2), "a master is never folded");
         assert!(state.collapsed(1) && state.collapsed(3));
-        // The demoted old master lands in the vacated slot, still open.
+        // The demoted old master lands in the vacated slot, still open: it
+        // has held the master frame, so it carries no fold to come back to.
         assert!(!state.collapsed(0));
     }
 
     /// The export: "collapse state persists per workspace and survives
-    /// promotion."
+    /// promotion." Since #39 that cuts both ways: the fold a preview starts
+    /// with travels, and so does an expansion the user made.
     #[test]
     fn a_fold_travels_with_its_terminal_across_promotions() {
-        let mut state = DeckState::new(4);
-        state.toggle_collapse(3);
+        let mut state = DeckState::new(5);
+        state.toggle_collapse(4);
 
         apply(&mut state, ActionCommand::SelectPosition(1));
         apply(&mut state, ActionCommand::SelectPosition(2));
 
+        assert!(!state.collapsed(4), "the opened pane stays open");
         assert!(
             state.collapsed(3),
-            "worker is still folded wherever it sits"
+            "the untouched pane is still folded wherever it sits"
         );
         assert_eq!(state.collapsed_count(), 1);
     }
@@ -588,7 +616,8 @@ mod tests {
         apply(&mut state, ActionCommand::ToggleZoom);
         apply(&mut state, ActionCommand::ToggleZoom);
 
-        assert!(state.collapsed(2));
+        assert!(!state.collapsed(2), "the opened preview is still open");
+        assert!(state.collapsed(3), "and the folded one is still folded");
     }
 
     /// The window onto the preview list is state; how far it can travel is

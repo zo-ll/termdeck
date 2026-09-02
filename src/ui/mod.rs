@@ -1507,6 +1507,11 @@ impl Deck<'_> {
         // While a fold is in play the row advertises the key that undoes it.
         // The export drops the scrollback hint and seats collapse ahead of
         // zoom rather than in the slot scrollback vacated.
+        //
+        // Zoom hides the stack outright, so the fold is inert and unstated
+        // there — the spec's "the zoom status line ... says nothing about
+        // collapse". Since #39 every run starts folded, so without this the
+        // zoomed row would trade its live `^g [` for an inert `^g c`.
         let folded: [(&str, &str); 6] = [
             KEY_HINTS[0],
             KEY_HINTS[1],
@@ -1515,7 +1520,7 @@ impl Deck<'_> {
             KEY_HINTS[4],
             KEY_HINTS[5],
         ];
-        let entries = if self.state.collapsed_count() > 0 {
+        let entries = if self.state.collapsed_count() > 0 && layout != Layout::Zoom {
             folded
         } else {
             KEY_HINTS
@@ -2003,13 +2008,15 @@ mod tests {
         render(&fixture::frontend_active(), &DeckState::new(4), (144, 42))
     }
 
+    /// Open previews own three bands of the column; the folded default is
+    /// covered by `a_folded_strip_is_hit_tested_but_has_nothing_to_scroll`.
     #[test]
     fn pane_hit_testing_follows_the_rendered_layout() {
         let projects = fixture::projects();
         let deck = Deck {
             workspace: "idp",
             projects: &projects,
-            state: &DeckState::new(4),
+            state: &expanded(4),
             home: Some(fixture::home()),
             master_ratio: 0.70,
             now: fixture::NOW,
@@ -2041,7 +2048,9 @@ mod tests {
 
     #[test]
     fn dragging_marks_the_source_and_only_valid_drop_target() {
-        let mut state = DeckState::new(4);
+        // The drop target's border chrome is what this reads, so the previews
+        // are open.
+        let mut state = expanded(4);
         assert!(state.begin_drag(1));
         state.update_drag(Some(0));
 
@@ -2102,10 +2111,21 @@ mod tests {
     }
 
     /// The export's screen 05: app and worker folded to their title rows.
+    /// Since #39 every preview starts folded, so the one open preview is what
+    /// this has to ask for; the rendered state is the same as before.
     fn collapsed() -> DeckState {
         let mut state = DeckState::new(4);
-        assert!(state.toggle_collapse(2));
-        assert!(state.toggle_collapse(3));
+        assert!(state.toggle_collapse(1));
+        state
+    }
+
+    /// A deck with every preview open. Since #39 that is no longer the state
+    /// a run starts in, so a test whose subject is open-preview chrome or
+    /// geometry asks for it rather than leaning on the default.
+    fn expanded(terminals: usize) -> DeckState {
+        let mut state = DeckState::new(terminals);
+        assert!(state.toggle_collapse_all());
+        assert_eq!(state.collapsed_count(), 0);
         state
     }
 
@@ -2140,7 +2160,9 @@ mod tests {
     #[test]
     fn freed_rows_split_evenly_with_the_remainder_going_to_the_top() {
         let mut state = DeckState::new(4);
-        state.toggle_collapse(3);
+        state.toggle_collapse(1);
+        state.toggle_collapse(2);
+        assert_eq!(state.collapsed_count(), 1, "worker alone is left folded");
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
@@ -2155,9 +2177,11 @@ mod tests {
     /// ends on the same row whatever the mix.
     #[test]
     fn folding_never_changes_the_height_the_stack_uses() {
+        // Walked from the folded default outwards, one expansion at a time.
         let mut state = DeckState::new(4);
 
-        for folds in 0..3 {
+        for opened in 0..4 {
+            let folds = 3 - opened;
             let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
             // The stack's own columns, on the row the footer always owns.
             let footer = (100..144)
@@ -2175,26 +2199,35 @@ mod tests {
             );
             // The row above it stays blank, so nothing has overrun.
             assert_eq!(buffer[(102u16, 38u16)].symbol(), " ");
-            state.toggle_collapse(folds + 1);
+            if opened < 3 {
+                state.toggle_collapse(opened + 1);
+            }
         }
     }
 
-    /// Issue #32: a fresh run has to show the affordance. Every stack pane
-    /// carries `▾` before anything is folded, and the master carries none.
+    /// Issues #32 and #39: a fresh run has to show the affordance, and since
+    /// #39 the state it shows is folded. Every stack pane carries `▸` before
+    /// anything is expanded, and the master carries no marker at all.
     #[test]
-    fn the_disclosure_markers_are_drawn_before_anything_is_folded() {
+    fn the_disclosure_markers_are_drawn_before_anything_is_expanded() {
         let (plain, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
         let rendered = text(&plain);
 
-        assert!(rendered.contains("▾ 2 backend"), "{rendered}");
-        assert!(rendered.contains("▾ 3 app"), "{rendered}");
-        assert!(rendered.contains("▾ 4 worker"), "{rendered}");
-        assert_eq!(rendered.matches('▾').count(), 3, "one per stacked preview");
-        assert!(!rendered.contains("▸"), "nothing is folded yet");
+        assert!(rendered.contains("▸ 2 backend"), "{rendered}");
+        assert!(rendered.contains("▸ 3 app"), "{rendered}");
+        assert!(rendered.contains("▸ 4 worker"), "{rendered}");
+        assert_eq!(rendered.matches('▸').count(), 3, "one per stacked preview");
+        assert!(!rendered.contains("▾"), "nothing is expanded yet");
         assert!(
-            !rendered.contains("▾ > 1 frontend"),
+            !rendered.contains("▸ > 1 frontend"),
             "the master never folds, so it never claims a marker"
         );
+
+        // Expanding every preview is what turns them over.
+        let (open, _) = render(&fixture::frontend_active(), &expanded(4), (144, 42));
+        let opened = text(&open);
+        assert_eq!(opened.matches('▾').count(), 3, "one per stacked preview");
+        assert!(!opened.contains("▸"), "nothing is folded any more");
     }
 
     /// The markers track each preview's own state once folds are in play.
@@ -2221,8 +2254,8 @@ mod tests {
     /// A pane that is neither exited nor idle falls back to its last output.
     #[test]
     fn a_folded_running_pane_shows_its_last_output_line() {
-        let mut state = DeckState::new(4);
-        state.toggle_collapse(1);
+        // Backend is folded from the first frame since #39.
+        let state = DeckState::new(4);
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
@@ -2331,38 +2364,44 @@ mod tests {
         assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
     }
 
-    /// Issue #32: the marker a fresh run draws is the marker a fresh run can
-    /// click. Every open preview's two cells fold that preview from frame one.
+    /// Issues #32 and #39: the marker a fresh run draws is the marker a fresh
+    /// run can click. Since #39 that is three strips, each of whose two cells
+    /// expands its preview from frame one.
     #[test]
-    fn the_markers_are_clickable_before_anything_is_folded() {
+    fn the_markers_are_clickable_before_anything_is_expanded() {
         let projects = fixture::projects();
         let mut state = DeckState::new(4);
         let area = Rect::new(0, 0, 144, 42);
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        // Three open previews, each with its marker on its own top border.
-        for (position, row) in [(1usize, 0u16), (2, 13), (3, 26)] {
-            assert_eq!(buffer[(103u16, row)].symbol(), "▾", "row {row}");
+        // Three strips at the head of the column, each with its own marker.
+        for (position, row) in [(1usize, 0u16), (2, 2), (3, 4)] {
+            assert_eq!(buffer[(102u16, row)].symbol(), "▸", "row {row}");
+            assert_eq!(
+                deck_for(&projects, &state).marker_at(area, Position::new(102, row)),
+                Some(position)
+            );
             assert_eq!(
                 deck_for(&projects, &state).marker_at(area, Position::new(103, row)),
                 Some(position)
             );
+            // The cell beside the marker's two is not the marker.
             assert_eq!(
                 deck_for(&projects, &state).marker_at(area, Position::new(104, row)),
-                Some(position)
-            );
-            // The border cell beside it is not the marker.
-            assert_eq!(
-                deck_for(&projects, &state).marker_at(area, Position::new(102, row)),
                 None
             );
         }
 
-        // Clicking one folds exactly that preview, from a stack with no folds.
+        // Clicking one expands exactly that preview, from a stack with no
+        // preview open.
         state.toggle_collapse(2);
-        assert_eq!(state.collapsed_count(), 1);
-        let (folded, _) = render(&fixture::frontend_active(), &state, (144, 42));
-        assert!(text(&folded).contains("▸ 3 app"), "{}", text(&folded));
+        assert_eq!(state.collapsed_count(), 2);
+        let (opened, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        assert!(text(&opened).contains("▾ 3 app"), "{}", text(&opened));
+        assert!(
+            text(&opened).contains("▸ 2 backend"),
+            "the rest stay folded"
+        );
     }
 
     /// Clicking a strip's marker expands that preview, and the rows it takes
@@ -2416,15 +2455,19 @@ mod tests {
     fn reference_chrome_carries_the_accepted_palette() {
         let (buffer, cursor) = reference();
 
-        // Master border is the accent; the preview border is not.
+        // Master border is the accent.
         assert_eq!(buffer[(0u16, 0u16)].fg, ACCENT);
-        assert_ne!(buffer[(100u16, 0u16)].fg, ACCENT);
         // The status row owns the second background value.
         assert_eq!(buffer[(0u16, 41u16)].bg, STATUS_BG);
-        // The exited preview's footer rule carries the error colour.
-        assert_eq!(buffer[(103u16, 22u16)].fg, ERROR);
         // The master cursor sits after the last line of engine-owned output.
         assert_eq!(cursor, Some(Position::new(3, 29)));
+
+        // The preview chrome the export states is a click away since #39, so
+        // it is read from an opened stack rather than from the fresh run.
+        let (open, _) = render(&fixture::frontend_active(), &expanded(4), (144, 42));
+        assert_ne!(open[(100u16, 0u16)].fg, ACCENT, "no preview takes focus");
+        // The exited preview's footer rule carries the error colour.
+        assert_eq!(open[(103u16, 22u16)].fg, ERROR);
     }
 
     #[test]
@@ -2460,12 +2503,27 @@ mod tests {
         assert!(screen.contains("> 2 backend"), "{screen}");
         // Frontend keeps number 1 and lands in the slot backend vacated.
         // Every pane number, in draw order. The disclosure marker is what
-        // tells a stacked preview from the caret-marked master.
-        let stack: Vec<_> = screen
-            .match_indices("┌─ ▾ ")
-            .filter_map(|(at, marker)| screen[at + marker.len()..].split(' ').next())
+        // tells a stacked preview from the caret-marked master; since #39 the
+        // demoted master is the open one and the untouched previews are
+        // strips, so both markers are collected.
+        let mut stack: Vec<_> = ["▾ ", "▸ "]
+            .iter()
+            .flat_map(|marker| screen.match_indices(marker))
+            .filter_map(|(at, marker)| {
+                screen[at + marker.len()..]
+                    .split(' ')
+                    .next()
+                    .map(|n| (at, n))
+            })
             .collect();
-        assert_eq!(stack, ["1", "3", "4"], "{screen}");
+        stack.sort_unstable();
+        let numbers: Vec<_> = stack.iter().map(|(_, number)| *number).collect();
+        assert_eq!(numbers, ["1", "3", "4"], "{screen}");
+        assert!(
+            screen.contains("┌─ ▾ 1 frontend"),
+            "the demoted master is open"
+        );
+        assert!(screen.contains("▸ 3 app"), "{screen}");
         assert!(screen.contains("promoted backend · ^g 1 back"), "{screen}");
     }
 
@@ -2476,8 +2534,17 @@ mod tests {
         // The top preview is the pane frontend was demoted into.
         assert_eq!(buffer[(100u16, 0u16)].fg, DEMOTED_BORDER);
         assert_eq!(buffer[(103u16, 1u16)].bg, DEMOTED_BG);
-        // The untouched previews keep the ordinary preview chrome.
-        assert_ne!(buffer[(100u16, 13u16)].fg, DEMOTED_BORDER);
+        // The untouched previews keep the ordinary chrome. They are strips
+        // since #39, so the row to read is the first of them.
+        // (A strip's own background is the same #101317 the demotion tint
+        // uses, so what separates them here is the border and the marker.)
+        assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
+        assert_ne!(buffer[(102u16, 35u16)].fg, DEMOTED_BORDER);
+        assert_eq!(
+            buffer[(100u16, 35u16)].symbol(),
+            " ",
+            "a strip has no border"
+        );
     }
 
     #[test]
@@ -2502,6 +2569,19 @@ mod tests {
         assert!(screen.contains("^g z unzoom"), "{screen}");
     }
 
+    /// The spec's zoom + collapse rule: zoom hides the stack, so the folds
+    /// it hides say nothing in the status row. Since #39 that is every run.
+    #[test]
+    fn a_zoomed_deck_states_the_keys_its_hidden_folds_do_not_take() {
+        let (buffer, _) = render(&fixture::frontend_active(), &zoomed(), (144, 42));
+        let screen = text(&buffer);
+
+        assert_eq!(zoomed().collapsed_count(), 3, "the folds are still held");
+        assert!(screen.contains("^g [ scroll"), "{screen}");
+        assert!(!screen.contains("^g c"), "an inert key is not advertised");
+        assert!(!screen.contains("collapsed"), "{screen}");
+    }
+
     #[test]
     fn unzooming_restores_the_stack() {
         let mut state = zoomed();
@@ -2523,7 +2603,8 @@ mod tests {
         let mut engine = fixture::frontend_active();
         engine.set_status(&TerminalId::new("app"), TerminalStatus::Running);
 
-        let (buffer, _) = render(&engine, &DeckState::new(4), (144, 42));
+        // The fold census replaces this one outright, so the stack is opened.
+        let (buffer, _) = render(&engine, &expanded(4), (144, 42));
 
         assert!(text(&buffer).contains("3 stacked  ·  all running"));
     }
@@ -2553,8 +2634,11 @@ mod tests {
         let (buffer, _) = render(&fixture::scrolled(), &scrolling(), (144, 42));
         let screen = text(&buffer);
 
-        // The stack stays visible and live: only zoom hides it.
-        assert_eq!(screen.matches('┌').count(), 4, "{screen}");
+        // The stack stays visible and live: only zoom hides it. Since #39 it
+        // is visible as the three strips a fresh run draws.
+        assert_eq!(screen.matches('┌').count(), 1, "{screen}");
+        assert_eq!(screen.matches('▸').count(), 3, "{screen}");
+        assert!(screen.contains("▸ 2 backend"), "{screen}");
         assert!(screen.contains(" SCROLL "), "{screen}");
         assert!(
             screen.contains("j/k ↑↓ line · pgup/pgdn page · g/G ends · esc live"),
@@ -2612,7 +2696,9 @@ mod tests {
         // A preview shows the ring alone: the border resumes right after it.
         let mut engine = fixture::frontend_active();
         engine.set_status(&TerminalId::new("backend"), TerminalStatus::Starting);
-        let screen = text(&render(&engine, &DeckState::new(4), (144, 42)).0);
+        // An open preview's title, so the stack is opened for it: a strip
+        // states its own status in the collapsed-strip tests.
+        let screen = text(&render(&engine, &expanded(4), (144, 42)).0);
 
         assert!(screen.contains("▾ 2 backend · …/backend · ○ ─"), "{screen}");
     }
@@ -2630,7 +2716,9 @@ mod tests {
 
     #[test]
     fn the_status_bar_drops_labels_before_keys_then_collapses() {
-        let state = DeckState::new(4);
+        // The unfolded hint set, which is the one this ladder is written for:
+        // a folded stack swaps `^g [` for `^g c` (§3.5 of the collapse spec).
+        let state = expanded(4);
 
         let labelled = render(&fixture::frontend_active(), &state, (144, 42)).0;
         let keys_only = render(&fixture::frontend_active(), &state, (128, 42)).0;
@@ -2807,7 +2895,9 @@ mod tests {
 
     #[test]
     fn one_column_above_the_fallback_still_stacks() {
-        let state = DeckState::new(4);
+        // Counted in preview boxes, so the stack is opened; the threshold
+        // itself never reads the folds.
+        let state = expanded(4);
 
         let (narrow, _) = render(&fixture::frontend_active(), &state, (99, 30));
         let (stacked, _) = render(&fixture::frontend_active(), &state, (100, 30));
@@ -2857,7 +2947,10 @@ mod tests {
     #[test]
     fn a_long_list_fills_the_column_with_whole_previews() {
         let projects = synthetic(8);
-        let state = DeckState::new(8);
+        // Whole previews, so the window arithmetic is the open-preview one;
+        // `folding_inside_a_long_list_lets_more_previews_into_the_window`
+        // covers what folds do to it.
+        let state = expanded(8);
 
         let window = deck_for(&projects, &state).stack_window(SCREEN);
 
@@ -2872,7 +2965,8 @@ mod tests {
     #[test]
     fn a_list_that_fits_does_not_scroll() {
         let projects = fixture::projects();
-        let mut state = DeckState::new(4);
+        // Four open previews are the tightest list that still fits.
+        let mut state = expanded(4);
 
         let window = deck_for(&projects, &state).stack_window(SCREEN);
         assert!(!window.overflows());
@@ -2894,7 +2988,7 @@ mod tests {
     #[test]
     fn paging_stops_with_the_last_preview_in_view() {
         let projects = synthetic(8);
-        let mut state = DeckState::new(8);
+        let mut state = expanded(8);
         let window = deck_for(&projects, &state).stack_window(SCREEN);
 
         assert_eq!(window.paged(1), 3, "one page is one window of previews");
@@ -2913,7 +3007,7 @@ mod tests {
     #[test]
     fn hit_testing_follows_the_scrolled_window() {
         let projects = synthetic(8);
-        let mut state = DeckState::new(8);
+        let mut state = expanded(8);
         state.toggle_collapse(6);
         state.set_stack_offset(2);
         let view = deck_for(&projects, &state);
@@ -2937,12 +3031,78 @@ mod tests {
         assert_eq!(view.marker_at(SCREEN, Position::new(103, 13)), Some(4));
     }
 
+    /// Issue #39: the fresh run is a column of strips, and every pointer
+    /// gesture still resolves on it — a strip's body promotes, drags and
+    /// names its terminal, its two marker cells expand it, and the empty
+    /// column below the strips is still the list's own chrome.
+    #[test]
+    fn a_fresh_folded_stack_answers_every_pointer_gesture() {
+        let projects = fixture::projects();
+        let state = DeckState::new(4);
+        let view = deck_for(&projects, &state);
+
+        for (position, row, terminal) in
+            [(1usize, 0u16, "backend"), (2, 2, "app"), (3, 4, "worker")]
+        {
+            assert_eq!(
+                view.position_at(SCREEN, Position::new(120, row)),
+                Some(position)
+            );
+            assert_eq!(
+                view.swap_position_at(SCREEN, Position::new(120, row)),
+                Some(position)
+            );
+            assert_eq!(
+                view.terminal_at(SCREEN, Position::new(120, row))
+                    .map(ToString::to_string)
+                    .as_deref(),
+                Some(terminal)
+            );
+            assert_eq!(
+                view.marker_at(SCREEN, Position::new(102, row)),
+                Some(position)
+            );
+            assert_eq!(
+                view.marker_at(SCREEN, Position::new(103, row)),
+                Some(position)
+            );
+        }
+        // The blank column the folds leave below them belongs to the list.
+        assert!(view.stack_scroll_at(SCREEN, Position::new(120, 20)));
+        assert!(
+            !view.stack_scroll_at(SCREEN, Position::new(120, 0)),
+            "a strip"
+        );
+        // Three strips are the whole list, so there is nothing to page to.
+        assert!(!view.stack_window(SCREEN).overflows());
+    }
+
+    /// Folds buy the window room, so it takes many more strips than previews
+    /// before the list overflows — but it still pages when it does.
+    #[test]
+    fn a_folded_list_longer_than_the_column_still_pages() {
+        let projects = synthetic(24);
+        let mut state = DeckState::new(24);
+
+        let window = deck_for(&projects, &state).stack_window(SCREEN);
+        assert_eq!(window.visible, 19, "39 budget rows hold 19 x (1 + 1)");
+        assert_eq!(window.total, 23);
+        assert!(window.overflows());
+
+        state.set_stack_offset(window.paged(1));
+        let scrolled = deck_for(&projects, &state).stack_window(SCREEN);
+        assert_eq!(scrolled.offset, 4, "the last window that ends on the list");
+        let rendered = text(&render_long(&projects, &state, (144, 42)));
+        assert!(rendered.contains("↑ 4 more"), "{rendered}");
+        assert!(rendered.contains("▸ 24 t24"), "{rendered}");
+    }
+
     /// The wheel over a preview is that preview's (#25), so the list is paged
     /// from the column's own chrome instead.
     #[test]
     fn the_stack_chrome_is_where_the_wheel_pages_the_list() {
         let projects = synthetic(8);
-        let state = DeckState::new(8);
+        let state = expanded(8);
         let view = deck_for(&projects, &state);
 
         assert!(view.stack_scroll_at(SCREEN, Position::new(99, 5)), "gutter");
@@ -2970,7 +3130,7 @@ mod tests {
     #[test]
     fn folding_inside_a_long_list_lets_more_previews_into_the_window() {
         let projects = synthetic(8);
-        let mut state = DeckState::new(8);
+        let mut state = expanded(8);
         assert!(state.toggle_collapse(1));
         assert!(state.toggle_collapse(2));
 
@@ -2994,9 +3154,11 @@ mod tests {
     #[test]
     fn a_scrolled_column_never_overruns_its_footer() {
         let projects = synthetic(9);
-        let mut state = DeckState::new(9);
+        // Walked from every preview open to every preview folded, so both
+        // ends of the #39 default are covered.
+        let mut state = expanded(9);
 
-        for step in 0..8 {
+        for step in 0..9 {
             for offset in 0..8 {
                 state.set_stack_offset(offset);
                 let buffer = render_long(&projects, &state, (144, 42));
@@ -3006,7 +3168,9 @@ mod tests {
                     "row 38 stays blank at offset {offset} with {step} folded"
                 );
             }
-            state.toggle_collapse(step + 1);
+            if step < 8 {
+                state.toggle_collapse(step + 1);
+            }
         }
     }
 
@@ -3015,7 +3179,8 @@ mod tests {
     #[test]
     fn the_footer_states_what_the_window_hides() {
         let projects = synthetic(8);
-        let mut state = DeckState::new(8);
+        // Open previews, so the window hides four of the seven.
+        let mut state = expanded(8);
 
         let head = text(&render_long(&projects, &state, (144, 42)));
         assert!(head.contains("↓ 4 more · ^g pgup/pgdn"), "{head}");
@@ -3044,7 +3209,7 @@ mod tests {
     #[test]
     fn hidden_previews_outrank_the_fold_census_in_the_footer() {
         let projects = synthetic(8);
-        let mut state = DeckState::new(8);
+        let mut state = expanded(8);
         state.toggle_collapse(1);
 
         let rendered = text(&render_long(&projects, &state, (144, 42)));
@@ -3062,7 +3227,8 @@ mod tests {
     #[test]
     fn the_gutter_carries_a_track_while_the_list_is_longer_than_the_column() {
         let projects = synthetic(8);
-        let mut state = DeckState::new(8);
+        // Three open previews of seven is the window the thumb is sized for.
+        let mut state = expanded(8);
 
         let head = render_long(&projects, &state, (144, 42));
         let track = |buffer: &Buffer| {
@@ -3090,7 +3256,9 @@ mod tests {
 
     #[test]
     fn too_few_rows_for_a_preview_also_falls_back() {
-        let state = DeckState::new(4);
+        // Counted in preview boxes, so the stack is opened; the fallback is
+        // decided by the row budget a whole preview needs, not by the folds.
+        let state = expanded(4);
 
         let (short, _) = render(&fixture::frontend_active(), &state, (144, 15));
         let (tall, _) = render(&fixture::frontend_active(), &state, (144, 16));

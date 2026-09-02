@@ -317,21 +317,24 @@ mod tests {
         assert!(session.deck.scrollback());
     }
 
+    /// The key is a toggle-all either way; since #39 the stack it starts from
+    /// is folded, so the first press is the expand-all half.
     #[test]
     fn the_collapse_key_folds_the_stack_without_a_frozen_action() {
         let mut input = Input::new(10);
         let mut deck = DeckState::new(4);
         let projects = fixture::projects();
+        assert_eq!(deck.collapsed_count(), 3);
 
         input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
         assert_eq!(input.press(Key::Char('c'), &mut deck, &projects, NOW), None);
 
-        assert_eq!(deck.collapsed_count(), 3);
+        assert_eq!(deck.collapsed_count(), 0);
 
         input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
         input.press(Key::Char('c'), &mut deck, &projects, NOW);
 
-        assert_eq!(deck.collapsed_count(), 0);
+        assert_eq!(deck.collapsed_count(), 3);
     }
 
     /// The page keys are the keyboard half of the scrollable stack. Only the
