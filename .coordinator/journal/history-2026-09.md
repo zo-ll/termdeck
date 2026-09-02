@@ -544,3 +544,9 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #46 (quit modal 'y' doesn't quit) dispatched to claude (same session; coord/46-quit-modal).
 - 2026-09-02: #46 done (claude `76c82c0`: root cause = shutdown sent only SIGTERM which shells ignore; now HUP+TERM, quit exits ~20ms, escalation/no-orphan unchanged; 158 tests) — in critic review.
 - 2026-09-02: #46 critic PASS → pushed coord/46-quit-modal → PR #47, awaiting user approval.
+- 2026-09-02: #42 PLANNING APPROVED — final spec on the issue (entry points:
+  no-path folder browser / <folder> root+single-terminal / --config file;
+  runtime add via '+' + ^g a from choice of roots; first selected = master;
+  stable fe/be order). Slices opened: #48 A1 (codex, ready), #49 A2 (claude,
+  blocked A1), #50 A3 (both; blocked A1), #51 A4 (codex; blocked A1+A2+A3).
+  Waves: A1 → A2(+A3-prep) → A3 → A4.
