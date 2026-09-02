@@ -62,7 +62,8 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
             break None;
         }
         let roots = Browse::roots(&browser);
-        let rows = state.rows(&browser);
+        let listing = state.listing(&browser);
+        let rows = listing.entries.clone();
         let size = screen_size()?;
         if dirty {
             let height = usize::from(size.rows.saturating_sub(12));
@@ -71,10 +72,9 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
             terminal.draw(|frame| {
                 Picker {
                     state: &state,
-                    rows: &rows,
+                    listing: &listing,
                     roots: &roots,
                     home: browser.home(),
-                    elsewhere: 0,
                 }
                 .render(frame);
             })?;
@@ -86,18 +86,24 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
                 InputEvent::Key(key) => picker::press(&mut state, &rows, &roots, key),
                 InputEvent::Mouse {
                     pointer,
-                    action: MouseAction::Up,
+                    action: action @ (MouseAction::Up | MouseAction::SecondaryUp),
                 } => {
                     let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
                     let view = Picker {
                         state: &state,
-                        rows: &rows,
+                        listing: &listing,
                         roots: &roots,
                         home: browser.home(),
-                        elsewhere: 0,
                     };
-                    view.hit(area, pointer)
-                        .and_then(|hit| picker::click(&mut state, &rows, hit))
+                    let hit = view.hit(area, pointer);
+                    match (hit, action) {
+                        (Some(hit), MouseAction::Up) => picker::click(&mut state, &rows, hit),
+                        (Some(hit), _) => {
+                            picker::click_secondary(&mut state, &rows, hit);
+                            None
+                        }
+                        _ => None,
+                    }
                 }
                 _ => None,
             };
@@ -287,6 +293,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
+                // The deck has no secondary-button gesture: ignoring it here
+                // keeps every existing pointer action exactly as it was.
+                InputEvent::Mouse {
+                    action: MouseAction::SecondaryUp,
+                    ..
+                } => {}
                 InputEvent::Mouse { pointer, action } => {
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -305,9 +317,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 pane.ratio_at(area, pointer.x),
                                 match action {
                                     MouseAction::Down => pane.swap_position_at(area, pointer),
-                                    MouseAction::Move | MouseAction::Up => {
-                                        pane.position_at(area, pointer)
-                                    }
+                                    // SecondaryUp never reaches here — the
+                                    // event loop drops it before the deck.
+                                    _ => pane.position_at(area, pointer),
                                 },
                             )
                         };
@@ -602,6 +614,9 @@ enum MouseAction {
     Down,
     Move,
     Up,
+    /// A secondary-button release. The deck has no gesture for it; the picker
+    /// uses it for the minus its parity table gives the badge (#42 A2).
+    SecondaryUp,
 }
 
 fn mouse_action(
@@ -621,6 +636,8 @@ fn mouse_action(
             deck.update_drag(position);
             None
         }
+        // The deck has no secondary-button gesture; the picker owns that one.
+        MouseAction::SecondaryUp => None,
         MouseAction::Up => {
             deck.update_drag(position);
             let (source, target) = deck.finish_drag()?;
@@ -772,6 +789,9 @@ fn mouse_event(bytes: &[u8], terminator: u8) -> Option<InputEvent> {
         return Some(InputEvent::Wheel { pointer, command });
     }
     let action = match (terminator, code & 0b11, code & 32) {
+        // A release reports the button it releases, so the secondary one is
+        // still distinguishable at the point it arrives.
+        (b'm', 2, _) => MouseAction::SecondaryUp,
         (b'm', _, _) => MouseAction::Up,
         (b'M', 0, 0) => MouseAction::Down,
         (b'M', _, 32) => MouseAction::Move,

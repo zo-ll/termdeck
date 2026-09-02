@@ -324,9 +324,18 @@ of them clears the selection**:
 | Zero results | `MATCH zzq · 0 of 9`, `no match for zzq`, `in ~/code or 3 other roots` | `⌫ edit · esc clear`, and `selection kept (3)` is printed |
 | Empty folder | the path, `..`, `empty folder` | `h go up · ~ home` |
 | At root, nothing selected | `ROOTS` and the configured roots as folder rows with repo counts (`~/code · 5 repos`) | `nothing selected · ⏎ disabled` |
+| **Unreadable folder** (added in A2) | `cannot read ~/code/secret` in `ERROR`, then the reason the filesystem gave | `h go up · ~ home` |
 
 The root list is the picker's own top level: the configured roots are drawn as
 folder rows, so `h` from a root lands somewhere legible rather than at `/`.
+
+**Chosen** (not in the export): a folder the picker cannot read states why,
+where its rows would have been. The export has no such card because it never
+shows a failure, but the alternative — letting a permission error fall through
+to the empty state — would have the picker tell the user their folder holds
+nothing, which is a lie about the filesystem and the one thing a browser must
+never say. Both states keep the `..` row, because a folder you cannot read is
+one you especially need a way out of.
 
 **Ambiguity.** Where configured roots come from is never stated — the top bar
 says `4 roots configured`. **Chosen:** configuration, a `roots:` list beside

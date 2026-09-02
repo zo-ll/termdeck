@@ -102,12 +102,39 @@ impl Entry {
 }
 
 /// One folder, as the picker sees it.
+///
+/// A listing that could not be read is not an empty one, and the picker has
+/// to be able to tell them apart: an unreadable folder that draws as empty is
+/// a lie about the filesystem. `error` carries why, and the view says it where
+/// the rows would have been.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Listing {
     pub entries: Vec<Entry>,
-    /// Folders the listing counts for its header: `9 items · 5 repos`.
-    pub items: usize,
-    pub repos: usize,
+    /// Why this folder could not be read, when it could not be.
+    pub error: Option<String>,
+    /// How many of the trailing entries came from other roots, which the
+    /// filter draws under its own rule.
+    pub elsewhere: usize,
+}
+
+impl Listing {
+    pub fn of(entries: Vec<Entry>) -> Self {
+        Self {
+            entries,
+            error: None,
+            elsewhere: 0,
+        }
+    }
+
+    /// A folder the picker could read and that holds nothing to show. The
+    /// parent row does not count: it is a way out, not a child.
+    pub fn is_empty_folder(&self) -> bool {
+        self.error.is_none()
+            && self
+                .entries
+                .iter()
+                .all(|entry| entry.kind == EntryKind::Parent)
+    }
 }
 
 /// Where listings come from. The picker asks; something behind this seam
@@ -216,21 +243,36 @@ impl PickerState {
             .collect()
     }
 
-    /// The rows the listing shows, given what the browser says and whether a
+    /// What the listing shows, given what the browser says and whether a
     /// filter is on. Filtered rows come from the search, unfiltered ones from
     /// the folder — or from the roots when the picker is at its top level.
-    pub fn rows(&self, browser: &dyn Browse) -> Vec<Entry> {
+    ///
+    /// A filter is a workspace-wide search (§4), so its results are ordered
+    /// this root first and everything else after; `elsewhere` is how many fell
+    /// in the second group, which is where the view draws its rule.
+    pub fn listing(&self, browser: &dyn Browse) -> Listing {
         let Some(cwd) = self.cwd.as_deref() else {
-            return browser.roots();
+            return Listing::of(browser.roots());
         };
-        match self.filter.as_deref().filter(|query| !query.is_empty()) {
-            Some(query) => browser
-                .search(cwd)
-                .into_iter()
-                .filter(|entry| matches(&entry.name, query))
-                .collect(),
-            _ => browser.list(cwd).entries,
+        let Some(query) = self.filter.as_deref().filter(|query| !query.is_empty()) else {
+            return browser.list(cwd);
+        };
+        let (here, elsewhere): (Vec<Entry>, Vec<Entry>) = browser
+            .search(cwd)
+            .into_iter()
+            .filter(|entry| matches(&entry.name, query))
+            .partition(|entry| entry.path.starts_with(cwd));
+        let count = elsewhere.len();
+        Listing {
+            entries: here.into_iter().chain(elsewhere).collect(),
+            error: None,
+            elsewhere: count,
         }
+    }
+
+    /// The rows alone, for callers that only move a cursor over them.
+    pub fn rows(&self, browser: &dyn Browse) -> Vec<Entry> {
+        self.listing(browser).entries
     }
 
     /// Moves the cursor, clamped to the rows it has.
@@ -612,14 +654,24 @@ pub enum Hit {
 /// The picker, drawn.
 pub struct Picker<'a> {
     pub state: &'a PickerState,
-    pub rows: &'a [Entry],
+    /// What the browser said about the folder: its rows, how many of them
+    /// came from elsewhere, and whether it could be read at all.
+    pub listing: &'a Listing,
     /// Home directory, so paths read as `~/code` the way the export draws
     /// them.
     pub home: Option<&'a Path>,
     /// Roots, for the crumb and for what `h` climbs to.
     pub roots: &'a [Entry],
-    /// How many of `rows` came from other roots, drawn under their own rule.
-    pub elsewhere: usize,
+}
+
+impl<'a> Picker<'a> {
+    fn entries(&self) -> &'a [Entry] {
+        &self.listing.entries
+    }
+
+    fn elsewhere(&self) -> usize {
+        self.listing.elsewhere
+    }
 }
 
 impl Picker<'_> {
@@ -865,7 +917,7 @@ impl Picker<'_> {
         let mut header = Vec::new();
         match (self.state.cwd(), self.state.filter()) {
             (Some(cwd), Some(query)) => {
-                let here = self.rows.len().saturating_sub(self.elsewhere);
+                let here = self.entries().len().saturating_sub(self.elsewhere());
                 header.push(vec![
                     Span::styled("MATCH ", hint),
                     Span::styled(query.to_owned(), Style::new().fg(ACCENT)),
@@ -886,11 +938,14 @@ impl Picker<'_> {
                 Span::styled(
                     format!(
                         "{} items · {} repos",
-                        self.rows
+                        self.entries()
                             .iter()
                             .filter(|entry| entry.kind != EntryKind::Parent)
                             .count(),
-                        self.rows.iter().filter(|entry| entry.selectable()).count()
+                        self.entries()
+                            .iter()
+                            .filter(|entry| entry.selectable())
+                            .count()
                     ),
                     hint,
                 ),
@@ -902,45 +957,18 @@ impl Picker<'_> {
     }
 
     fn rows(&self, buffer: &mut Buffer, area: Rect) {
-        if self.rows.is_empty() {
-            let message = if self.state.filtering() {
-                format!("no match for {}", self.state.filter().unwrap_or_default())
-            } else {
-                "empty folder".to_owned()
-            };
-            let mut lines = vec![message];
-            if self.state.filtering() {
-                let elsewhere = self.roots.len().saturating_sub(1);
-                lines.push(format!(
-                    "in {} or {elsewhere} other roots",
-                    self.state
-                        .cwd()
-                        .map(|cwd| display_path(cwd, self.home))
-                        .unwrap_or_default()
-                ));
-                lines.push(format!("selection kept ({})", self.state.selection().len()));
-            } else {
-                lines.push("h go up · ~ home".to_owned());
-            }
-            for (index, line) in lines.into_iter().enumerate() {
-                buffer.set_line(
-                    area.x + INSET,
-                    area.y + index as u16,
-                    &Line::from(Span::styled(line, Style::new().fg(MUTED))),
-                    area.width,
-                );
-            }
-            return;
-        }
+        // Whatever else is true, the rows that exist are drawn — an
+        // unreadable or empty folder still shows the `..` that leads out of
+        // it, exactly as the export's empty-folder card does.
         let height = area.height as usize;
-        let visible = self.rows.len().min(height);
+        let visible = self.entries().len().min(height);
         for slot in 0..visible {
             let index = self.state.offset() + slot;
-            let Some(entry) = self.rows.get(index) else {
+            let Some(entry) = self.entries().get(index) else {
                 break;
             };
             let y = area.y + slot as u16;
-            if self.elsewhere > 0 && index == self.rows.len() - self.elsewhere {
+            if self.elsewhere() > 0 && index == self.entries().len() - self.elsewhere() {
                 buffer.set_line(
                     area.x + INSET,
                     y,
@@ -954,6 +982,68 @@ impl Picker<'_> {
             }
             self.row(buffer, area, y, index, entry);
         }
+        // Then what the listing has to say about itself, under them.
+        for (index, (line, style)) in self.condition().into_iter().enumerate() {
+            let y = area.y + (visible + index) as u16;
+            if y >= area.y + area.height {
+                break;
+            }
+            buffer.set_line(
+                area.x + INSET,
+                y,
+                &Line::from(Span::styled(line, style)),
+                area.width,
+            );
+        }
+    }
+
+    /// What the listing says when it has nothing ordinary to show: a read that
+    /// failed, a folder that is genuinely empty, or a query that matched
+    /// nothing. Each states the condition and the key that escapes it (§5).
+    ///
+    /// An unreadable folder is **not** an empty one. Saying so is the whole
+    /// point of this: an error that draws as an empty listing tells the user
+    /// their folder holds nothing, which is a lie about the filesystem.
+    fn condition(&self) -> Vec<(String, Style)> {
+        let muted = Style::new().fg(MUTED);
+        if let Some(error) = self.listing.error.as_deref() {
+            let path = self
+                .state
+                .cwd()
+                .map(|cwd| display_path(cwd, self.home))
+                .unwrap_or_default();
+            return vec![
+                (format!("cannot read {path}"), Style::new().fg(ERROR)),
+                (error.to_owned(), muted),
+                ("h go up · ~ home".to_owned(), muted),
+            ];
+        }
+        if self.state.filtering() && self.entries().is_empty() {
+            let elsewhere = self.roots.len().saturating_sub(1);
+            let root = self
+                .state
+                .cwd()
+                .map(|cwd| display_path(cwd, self.home))
+                .unwrap_or_default();
+            return vec![
+                (
+                    format!("no match for {}", self.state.filter().unwrap_or_default()),
+                    muted,
+                ),
+                (format!("in {root} or {elsewhere} other roots"), muted),
+                (
+                    format!("selection kept ({})", self.state.selection().len()),
+                    muted,
+                ),
+            ];
+        }
+        if self.listing.is_empty_folder() {
+            return vec![
+                ("empty folder".to_owned(), muted),
+                ("h go up · ~ home".to_owned(), muted),
+            ];
+        }
+        Vec::new()
     }
 
     /// One listing row on the §1.2 grid.
@@ -1134,7 +1224,7 @@ impl Picker<'_> {
             );
             return;
         }
-        let Some(entry) = self.rows.get(self.state.cursor()) else {
+        let Some(entry) = self.entries().get(self.state.cursor()) else {
             return;
         };
         let rule = format!(
@@ -1426,7 +1516,7 @@ impl Picker<'_> {
             return None;
         }
         let index = self.state.offset() + (pointer.y - first) as usize;
-        let entry = self.rows.get(index)?;
+        let entry = self.entries().get(index)?;
         let column = pointer.x.saturating_sub(content.x);
         Some(match column {
             0..=2 => Hit::Box(index),
@@ -1585,6 +1675,21 @@ pub fn press(
     None
 }
 
+/// The secondary button's own gesture: on the `×N` badge it is `-`, which
+/// sheds one instance of that path. The parity table gives the primary button
+/// the additions and the secondary button the subtraction, so a pointer can
+/// reach both ends of §3.1 without a keyboard.
+pub fn click_secondary(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
+    let (Hit::Badge(index) | Hit::Row(index) | Hit::Box(index)) = hit else {
+        return false;
+    };
+    let Some(entry) = rows.get(index).cloned() else {
+        return false;
+    };
+    state.point_at(index, rows.len());
+    state.drop_one(&entry)
+}
+
 /// Applies one pointer gesture, in the same terms as the keys (§7).
 pub fn click(state: &mut PickerState, rows: &[Entry], hit: Hit) -> Option<PickerReaction> {
     match hit {
@@ -1667,8 +1772,13 @@ impl FsBrowse {
                 None => entry,
             }
         } else if path.is_dir() {
-            let (items, repos) = count(path);
-            Entry::folder(name, path).holding(items, repos)
+            // A folder whose contents cannot be read claims nothing about
+            // them: `0 items · no repos` would be the same lie the listing
+            // body refuses to tell.
+            match count(path) {
+                Some((items, repos)) => Entry::folder(name, path).holding(items, repos),
+                None => Entry::folder(name, path),
+            }
         } else {
             Entry::file(name, path)
         }
@@ -1677,13 +1787,27 @@ impl FsBrowse {
 
 impl Browse for FsBrowse {
     fn list(&self, path: &Path) -> Listing {
+        // The parent row goes in whatever happens: a folder that cannot be
+        // read is one the user especially needs a way out of.
         let mut entries = Vec::new();
         if path.parent().is_some() {
             entries.push(Entry::parent(path.parent().unwrap_or(path).to_path_buf()));
         }
-        let mut read: Vec<_> = fs::read_dir(path)
-            .into_iter()
-            .flatten()
+        // A read that fails is not a folder that is empty. Swallowing the
+        // error would draw an empty listing and tell the user their folder
+        // holds nothing, which is the one thing the picker must never say
+        // about a folder it could not open.
+        let read = match fs::read_dir(path) {
+            Ok(read) => read,
+            Err(error) => {
+                return Listing {
+                    entries,
+                    error: Some(error.to_string()),
+                    elsewhere: 0,
+                };
+            }
+        };
+        let mut read: Vec<_> = read
             .flatten()
             .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
             .collect();
@@ -1697,13 +1821,7 @@ impl Browse for FsBrowse {
                 entry.file_name().to_string_lossy().into_owned(),
             ));
         }
-        let items = entries.len().saturating_sub(1);
-        let repos = entries.iter().filter(|entry| entry.selectable()).count();
-        Listing {
-            entries,
-            items,
-            repos,
-        }
+        Listing::of(entries)
     }
 
     fn search(&self, path: &Path) -> Vec<Entry> {
@@ -1719,8 +1837,11 @@ impl Browse for FsBrowse {
         self.roots
             .iter()
             .map(|root| {
-                let (items, repos) = count(root);
-                Entry::folder(display_path(root, self.home.as_deref()), root).holding(items, repos)
+                let root_entry = Entry::folder(display_path(root, self.home.as_deref()), root);
+                match count(root) {
+                    Some((items, repos)) => root_entry.holding(items, repos),
+                    None => root_entry,
+                }
             })
             .collect()
     }
@@ -1788,11 +1909,10 @@ fn commit_age(path: &Path) -> Option<String> {
     })
 }
 
-/// What a folder holds, for `9 items · 5 repos`.
-fn count(path: &Path) -> (usize, usize) {
-    let Ok(read) = fs::read_dir(path) else {
-        return (0, 0);
-    };
+/// What a folder holds, for `9 items · 5 repos`. `None` when it could not be
+/// read, which is not the same as holding nothing.
+fn count(path: &Path) -> Option<(usize, usize)> {
+    let read = fs::read_dir(path).ok()?;
     let children: Vec<_> = read
         .flatten()
         .map(|entry| entry.path())
@@ -1807,7 +1927,7 @@ fn count(path: &Path) -> (usize, usize) {
         .iter()
         .filter(|child| child.is_dir() && is_repository(child))
         .count();
-    (children.len(), repos)
+    Some((children.len(), repos))
 }
 
 #[cfg(test)]
@@ -1826,11 +1946,16 @@ mod tests {
 
     impl Browse for Fixture {
         fn list(&self, path: &Path) -> Listing {
+            // A folder that is genuinely empty, and one that cannot be read:
+            // the two the picker must never confuse.
             if path == Path::new("/home/dev/code/vendor/tmp") {
+                return Listing::of(vec![Entry::parent("/home/dev/code/vendor")]);
+            }
+            if path == Path::new("/home/dev/code/secret") {
                 return Listing {
-                    entries: vec![Entry::parent("/home/dev/code/vendor")],
-                    items: 0,
-                    repos: 0,
+                    entries: vec![Entry::parent("/home/dev/code")],
+                    error: Some("Permission denied (os error 13)".to_owned()),
+                    elsewhere: 0,
                 };
             }
             let entries = vec![
@@ -1852,11 +1977,7 @@ mod tests {
                 Entry::folder("vendor", code().join("vendor")).holding(6, 0),
                 Entry::file("README.md", code().join("README.md")),
             ];
-            Listing {
-                items: entries.len() - 1,
-                repos: 5,
-                entries,
-            }
+            Listing::of(entries)
         }
 
         fn search(&self, path: &Path) -> Vec<Entry> {
@@ -1883,14 +2004,13 @@ mod tests {
     }
 
     fn render(state: &PickerState) -> Buffer {
-        let rows = state.rows(&Fixture);
+        let listing = state.listing(&Fixture);
         let roots = Fixture.roots();
         let view = Picker {
             state,
-            rows: &rows,
+            listing: &listing,
             roots: &roots,
             home: Some(Path::new("/home/dev")),
-            elsewhere: usize::from(state.filtering()),
         };
         let mut terminal = Terminal::new(TestBackend::new(144, 42)).unwrap();
         terminal.draw(|frame| view.render(frame)).unwrap();
@@ -2180,21 +2300,15 @@ mod tests {
         let mut state = browsing();
         let rows = rows_of(&state);
         let roots = Fixture.roots();
-        let view = |state: &PickerState, rows: &[Entry]| {
-            let _ = state;
-            let _ = rows;
-        };
-        view(&state, &rows);
 
         // Row 2 of the listing is horizon-frontend; its body toggles it.
         let hit = {
-            let rows = rows_of(&state);
+            let listing = state.listing(&Fixture);
             let picker = Picker {
                 state: &state,
-                rows: &rows,
+                listing: &listing,
                 roots: &roots,
                 home: Some(Path::new("/home/dev")),
-                elsewhere: 0,
             };
             // The listing starts under its header and rule: row 0 is `..`,
             // so horizon-frontend is the third row drawn.
@@ -2229,6 +2343,133 @@ mod tests {
             click(&mut state, &rows, Hit::Launch),
             Some(PickerReaction::Launch)
         );
+    }
+
+    /// The blocking case: a folder the picker cannot read must say so. An
+    /// error that draws as an empty listing tells the user their folder holds
+    /// nothing, which is a lie about the filesystem.
+    #[test]
+    fn an_unreadable_folder_says_why_instead_of_looking_empty() {
+        let state = PickerState::at("/home/dev/code/secret");
+
+        let listing = state.listing(&Fixture);
+        assert!(listing.error.is_some(), "the browser reported the failure");
+        assert!(
+            !listing.is_empty_folder(),
+            "a folder that could not be read is not an empty one"
+        );
+
+        let rendered = text(&render(&state));
+        assert!(rendered.contains("cannot read ~/code/secret"), "{rendered}");
+        assert!(rendered.contains("Permission denied"), "{rendered}");
+        assert!(rendered.contains("h go up · ~ home"), "the way out");
+        assert!(!rendered.contains("empty folder"), "{rendered}");
+        // And the row that leads out of it is still drawn.
+        assert!(rendered.contains("▴  .."), "{rendered}");
+    }
+
+    /// The other half of the same distinction: a folder that really is empty
+    /// gets the designed empty state, which the error case must not take.
+    #[test]
+    fn a_genuinely_empty_folder_shows_the_empty_state() {
+        let state = PickerState::at("/home/dev/code/vendor/tmp");
+
+        let listing = state.listing(&Fixture);
+        assert!(listing.error.is_none());
+        assert!(listing.is_empty_folder());
+
+        let rendered = text(&render(&state));
+        assert!(rendered.contains("empty folder"), "{rendered}");
+        assert!(rendered.contains("h go up · ~ home"), "{rendered}");
+        assert!(!rendered.contains("cannot read"), "{rendered}");
+        assert!(rendered.contains("▴  .."), "{rendered}");
+    }
+
+    /// The same distinction against the real filesystem, so the branch the
+    /// fixture describes is the branch `read_dir` actually produces.
+    #[test]
+    fn the_filesystem_browser_separates_empty_from_unreadable() {
+        let root = std::env::temp_dir().join(format!(
+            "termdeck-picker-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let empty = root.join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        let browser = FsBrowse::new(vec![root.clone()]);
+
+        let listing = browser.list(&empty);
+        assert!(listing.error.is_none(), "an empty folder reads fine");
+        assert!(
+            listing.is_empty_folder(),
+            "and holds nothing but its parent"
+        );
+
+        let missing = root.join("does-not-exist");
+        let listing = browser.list(&missing);
+        assert!(
+            listing.error.is_some(),
+            "a folder that cannot be read reports why"
+        );
+        assert!(!listing.is_empty_folder(), "and is not called empty");
+        assert!(
+            listing
+                .entries
+                .iter()
+                .any(|entry| entry.kind == EntryKind::Parent),
+            "the way out is still there"
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Mouse parity's other half (§7): the secondary button is the `-`.
+    #[test]
+    fn the_secondary_button_sheds_an_instance() {
+        let mut state = browsing();
+        let rows = rows_of(&state);
+        let frontend = entry(&state, "horizon-frontend");
+        state.add(&frontend);
+        state.add(&frontend);
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+
+        assert!(click_secondary(&mut state, &rows, Hit::Badge(index)));
+
+        assert_eq!(state.instances(&frontend.path), 1, "one shed, one kept");
+        assert!(click_secondary(&mut state, &rows, Hit::Badge(index)));
+        assert!(state.selection().is_empty());
+        assert!(
+            !click_secondary(&mut state, &rows, Hit::Badge(index)),
+            "nothing left to shed"
+        );
+    }
+
+    /// The filter's own rule: matches from other roots are counted, and the
+    /// view draws them under their own heading.
+    #[test]
+    fn matches_from_other_roots_are_counted_and_ruled_off() {
+        let mut state = browsing();
+        state.begin_filter();
+        for character in "hor".chars() {
+            state.push_filter(character);
+        }
+
+        let listing = state.listing(&Fixture);
+
+        assert_eq!(listing.elsewhere, 1, "horizon-docs lives under ~/work");
+        assert_eq!(
+            listing.entries.last().map(|entry| entry.name.as_str()),
+            Some("horizon-docs"),
+            "and it sorts after everything from this root"
+        );
+        let rendered = text(&render(&state));
+        assert!(rendered.contains("also in other roots"), "{rendered}");
     }
 
     #[test]
