@@ -960,15 +960,18 @@ impl Picker<'_> {
         // Whatever else is true, the rows that exist are drawn — an
         // unreadable or empty folder still shows the `..` that leads out of
         // it, exactly as the export's empty-folder card does.
-        let height = area.height as usize;
-        let visible = self.entries().len().min(height);
-        for slot in 0..visible {
-            let index = self.state.offset() + slot;
-            let Some(entry) = self.entries().get(index) else {
+        // The rule that separates this root's matches from the rest takes a
+        // row of its own; it does not stand in for the match it introduces.
+        let boundary = (self.elsewhere() > 0)
+            .then(|| self.entries().len() - self.elsewhere())
+            .filter(|first| *first >= self.state.offset());
+        let mut drawn = 0usize;
+        let mut y = area.y;
+        for index in self.state.offset()..self.entries().len() {
+            if y >= area.y + area.height {
                 break;
-            };
-            let y = area.y + slot as u16;
-            if self.elsewhere() > 0 && index == self.entries().len() - self.elsewhere() {
+            }
+            if boundary == Some(index) {
                 buffer.set_line(
                     area.x + INSET,
                     y,
@@ -978,10 +981,20 @@ impl Picker<'_> {
                     )),
                     area.width,
                 );
-                continue;
+                y += 1;
+                drawn += 1;
+                if y >= area.y + area.height {
+                    break;
+                }
             }
+            let Some(entry) = self.entries().get(index) else {
+                break;
+            };
             self.row(buffer, area, y, index, entry);
+            y += 1;
+            drawn += 1;
         }
+        let visible = drawn;
         // Then what the listing has to say about itself, under them.
         for (index, (line, style)) in self.condition().into_iter().enumerate() {
             let y = area.y + (visible + index) as u16;
@@ -1825,10 +1838,35 @@ impl Browse for FsBrowse {
     }
 
     fn search(&self, path: &Path) -> Vec<Entry> {
+        // Configured roots may overlap — the default pair is the working
+        // directory and the home that usually contains it — and a repository
+        // inside two of them would otherwise be found once per root and
+        // listed twice, in both partitions.
+        //
+        // So a repository belongs to exactly one searcher: the most specific
+        // one that contains it. The folder being browsed claims its own
+        // matches first, then the roots from the deepest outwards, and a path
+        // already claimed is skipped. Paths are compared canonically, so a
+        // symlinked or `..`-laden root cannot smuggle the same repository in
+        // twice.
+        let mut deepest: Vec<&Path> = self
+            .roots
+            .iter()
+            .map(PathBuf::as_path)
+            .filter(|root| *root != path)
+            .collect();
+        deepest.sort_by_key(|root| std::cmp::Reverse(root.components().count()));
+
         let mut found = Vec::new();
-        walk(path, 3, &mut found);
-        for root in self.roots.iter().filter(|root| root.as_path() != path) {
-            walk(root, 3, &mut found);
+        let mut claimed = std::collections::HashSet::new();
+        for start in std::iter::once(path).chain(deepest) {
+            let mut batch = Vec::new();
+            walk(start, 3, &mut batch);
+            for entry in batch {
+                if claimed.insert(canonical(&entry.path)) {
+                    found.push(entry);
+                }
+            }
         }
         found
     }
@@ -1878,6 +1916,13 @@ fn walk(path: &Path, depth: usize, found: &mut Vec<Entry>) {
             walk(&child, depth - 1, found);
         }
     }
+}
+
+/// A path in the form two roots can be compared by. Falls back to the path
+/// itself when it cannot be resolved, which still de-duplicates the ordinary
+/// case.
+fn canonical(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn is_repository(path: &Path) -> bool {
@@ -2057,6 +2102,18 @@ mod tests {
             .find(|entry| entry.name == name)
             .expect("the fixture lists it");
         assert!(state.toggle(entry));
+    }
+
+    /// A directory of this test's own, for the cases that need a real one.
+    fn temp_root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "termdeck-picker-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
     }
 
     fn entry(state: &PickerState, name: &str) -> Entry {
@@ -2389,14 +2446,7 @@ mod tests {
     /// fixture describes is the branch `read_dir` actually produces.
     #[test]
     fn the_filesystem_browser_separates_empty_from_unreadable() {
-        let root = std::env::temp_dir().join(format!(
-            "termdeck-picker-{}-{:?}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = temp_root("states");
         let empty = root.join("empty");
         std::fs::create_dir_all(&empty).unwrap();
         let browser = FsBrowse::new(vec![root.clone()]);
@@ -2422,6 +2472,60 @@ mod tests {
                 .any(|entry| entry.kind == EntryKind::Parent),
             "the way out is still there"
         );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Overlapping roots — the default pair is the working directory and the
+    /// home above it — must not list the same repository twice. The nearer
+    /// root claims it; a repository no root contains still shows up under the
+    /// filter's own rule.
+    #[test]
+    fn a_repository_inside_two_roots_is_listed_once() {
+        let root = temp_root("overlap");
+        let outer = root.join("outer");
+        let inner = outer.join("inner");
+        let shared = inner.join("repo-shared");
+        let only_outer = outer.join("repo-outer");
+        for repository in [&shared, &only_outer] {
+            std::fs::create_dir_all(repository.join(".git")).unwrap();
+            std::fs::write(repository.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        }
+        // Both roots contain `repo-shared`; only the outer contains
+        // `repo-outer`.
+        let browser = FsBrowse::new(vec![outer.clone(), inner.clone()]);
+
+        let found = browser.search(&inner);
+
+        let names: Vec<_> = found.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(
+            names.iter().filter(|name| **name == "repo-shared").count(),
+            1,
+            "the nearer root claims it: {names:?}"
+        );
+        assert_eq!(
+            names.iter().filter(|name| **name == "repo-outer").count(),
+            1,
+            "{names:?}"
+        );
+
+        // And through the filter, the shared repository sits in the browsed
+        // folder's own partition while the outer one is ruled off as
+        // elsewhere — each exactly once.
+        let mut state = PickerState::at(&inner);
+        state.begin_filter();
+        for character in "repo".chars() {
+            state.push_filter(character);
+        }
+        let listing = state.listing(&browser);
+
+        let names: Vec<_> = listing
+            .entries
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect();
+        assert_eq!(names, ["repo-shared", "repo-outer"], "{names:?}");
+        assert_eq!(listing.elsewhere, 1, "only the unclaimed one is elsewhere");
 
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -2470,6 +2574,14 @@ mod tests {
         );
         let rendered = text(&render(&state));
         assert!(rendered.contains("also in other roots"), "{rendered}");
+        // The rule introduces the match; it does not replace it.
+        assert!(
+            rendered.contains("horizon-docs"),
+            "the elsewhere match is drawn under its rule: {rendered}"
+        );
+        let rule = rendered.find("also in other roots").unwrap();
+        let docs = rendered.find("horizon-docs").unwrap();
+        assert!(rule < docs, "the rule comes first");
     }
 
     #[test]
