@@ -553,3 +553,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #48 A1 (CLI entries + discovery model) dispatched to codex (coord/48-cli-discovery). A2 (picker) design check with Claude Design deferred until A1 lands.
 - 2026-09-02: #48 A1 done (codex `6dd1401`: fs resolution + discovery model; 163 tests) — in critic review.
 - 2026-09-02: #48 A1 critic PASS (contracts empty; 2 non-blocking: redundant DEFAULT_SCROLLBACK, expect() invariants) → pushed coord/48-cli-discovery → PR #52. A2 (folder picker) now unblocks — user's Claude Design pass next.
+- 2026-09-02: synced updated mockups (picker) into reference `63c5b4c`; dispatached claude_design MCP prompt to claude for the A2 picker design (import project, implement Termdeck TUI.dc.html).
