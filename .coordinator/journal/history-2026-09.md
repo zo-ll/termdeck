@@ -539,3 +539,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   check test for ratio constants; 152 tests). Re-review handed to the critic.
   (Skills: lean rewrite committed+pushed.)
 - 2026-09-02: #44 (stacked previews start at minimal width) dispatched to claude (same session; coord/44-min-stack).
+- 2026-09-02: #44 done (claude `c1d614f`: min-width start 0.85, examples stop pinning 0.70 so override works, strip degrades at 15% instead of truncating, zero fixtures re-blessed, fresh-start.txt; 157 tests) — in critic review.
