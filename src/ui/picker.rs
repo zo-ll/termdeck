@@ -456,11 +456,11 @@ impl PickerState {
     /// `⇧↓` / `⇧↑` — everything selectable from the cursor to the end of the
     /// listing, or from the start of it to the cursor.
     ///
-    /// Additive and idempotent, exactly like `a`: a row already selected keeps
-    /// the instances it has, so leaning on the key cannot multiply what a
-    /// deliberate `+` built. Rows are taken in listing order whichever way the
-    /// range runs, so the pane numbers read top to bottom the way the screen
-    /// does.
+    /// The first selectable row in the span decides the operation: selected
+    /// means remove every selectable path in the span; unselected means add
+    /// every missing path once. Rows are taken in listing order whichever way
+    /// the range runs, so newly added pane numbers read top to bottom the way
+    /// the screen does.
     pub fn select_range(&mut self, rows: &[Entry], downward: bool) -> bool {
         if rows.is_empty() {
             return false;
@@ -482,16 +482,24 @@ impl PickerState {
         let cursor = self.cursor.min(last);
         let target = target.min(last);
         let (first, final_row) = (cursor.min(target), cursor.max(target));
-        let mut added = false;
-        for entry in rows[first..=final_row]
+        let entries: Vec<_> = rows[first..=final_row]
             .iter()
             .filter(|entry| entry.selectable())
-        {
-            if self.instances(&entry.path) == 0 {
-                added |= self.add(entry);
-            }
-        }
-        added
+            .collect();
+        let Some(first_entry) = entries.first() else {
+            return false;
+        };
+        let remove = self.instances(&first_entry.path) > 0;
+        entries.into_iter().fold(false, |changed, entry| {
+            changed
+                | if remove {
+                    self.remove(entry)
+                } else if self.instances(&entry.path) == 0 {
+                    self.add(entry)
+                } else {
+                    false
+                }
+        })
     }
 
     /// `m` — the cursor's path takes the master frame: its first instance
@@ -705,8 +713,8 @@ pub enum Hit {
     /// The row's body — `⏎`. A second click on the same row descends into it,
     /// which is the pointer's `→`.
     Row(usize),
-    /// The selection box — `x`.
-    Box(usize),
+    /// The per-row checkbox — toggle this path without descending.
+    Checkbox(usize),
     /// The `×N` badge — `+`.
     Badge(usize),
     /// A pane number in the selection panel — `m`.
@@ -868,14 +876,14 @@ impl Picker<'_> {
             &[
                 ("type", " to narrow  "),
                 ("↑↓", " move  "),
-                ("⏎", " select  "),
+                ("⏎/⇥", " toggle  "),
                 ("+/-", " instance  "),
                 ("esc", " clear filter"),
             ]
         } else {
             &[
                 ("↑↓", " move  "),
-                ("⏎", " select  "),
+                ("⏎/⇥", " toggle  "),
                 ("⇧↑↓", " range  "),
                 ("→", " inside  "),
                 ("←", " back  "),
@@ -1130,11 +1138,6 @@ impl Picker<'_> {
     fn row(&self, buffer: &mut Buffer, area: Rect, y: u16, index: usize, entry: &Entry) {
         let cursor = index == self.state.cursor();
         let instances = self.state.instances(&entry.path);
-        let ordinal = self
-            .state
-            .selection()
-            .iter()
-            .position(|instance| instance.path == entry.path);
         if cursor {
             Block::new().style(Style::new().bg(DEMOTED_BG)).render(
                 Rect {
@@ -1154,17 +1157,17 @@ impl Picker<'_> {
                 area.width.saturating_sub(column),
             );
         };
-        let box_style = if ordinal.is_some() {
+        let box_style = if instances > 0 {
             Style::new().fg(ACCENT).bg(background)
         } else {
             Style::new().fg(HINT).bg(background)
         };
-        // Screen 06 gives a box to every row but a plain file — including
-        // `..` and folders, which simply never fill one.
-        let selection_box = match (entry.kind, ordinal) {
-            (_, Some(index)) => format!("[{}]", index + 1),
-            (EntryKind::File, None) => "   ".to_owned(),
-            (_, None) => "[ ]".to_owned(),
+        // The checkbox is for paths that can actually be selected. `..` and
+        // files have no checkbox because neither can open a terminal.
+        let selection_box = match (entry.selectable(), instances > 0) {
+            (true, true) => "[x]",
+            (true, false) => "[ ]",
+            (false, _) => "   ",
         };
         put(buffer, 0, vec![Span::styled(selection_box, box_style)]);
         let (glyph, colour) = match entry.kind {
@@ -1600,7 +1603,7 @@ impl Picker<'_> {
         let entry = self.entries().get(index)?;
         let column = pointer.x.saturating_sub(content.x);
         Some(match column {
-            0..=2 => Hit::Box(index),
+            0..=2 if entry.selectable() => Hit::Checkbox(index),
             COL_BADGE..COL_SEPARATOR if self.state.instances(&entry.path) > 0 => Hit::Badge(index),
             _ => Hit::Row(index),
         })
@@ -1693,7 +1696,7 @@ pub fn press(
         }
         // `⏎` selects the row under the cursor, and a second press on the
         // same row lets it go again. `space` is the same key by another name.
-        Key::Enter | Key::Char(' ') => {
+        Key::Enter | Key::Tab | Key::Char(' ') => {
             if let Some(entry) = cursor.as_ref() {
                 state.toggle(entry);
             }
@@ -1717,7 +1720,7 @@ pub fn press(
         }
         // `→` goes inside whatever the cursor is on — a folder or a
         // repository, since a repository is a folder that also holds a `.git`.
-        Key::Right | Key::Tab | Key::Char('l') => {
+        Key::Right | Key::Char('l') => {
             if let Some(entry) = cursor.as_ref() {
                 state.enter(entry);
             }
@@ -1780,12 +1783,11 @@ pub fn descend(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
     state.enter(&entry)
 }
 
-/// Shift held on a click: the pointer twin of `⇧↓` / `⇧↑`. It selects every
+/// Shift held on a click: the pointer twin of `⇧↓` / `⇧↑`. It toggles every
 /// selectable row between the highlight and the row that was clicked, then
-/// moves the highlight there — so a second shift-click carries on from where
-/// the first one stopped.
+/// moves the highlight there.
 pub fn click_range(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
-    let (Hit::Row(index) | Hit::Box(index) | Hit::Badge(index)) = hit else {
+    let (Hit::Row(index) | Hit::Checkbox(index) | Hit::Badge(index)) = hit else {
         return false;
     };
     if index >= rows.len() {
@@ -1801,7 +1803,7 @@ pub fn click_range(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
 /// the additions and the secondary button the subtraction, so a pointer can
 /// reach both ends of §3.1 without a keyboard.
 pub fn click_secondary(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
-    let (Hit::Badge(index) | Hit::Row(index) | Hit::Box(index)) = hit else {
+    let (Hit::Badge(index) | Hit::Row(index) | Hit::Checkbox(index)) = hit else {
         return false;
     };
     let Some(entry) = rows.get(index).cloned() else {
@@ -1819,10 +1821,10 @@ pub fn click(state: &mut PickerState, rows: &[Entry], hit: Hit) -> Option<Picker
             state.point_at(index, rows.len());
             state.toggle(&entry);
         }
-        Hit::Box(index) => {
+        Hit::Checkbox(index) => {
             let entry = rows.get(index).cloned()?;
             state.point_at(index, rows.len());
-            state.remove(&entry);
+            state.toggle(&entry);
         }
         Hit::Badge(index) => {
             let entry = rows.get(index).cloned()?;
@@ -2548,11 +2550,12 @@ mod tests {
             "folders are in the range"
         );
 
-        // Additive and idempotent: pressing it again changes nothing, and a
-        // deliberate instance is not multiplied by a bulk key.
-        let before = state.selection().len();
+        // Each press decides from the first selectable row afresh: the second
+        // one removes the span, and the third selects it again.
         press(&mut state, &rows, &roots, Key::ShiftDown);
-        assert_eq!(state.selection().len(), before);
+        assert!(state.selection().is_empty());
+        press(&mut state, &rows, &roots, Key::ShiftDown);
+        assert_eq!(state.selection().len(), 4);
     }
 
     /// `⇧↑` is the same thing upward, and takes its rows in listing order so
@@ -2587,14 +2590,16 @@ mod tests {
         );
     }
 
-    /// A range that starts on an already-selected row keeps what is there and
-    /// adds the rest — the two keys accumulate rather than replace.
+    /// A selected first row makes a range remove every path in its span,
+    /// including every deliberate instance of those paths.
     #[test]
-    fn a_range_adds_to_what_is_already_selected() {
+    fn a_range_uses_its_first_selectable_row_to_choose_removal() {
         let mut state = browsing();
         let roots = Fixture.roots();
         let rows = rows_of(&state);
-        select(&mut state, "termdeck");
+        let app = entry(&state, "horizon-app");
+        state.add(&app);
+        state.add(&app);
         let index = rows
             .iter()
             .position(|entry| entry.name == "horizon-app")
@@ -2603,15 +2608,7 @@ mod tests {
 
         press(&mut state, &rows, &roots, Key::ShiftDown);
 
-        let names: Vec<_> = state
-            .selection()
-            .iter()
-            .map(|instance| instance.name.as_str())
-            .collect();
-        assert_eq!(names[0], "termdeck", "what was already selected stays put");
-        assert_eq!(state.instances(&entry(&state, "termdeck").path), 1);
-        assert!(names.contains(&"horizon-app"), "{names:?}");
-        assert!(names.contains(&"vendor"), "{names:?}");
+        assert!(state.selection().is_empty(), "both app instances are gone");
     }
 
     /// The pointer selects a folder exactly as `⏎` does, and a second click
@@ -2635,10 +2632,10 @@ mod tests {
         assert!(state.selection().is_empty(), "the click was navigation");
     }
 
-    /// Every column of a folder's row is the row, since the name stopped
-    /// being its own hit region when a click came to mean select.
+    /// The checkbox is the only separate hit region; the row body still owns
+    /// selection and second-click descent.
     #[test]
-    fn every_column_of_a_folder_row_is_the_row() {
+    fn a_folder_checkbox_is_separate_from_its_row_body() {
         let state = browsing();
         let listing = state.listing(&Fixture);
         let roots = Fixture.roots();
@@ -2655,13 +2652,18 @@ mod tests {
             assert_eq!(
                 picker.hit(area, Position::new(column, 6)),
                 Some(if column <= 2 {
-                    Hit::Box(1)
+                    Hit::Checkbox(1)
                 } else {
                     Hit::Row(1)
                 }),
                 "column {column}"
             );
         }
+        assert_eq!(
+            picker.hit(area, Position::new(1, 5)),
+            Some(Hit::Row(0)),
+            ".. has no checkbox"
+        );
     }
 
     /// Shift-click is the range's pointer twin: everything between the
@@ -2702,6 +2704,10 @@ mod tests {
         assert!(names.contains(&"notes"), "a folder inside the span");
         assert!(!names.contains(&"README.md"), "but not a file");
         assert_eq!(state.cursor(), to, "the highlight follows the click");
+
+        state.point_at(from, rows.len());
+        assert!(click_range(&mut state, &rows, Hit::Row(to)));
+        assert!(state.selection().is_empty(), "the same span toggles off");
     }
 
     /// Clicking *above* the highlight is the same span read the other way,
@@ -2745,42 +2751,26 @@ mod tests {
         assert_eq!(state.cursor(), to);
     }
 
-    /// Additive and idempotent, exactly as the keys are: a second shift-click
-    /// carries on from where the first stopped without multiplying anything.
+    /// Shift-click applies the same fresh first-row rule as the keyboard.
     #[test]
-    fn shift_click_adds_to_the_selection_without_multiplying_it() {
+    fn shift_click_uses_the_first_selectable_row_to_toggle_the_span() {
         let mut state = browsing();
         let rows = rows_of(&state);
         let frontend = entry(&state, "horizon-frontend");
         state.add(&frontend);
         state.add(&frontend);
-        state.point_at(0, rows.len());
+        let frontend_index = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+        state.point_at(frontend_index, rows.len());
 
         let app = rows
             .iter()
             .position(|entry| entry.name == "horizon-app")
             .unwrap();
-        click_range(&mut state, &rows, Hit::Row(app));
-        let after_first = state.selection().len();
-
-        // From here the highlight is on horizon-app, so the next one extends.
-        let vendor = rows
-            .iter()
-            .position(|entry| entry.name == "vendor")
-            .unwrap();
-        click_range(&mut state, &rows, Hit::Row(vendor));
-
-        assert_eq!(
-            state.instances(&frontend.path),
-            2,
-            "a deliberate instance is not multiplied by a range"
-        );
-        assert!(state.selection().len() > after_first, "it carried on");
-        // And running the same span again changes nothing at all.
-        let before = state.selection().len();
-        state.point_at(app, rows.len());
-        click_range(&mut state, &rows, Hit::Row(vendor));
-        assert_eq!(state.selection().len(), before);
+        assert!(click_range(&mut state, &rows, Hit::Row(app)));
+        assert!(state.selection().is_empty(), "all frontend instances go");
     }
 
     /// The pointer follows the same two keys: one click selects, a second on
@@ -2838,9 +2828,50 @@ mod tests {
         assert_eq!(state.selection().len(), 2);
         assert_eq!(state.selection()[1].name, "horizon-frontend-2");
 
-        // The box removes the path outright, however many instances it has.
-        click(&mut state, &rows, Hit::Box(2));
+        // The checkbox removes the path outright, however many instances it
+        // has, without using the row's descend behaviour.
+        click(&mut state, &rows, Hit::Checkbox(2));
         assert!(state.selection().is_empty());
+    }
+
+    /// The checkbox and `⇥` share `space`/`x`'s whole-path toggle rule, while
+    /// only the row body can take the second-click navigation path.
+    #[test]
+    fn checkbox_and_tab_toggle_a_path_without_conflicting_with_row_descent() {
+        let mut state = browsing();
+        let rows = rows_of(&state);
+        let roots = Fixture.roots();
+        let index = rows
+            .iter()
+            .position(|entry| entry.name == "archive")
+            .unwrap();
+        let archive = rows[index].clone();
+        state.add(&archive);
+        state.add(&archive);
+
+        click(&mut state, &rows, Hit::Checkbox(index));
+        assert!(
+            state.selection().is_empty(),
+            "checkbox removes all instances"
+        );
+        assert_eq!(
+            state.cwd(),
+            Some(code().as_path()),
+            "checkbox never descends"
+        );
+
+        press(&mut state, &rows, &roots, Key::Tab);
+        assert_eq!(
+            state.instances(&archive.path),
+            1,
+            "tab toggles the cursor row"
+        );
+        press(&mut state, &rows, &roots, Key::Tab);
+        assert!(state.selection().is_empty());
+
+        click(&mut state, &rows, Hit::Row(index));
+        assert!(descend(&mut state, &rows, Hit::Row(index)));
+        assert_eq!(state.cwd(), Some(code().join("archive").as_path()));
     }
 
     #[test]
