@@ -59,9 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
-  expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
-  critic review.
 - 2026-09-02: #41 S1 (mouse-first: draggable stack-width divider, keyboard
   parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
   off main). Brief: visible divider + drag => live split (bounds decision),
@@ -164,6 +161,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   blocked A1), #50 A3 (both; blocked A1), #51 A4 (codex; blocked A1+A2+A3).
   Waves: A1 → A2(+A3-prep) → A3 → A4.
 - 2026-09-02: #48 A1 (CLI entries + discovery model) dispatched to codex (coord/48-cli-discovery). A2 (picker) design check with Claude Design deferred until A1 lands.
+- 2026-09-02: #48 A1 done (codex `6dd1401`: fs resolution + discovery model; 163 tests) — in critic review.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

@@ -446,3 +446,6 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   untouched per user). /tmp was wiped by the reboot — task briefs recreated
   from issue bodies/COORDINATION records.
 - 2026-09-02: #39 critic PASS → pushed → PR opened. Awaiting user approval.
+- 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
+  expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
+  critic review.
