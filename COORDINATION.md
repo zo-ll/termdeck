@@ -194,3 +194,13 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   give it to a new agent. Do not rely on an old conversation for context.
 - Private remote: `https://github.com/zo-ll/termdeck`. `main` and the active
   `coord/*` branches were first pushed on 2026-08-31.
+- 2026-09-02: RECONCILE (coordinator session was truncated by a tmux bug —
+  relay log recovered the missed turns): #41 S1 finished by claude (`bb29ff6`)
+  and critic re... 
+- 2026-09-02: RECONCILE (coordinator session truncated by a tmux bug; relay
+  log recovered the missed turns): #41 S1 done by claude `bb29ff6` (draggable
+  divider + ^g -/^g = parity, bounds 0.55-0.85, per-session persistence,
+  ceil-fix, 151 tests) and critic PASS (region discrimination + ceil-fix
+  regression tested, 3 non-blocking). Pushed coord/41-mouse-ratio → PR #43,
+  awaiting user approval. (Also fixed a duplicated '## Durable resumption'
+  heading from the earlier rotation run.)
