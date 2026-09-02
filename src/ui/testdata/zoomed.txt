@@ -39,4 +39,4 @@
 │                                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
                                                                                                                                                 
-   idp   4 terminals   > 1 frontend  ·  hidden: 2● 3✕ 4○          ^g j/k switch  ^g 1-4 select  ^g z unzoom  ^g [ scroll  ^g ? help  ^g q quit  
+   idp   4 terminals   > 1 frontend  ·  + add  ·  hidden: 2● 3✕ 4○                                      ^g j/k  ^g 1-4  ^g z  ^g [  ^g ?  ^g q  

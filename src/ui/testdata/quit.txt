@@ -39,4 +39,4 @@
 │                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  3 collapsed · ^g c expand all              
                                                                                                                                                 
-   idp   4 terminals   > 1 frontend  ·  0 open  ·  3 collapsed                                               confirm quit  ·  y quit  n cancel  
+   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                     confirm quit  ·  y quit  n cancel  

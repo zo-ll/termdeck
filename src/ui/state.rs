@@ -161,6 +161,20 @@ impl DeckState {
         self.resizing = resizing;
     }
 
+    /// Appends a terminal to the deck and returns the position it took.
+    ///
+    /// It lands at the end of the stack, folded like every other preview
+    /// (#39): the master keeps the frame, the order in front of it is
+    /// untouched, and the new pane is one more strip at the bottom of the
+    /// column. Nothing renumbers, so a promotion made before the addition
+    /// still means what it meant.
+    pub fn push_terminal(&mut self) -> usize {
+        let position = self.collapsed.len();
+        self.collapsed.push(true);
+        self.order.push(position);
+        position
+    }
+
     /// Configured position of the terminal holding the master pane.
     pub fn active(&self) -> Option<usize> {
         self.order.first().copied()
@@ -746,6 +760,32 @@ mod tests {
         state.set_resizing(false);
         assert!(!state.resizing());
         assert_eq!(state.master_ratio(), 0.60, "the split it left behind");
+    }
+
+    /// #50 A3: a terminal added at runtime lands at the end of the stack,
+    /// folded, and disturbs neither the master nor the order in front of it.
+    #[test]
+    fn a_pushed_terminal_joins_the_stack_without_moving_anything() {
+        let mut state = DeckState::new(3);
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        let order = state.stack().to_vec();
+        assert_eq!(state.active(), Some(2));
+
+        let position = state.push_terminal();
+
+        assert_eq!(position, 3, "it took the next configured position");
+        assert_eq!(state.active(), Some(2), "the master kept the frame");
+        assert_eq!(
+            state.stack(),
+            [order[0], order[1], 3],
+            "and it joined the end of the stack"
+        );
+        assert!(state.collapsed(3), "folded, like every other new preview");
+
+        // It behaves like any other pane from there.
+        apply(&mut state, ActionCommand::SelectPosition(3));
+        assert_eq!(state.active(), Some(3));
+        assert!(!state.collapsed(3), "a master is never folded");
     }
 
     #[test]

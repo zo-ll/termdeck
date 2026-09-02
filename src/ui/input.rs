@@ -32,6 +32,8 @@ pub enum Key {
     /// forwards them like any other arrow.
     ShiftUp,
     ShiftDown,
+    /// `⇧⇥`, which the runtime-add sheet cycles roots with.
+    ShiftTab,
     PageUp,
     PageDown,
     Enter,
@@ -50,6 +52,7 @@ impl Key {
             Self::Up => b"\x1b[A".to_vec(),
             Self::ShiftUp => b"\x1b[1;2A".to_vec(),
             Self::ShiftDown => b"\x1b[1;2B".to_vec(),
+            Self::ShiftTab => b"\x1b[Z".to_vec(),
             Self::Down => b"\x1b[B".to_vec(),
             Self::Right => b"\x1b[C".to_vec(),
             Self::Left => b"\x1b[D".to_vec(),
@@ -77,6 +80,9 @@ pub enum Reaction {
     /// far one page reaches is rendered geometry, which only the caller holds,
     /// so it applies this through [`super::Deck::stack_window`].
     PageStack(isize),
+    /// `^g a`: open the runtime-add sheet. Which repositories it can offer
+    /// is the caller's business, so the deck only asks for it (#50 A3).
+    AddTerminal,
     /// Quit confirmed at the confirmation modal that
     /// [`ActionCommand::RequestQuit`] opened.
     Quit,
@@ -197,6 +203,9 @@ impl Input {
                 deck.nudge_master_ratio(-1);
                 return None;
             }
+            // The runtime-add sheet: the deck has nothing to change, so it
+            // carries no frozen action either.
+            Key::Char('a') => return Some(Reaction::AddTerminal),
             Key::Char('[') => ActionCommand::ToggleScrollback,
             Key::Char('r') => ActionCommand::RespawnActive,
             Key::Char('?') => ActionCommand::ShowHelp,

@@ -1,0 +1,42 @@
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                 ┌── > add terminal  ·  ^g a ─────────────────────────────────────────────────┐                                 
+                                 │ ROOT ~/code  ·  5 repos · 2 already open                    ⇧⇥ switch root │                                 
+                                 │ ────────────────────────────────────────────────────────────────────────── │                                 
+                                 │ [·] ◆  horizon-frontend       · already open · pane 1                      │                                 
+                                 │ [·] ◆  horizon-backend        · already open · pane 2                      │                                 
+                                 │ [ ] ◆  horizon-app            · git · feat/rn-0.75                         │                                 
+                                 │ [ ] ◆  horizon-infra          · git · main                                 │                                 
+                                 │ [+] ◆  termdeck               · git · main                                 │                                 
+                                 │                                                                            │                                 
+                                 │ ────────────────────────────────────────────────────────────────────────── │                                 
+                                 │                                                          appends as pane 3 │                                 
+                                 │  o  Add 1 terminal     esc cancel · master unchanged                       │                                 
+                                 │ ↑↓ move  ⏎ mark  + instance  ⇧⇥ root  / filter  o add                      │                                 
+                                 └────────────────────────────────────────────────────────────────────────────┘                                 
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                
+                                                                                                                                                

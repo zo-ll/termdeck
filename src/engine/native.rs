@@ -178,6 +178,26 @@ impl NativeEngine {
         Ok(Self { terminals })
     }
 
+    /// Starts one more terminal in an already-running engine (#50 A3).
+    ///
+    /// Everything else here iterates `terminals`, so a terminal added this
+    /// way answers every command, drains its events, exits and respawns like
+    /// any other, and shutdown reaches it without a further thought.
+    pub fn add(&mut self, project: Project, size: ScreenSize) -> Result<(), String> {
+        if self
+            .terminals
+            .iter()
+            .any(|item| item.owns(&project.terminal))
+        {
+            return Err(format!(
+                "terminal '{}' is already running",
+                project.terminal
+            ));
+        }
+        self.terminals.push(NativeTerminal::spawn(project, size)?);
+        Ok(())
+    }
+
     fn terminal_mut(&mut self, terminal: &TerminalId) -> Option<&mut NativeTerminal> {
         self.terminals.iter_mut().find(|item| item.owns(terminal))
     }
@@ -480,6 +500,51 @@ mod tests {
         let transport = engine.terminals[0].transport.as_ref().unwrap();
         assert!(!transport.is_process_group_alive(), "no orphaned shell");
         assert!(transport.has_joined_threads());
+    }
+
+    /// #50 A3: a terminal added to a running engine is a terminal like any
+    /// other — it runs, it answers, and shutdown reaches it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_terminal_added_at_runtime_runs_and_is_shut_down_with_the_rest() {
+        let first = TerminalId::new("first");
+        let added = TerminalId::new("added");
+        let projects = [project(first.clone(), "printf FIRST; sleep 30")];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        wait_for_frame(&mut engine, &first, "FIRST");
+
+        engine
+            .add(
+                project(added.clone(), "printf ADDED; sleep 30"),
+                ScreenSize::new(80, 24),
+            )
+            .unwrap();
+
+        wait_for_frame(&mut engine, &added, "ADDED");
+        assert_eq!(engine.status(&added), Some(&TerminalStatus::Running));
+        assert_eq!(
+            engine.status(&first),
+            Some(&TerminalStatus::Running),
+            "the one that was already here is undisturbed"
+        );
+        // Identities stay unique, which is what the engine keys everything by.
+        assert!(
+            engine
+                .add(project(added.clone(), "sleep 1"), ScreenSize::new(80, 24))
+                .is_err(),
+            "the same identity twice is refused"
+        );
+
+        engine.dispatch(EngineCommand::Shutdown);
+
+        assert!(
+            engine.terminals.iter().all(|terminal| {
+                terminal.transport.as_ref().is_some_and(|transport| {
+                    !transport.is_process_group_alive() && transport.has_joined_threads()
+                })
+            }),
+            "nothing is orphaned, the addition included"
+        );
     }
 
     #[cfg(target_os = "linux")]

@@ -29,7 +29,8 @@ use ratatui::{
 pub use input::{Input, Key, Reaction};
 pub mod picker;
 pub use picker::{
-    Browse, Entry, EntryKind, FsBrowse, Hit, Instance, Listing, Picker, PickerReaction, PickerState,
+    Browse, Entry, EntryKind, FsBrowse, Hit, Instance, Listing, Open, Picker, PickerReaction,
+    PickerState, Sheet, SheetState,
 };
 pub use state::{DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal};
 
@@ -94,16 +95,19 @@ const PADDING: u16 = 2;
 const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 /// Cells in the activity meter.
 const METER_CELLS: u64 = 6;
-/// Help overlay size: the supplement's 60 columns by 21 rows, one row taller
-/// for the collapse binding, one more for the stack-paging keys and one more
-/// for the split divider's keys.
-const HELP_SIZE: (u16, u16) = (60, 24);
+/// Help overlay size: the supplement's 60 columns by 21 rows, grown a row at
+/// a time for the collapse binding, the stack-paging keys, the split
+/// divider's keys and the runtime-add sheet.
+const HELP_SIZE: (u16, u16) = (60, 25);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// Column the help overlay's descriptions start at.
 const HELP_KEYS: usize = 17;
 /// The keys that page the preview list, as the stack footer states them.
 const PAGE_KEYS: &str = "^g pgup/pgdn";
+/// The status bar's runtime-add affordance. Clicking it opens the same sheet
+/// `^g a` does.
+const ADD_AFFORDANCE: &str = "+";
 
 /// How a single pane is dressed. Every pane draws the same chrome; the kind
 /// selects the colours and how much of the title the pane has room to say.
@@ -505,6 +509,47 @@ impl Deck<'_> {
         let (body, _) = self.divider_of(area)?;
         let master = column.saturating_sub(body.x).min(body.width);
         Some(f64::from(master + GUTTER) / f64::from(body.width))
+    }
+
+    /// Whether `pointer` is on the status bar's `+`, which opens the
+    /// runtime-add sheet — the pointer's half of `^g a` (#50 A3).
+    ///
+    /// The affordance sits after the workspace chip, the census and the
+    /// active pane, so where it lands depends on their widths; this measures
+    /// the same spans the row draws rather than guessing a column.
+    pub fn add_at(&self, area: Rect, pointer: Position) -> bool {
+        if area.height < 2 || pointer.y + 1 != area.y + area.height {
+            return false;
+        }
+        let body = Rect {
+            height: area.height.saturating_sub(2),
+            ..area
+        };
+        // The narrow fallback's row has no affordance to click.
+        if self.layout(body) == Layout::Narrow {
+            return false;
+        }
+        let start = area.x + PADDING + self.add_affordance_offset();
+        let label = if area.width >= WIDE_COLUMNS { 4 } else { 0 };
+        (start..=start + ADD_AFFORDANCE.chars().count() as u16 + label).contains(&pointer.x)
+    }
+
+    /// Columns before the `+`.
+    fn add_affordance_offset(&self) -> u16 {
+        let total = self.projects.len();
+        let active = self
+            .state
+            .active()
+            .and_then(|position| self.projects.get(position).zip(Some(position)))
+            .map(|(project, position)| format!("> {} {}", position + 1, project.terminal))
+            .unwrap_or_default();
+        let width = format!(" {} ", self.workspace).chars().count()
+            + format!("  {total} terminal{}   ", plural(total))
+                .chars()
+                .count()
+            + active.chars().count()
+            + "  ·  ".chars().count();
+        width as u16
     }
 
     /// A draggable pane must have a visible master-and-stack counterpart.
@@ -1463,7 +1508,19 @@ impl Deck<'_> {
                 workspace,
                 Span::styled(format!("  {total} terminal{}   ", plural(total)), hint),
                 Span::styled(active, Style::new().fg(PREVIEW_FG).bg(STATUS_BG)),
+                // The runtime-add affordance the note puts here: `+ add`,
+                // beside the pane summary and clickable (#50 A3). It says
+                // the same thing `^g a` does.
+                Span::styled("  ·  ", hint),
+                Span::styled(ADD_AFFORDANCE, Style::new().fg(ACCENT).bg(STATUS_BG)),
             ];
+            // Its label goes the way the key hints' labels go, and for the
+            // same reason: below the wide threshold the row would rather
+            // spend those columns on the keys themselves. The `+` stays,
+            // because it is the only pointer path to the sheet.
+            if area.width >= WIDE_COLUMNS {
+                spans.push(Span::styled(" add", hint));
+            }
             if self.state.scrollback() {
                 spans.push(Span::styled("  ·  ", hint));
                 spans.push(Span::styled(
@@ -1820,7 +1877,7 @@ fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-const HELP: [(&str, &str); 16] = [
+const HELP: [(&str, &str); 17] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
@@ -1830,6 +1887,7 @@ const HELP: [(&str, &str); 16] = [
     ("^g c", "collapse / expand previews"),
     ("^g pgup/pgdn", "page the preview stack"),
     ("^g -  ^g =", "narrow / widen the master"),
+    ("^g a", "add a terminal"),
     ("^g [", "enter scrollback mode"),
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
@@ -2394,7 +2452,7 @@ mod tests {
         let rendered = text(&buffer);
 
         assert!(
-            rendered.contains("> 1 frontend  ·  1 open  ·  2 collapsed"),
+            rendered.contains("> 1 frontend  ·  + add  ·  1 open  ·  2 collapsed"),
             "{rendered}"
         );
         assert!(!rendered.contains("3 stacked"));
@@ -2402,7 +2460,9 @@ mod tests {
             !rendered.contains("1 exited"),
             "the fold census stands alone"
         );
-        assert!(rendered.contains("^g c collapse"));
+        // The `+ add` affordance (#50) leaves the reference row without the
+        // columns for labels; the key is what it promises.
+        assert!(rendered.contains("^g c"));
         assert!(
             !rendered.contains("^g [ scroll"),
             "collapse takes scroll's slot"
@@ -2935,7 +2995,9 @@ mod tests {
         assert!(screen.contains(" ZOOM "), "{screen}");
         // The hidden terminals stay accounted for in the status row.
         assert!(screen.contains("hidden: 2● 3✕ 4○"), "{screen}");
-        assert!(screen.contains("^g z unzoom"), "{screen}");
+        // The affordance took the room the labels had at this width; the
+        // key itself is what the row promises.
+        assert!(screen.contains("^g z"), "{screen}");
     }
 
     /// The spec's zoom + collapse rule: zoom hides the stack, so the folds
@@ -2946,7 +3008,10 @@ mod tests {
         let screen = text(&buffer);
 
         assert_eq!(zoomed().collapsed_count(), 3, "the folds are still held");
-        assert!(screen.contains("^g [ scroll"), "{screen}");
+        // The `+ add` affordance (#50) widened the left segment past the
+        // room for labels here, so the keys stand alone — but they are still
+        // the unfolded set, which is what this is about.
+        assert!(screen.contains("^g ["), "{screen}");
         assert!(!screen.contains("^g c"), "an inert key is not advertised");
         assert!(!screen.contains("collapsed"), "{screen}");
     }
@@ -3089,7 +3154,11 @@ mod tests {
         // a folded stack swaps `^g [` for `^g c` (§3.5 of the collapse spec).
         let state = expanded(4);
 
-        let labelled = render(&fixture::frontend_active(), &state, (144, 42)).0;
+        // The `+ add` affordance (#50) costs the left segment ten columns,
+        // so the labelled rung needs a wider canvas than the reference one to
+        // show itself. The ladder is what this tests, not where each rung
+        // falls: labels first, then keys, then the collapsed form.
+        let labelled = render(&fixture::frontend_active(), &state, (160, 42)).0;
         let keys_only = render(&fixture::frontend_active(), &state, (128, 42)).0;
         let collapsed = render(&fixture::frontend_active(), &state, (100, 42)).0;
 
@@ -3149,11 +3218,12 @@ mod tests {
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        // 60x24 centred on the canvas: columns 42..101, rows 9..32. The
-        // overlay grew a row for the split divider's keys (#41).
-        assert_eq!(buffer[(42u16, 9u16)].symbol(), "┌");
+        // 60x25 centred on the canvas: columns 42..101, rows 8..32. The
+        // overlay grew a row for the split divider's keys (#41) and another
+        // for the runtime-add sheet (#50).
+        assert_eq!(buffer[(42u16, 8u16)].symbol(), "┌");
         assert_eq!(buffer[(101u16, 32u16)].symbol(), "┘");
-        assert_eq!(buffer[(42u16, 9u16)].fg, ACCENT);
+        assert_eq!(buffer[(42u16, 8u16)].fg, ACCENT);
         // Focus is singular: the master border is no longer the accent, and
         // the underlay recedes by foreground alone.
         assert_eq!(buffer[(0u16, 0u16)].fg, IDLE_BORDER);

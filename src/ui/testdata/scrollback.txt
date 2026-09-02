@@ -39,4 +39,4 @@
 │  j/k ↑↓ line · pgup/pgdn page · g/G ends · esc live                                            ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  scrollback · esc returns to live           
                                                                                                                                                 
-   idp   4 terminals   > 1 frontend  ·  SCROLLBACK  ·  line 2217/2431               j/k ↑↓ line  pgup/pgdn page  g/G ends  esc live  ^g ? help  
+   idp   4 terminals   > 1 frontend  ·  + add  ·  SCROLLBACK  ·  line 2217/2431     j/k ↑↓ line  pgup/pgdn page  g/G ends  esc live  ^g ? help  
