@@ -555,3 +555,6 @@ scope.
   Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
   reusable across worktrees; tmux pings + crates.io work directly. No
   sandbox exception remains in the reuse policy.
+- 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
+  expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
+  critic review.
