@@ -395,3 +395,21 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   defined carefully vs #25 wheel; hit-testing by list offset; scroll
   indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
   working (#34a codex, #34b claude).
+- 2026-09-01 (end of day): USER change — stack previews COLLAPSED BY DEFAULT,
+  expand via marker click (inverts #27/#32). Issue #39 opened; dispatched to
+  claude (coord/35-collapsed-default): default folded strips, markers show ▸
+  from frame one, ^g c = toggle-all/expand-all, deliberate snapshot
+  re-blessing per fixture (honesty enforced by the critic).
+- 2026-09-01 (end-of-day, saved for tonight): #39 (stack previews collapsed
+  by default) remains OPEN, ready-for-agent, fully specced on GitHub. claude
+  exhausted its session tokens mid-task (~91% then cut) — its partial work in
+  ~/.worktrees/termdeck/35-collapsed-default (M src/ui/state.rs only, no
+  commit) is intentionally NOT saved (user decision); do not touch it. Resume
+  tonight: claude session resets 20:10 (Europe/Malta) — reroute/redo #39 from
+  a clean fresh branch off main (the existing coord/35-collapsed-default
+  branch is stale with partial state; prefer a new branch), or ask the user.
+  Task brief lives at /tmp/shipwright/termdeck/35-collapsed-default/task.md.
+- 2026-09-01: #32 critic PASS → pushed → PR #36 R awaiting approval. #34a
+  (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
+  #34b (scrollable stack list, UI) next — awaiting user choice (design-first
+  vs direct) but queued to claude.
