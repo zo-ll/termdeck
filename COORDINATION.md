@@ -183,6 +183,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   check test for ratio constants; 152 tests). Re-review handed to the critic.
   (Skills: lean rewrite committed+pushed.)
 
+## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
 - Before changing machines, commit worker changes and push `main` plus every
