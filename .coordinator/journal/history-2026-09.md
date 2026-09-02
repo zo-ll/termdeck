@@ -461,3 +461,9 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   ceil-fix, 151 tests) and critic PASS (region discrimination + ceil-fix
   regression tested, 3 non-blocking). Pushed coord/41-mouse-ratio → PR #43,
   awaiting user approval. (Also fixed a duplicated '
+- 2026-09-02: USER — give codex permissions too (parity with claude): codex
+  now runs danger-full-access (safety = worker contract + critic + user
+  approval; supersedes the earlier no-full-access stance for worker parity).
+  Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
+  reusable across worktrees; tmux pings + crates.io work directly. No
+  sandbox exception remains in the reuse policy.

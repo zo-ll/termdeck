@@ -59,12 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: USER — give codex permissions too (parity with claude): codex
-  now runs danger-full-access (safety = worker contract + critic + user
-  approval; supersedes the earlier no-full-access stance for worker parity).
-  Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
-  reusable across worktrees; tmux pings + crates.io work directly. No
-  sandbox exception remains in the reuse policy.
 - 2026-09-02: WORKFLOW (user-driven): reuse LONG-LIVED worker sessions per
   LANE (preserve context) — fresh sessions only on quota exhaustion or
   sandbox-scoped worktrees (codex). Patched into the coordinator skill
@@ -152,6 +146,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #48 A1 done (codex `6dd1401`: fs resolution + discovery model; 163 tests) — in critic review.
 - 2026-09-02: #48 A1 critic PASS (contracts empty; 2 non-blocking: redundant DEFAULT_SCROLLBACK, expect() invariants) → pushed coord/48-cli-discovery → PR #52. A2 (folder picker) now unblocks — user's Claude Design pass next.
 - 2026-09-02: synced updated mockups (picker) into reference `63c5b4c`; dispatached claude_design MCP prompt to claude for the A2 picker design (import project, implement Termdeck TUI.dc.html).
+- 2026-09-02: A2 picker DESIGN NOTE done (claude, coord/42-picker-spec `5b7a759` docs-only, off main): MCP import no-op — repo reference already matches live project (additive screens 06-08 + 5 boards); note fixes grid/colors/ordinal model/^g a sheet/click parity, answers 4 ambiguities, flags 1 export contradiction (/ root vs / filter+g root). Follow-up handed: same-path MULTI-INSTANCE support in picker + runtime-add (per-path counts, -2/-3 suffixes).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
