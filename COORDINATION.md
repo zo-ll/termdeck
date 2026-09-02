@@ -59,68 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: correction for #41 S1's 3 non-blocking findings routed to
-  claude (same session, coord/41-mouse-ratio): drop dup resizing, wheel
-  releases the divider (doc+code aligned), cross-check test for
-  master-ratio constants. Working.
-
-Rotated history: `.coordinator/journal/` (latest archive: 2026-09, 56 events).
-The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
-  (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
-  #34b (scrollable stack list, UI) next — awaiting user choice (design-first
-  vs direct) but queued to claude.
-  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
-  defined carefully vs #25 wheel; hit-testing by list offset; scroll
-  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
-  working (#34a codex, #34b claude).
-  critic review.
-  before #34b. #34b still with claude.
-  list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
-  follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
-  in critic review; branch base predates #36/#37, integration onto main after
-  review.
-  src/ui/testdata/help.txt (both #32 and #34b edits) — conflict resolution
-  routed to claude (same worker; left in conflicted state, not hand-fixed).
-  FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
-  should use the deck's count after the cap lift.
-  from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
-  close #34.
-  once: cap lift + scrollable stack live). Release binary rebuilt +
-  reinstalled. Open tracker: only #33 (animations, parked).
-  expand via marker click (inverts #27/#32). Issue #39 opened; dispatched to
-  claude (coord/35-collapsed-default): default folded strips, markers show ▸
-  from frame one, ^g c = toggle-all/expand-all, deliberate snapshot
-  re-blessing per fixture (honesty enforced by the critic).
-  by default) remains OPEN, ready-for-agent, fully specced on GitHub. claude
-  exhausted its session tokens mid-task (~91% then cut) — its partial work in
-  ~/.worktrees/termdeck/35-collapsed-default (M src/ui/state.rs only, no
-  commit) is intentionally NOT saved (user decision); do not touch it. Resume
-  tonight: claude session resets 20:10 (Europe/Malta) — reroute/redo #39 from
-  a clean fresh branch off main (the existing coord/35-collapsed-default
-  branch is stale with partial state; prefer a new branch), or ask the user.
-  Task brief lives at /tmp/shipwright/termdeck/35-collapsed-default/task.md.
-  personal with coordinator/critic/codex/claude windows; relay restarted
-  detached (inbox live, self-test delivered); critic booted fresh (ready,
-  idle, boot ping landed); codex standby; #39 re-dispatched to claude on a
-  FRESH branch coord/39-collapsed-default (stale 35-collapsed-default left
-  untouched per user). /tmp was wiped by the reboot — task briefs recreated
-  from issue bodies/COORDINATION records.
-  LANE (preserve context) — fresh sessions only on quota exhaustion or
-  sandbox-scoped worktrees (codex). Patched into the coordinator skill
-  (Phase 4, "reuse, don't relaunch"). Consequence: claude/critic keep one
-  session each; codex engine slices serialize in one worktree where possible.
-  now runs danger-full-access (safety = worker contract + critic + user
-  approval; supersedes the earlier no-full-access stance for worker parity).
-  Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
-  reusable across worktrees; tmux pings + crates.io work directly. No
-  sandbox exception remains in the reuse policy.
-  expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
-  critic review.
-  parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
-  off main). Brief: visible divider + drag => live split (bounds decision),
-  keyboard nudge bindings as equivalence, no regression of wheel/drag/
-  promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
-  hint/help label should read "expand" while folded.
 - 2026-09-02: #41 S1 correction done (claude `1f47d6c`: dup resizing
   deleted, paste-release added — key/wheel already released per doc, cross-
   check test for ratio constants; 152 tests). Re-review handed to the critic.
@@ -143,6 +81,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: synced updated mockups (picker) into reference `63c5b4c`; dispatached claude_design MCP prompt to claude for the A2 picker design (import project, implement Termdeck TUI.dc.html).
 - 2026-09-02: A2 picker DESIGN NOTE done (claude, coord/42-picker-spec `5b7a759` docs-only, off main): MCP import no-op — repo reference already matches live project (additive screens 06-08 + 5 boards); note fixes grid/colors/ordinal model/^g a sheet/click parity, answers 4 ambiguities, flags 1 export contradiction (/ root vs / filter+g root). Follow-up handed: same-path MULTI-INSTANCE support in picker + runtime-add (per-path counts, -2/-3 suffixes).
 - 2026-09-02: A2 design accepted (user: / = filter, g = root); design note pushed+merged `2bdaf5f`. #49 A2 DISPATCHED to claude (coord/49-picker): implement the picker per the note incl. multi-instance same-path.
+- 2026-09-02: #52/A1 MERGED (`7cab5ca`, gate 163) — #48 closed; A2 branch now needs to integrate main (claude builds on the seam; it read A1 from the branch meanwhile).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
