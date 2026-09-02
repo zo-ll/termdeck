@@ -385,3 +385,4 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   approval. #32 in flight (claude).
 - 2026-09-01: #32 done (claude, `48ab5d3`: always-visible markers + help ^g c;
   gate 116) — in critic review.
+- 2026-09-02: #41 S1 done (claude, `bb29ff6`: draggable divider col 98 + ^g -/= parity, per-session persistence, ceil-rounding fix found live, gate 151) — in critic review.
