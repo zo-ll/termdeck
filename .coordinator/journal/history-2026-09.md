@@ -542,3 +542,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #44 done (claude `c1d614f`: min-width start 0.85, examples stop pinning 0.70 so override works, strip degrades at 15% instead of truncating, zero fixtures re-blessed, fresh-start.txt; 157 tests) — in critic review.
 - 2026-09-02: #44 critic PASS → pushed coord/44-min-stack → PR #45, awaiting user approval.
 - 2026-09-02: #46 (quit modal 'y' doesn't quit) dispatched to claude (same session; coord/46-quit-modal).
+- 2026-09-02: #46 done (claude `76c82c0`: root cause = shutdown sent only SIGTERM which shells ignore; now HUP+TERM, quit exits ~20ms, escalation/no-orphan unchanged; 158 tests) — in critic review.
