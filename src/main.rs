@@ -19,14 +19,14 @@ fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
         }
         termdeck::cli::CliCommand::Picker => {
             // No path: the picker chooses the workspace, then the session
-            // opens it. Leaving the picker without a selection is not an
-            // error — the user asked for nothing.
+            // opens it. Cancelling is successful, but says what happened
+            // after the alternate screen has been restored.
             match termdeck::session::pick(termdeck::cli::picker_roots())? {
                 Some(workspace) => {
                     termdeck::session::run(&workspace)?;
                     Ok(None)
                 }
-                None => Ok(None),
+                None => Ok(Some("picker cancelled".to_owned())),
             }
         }
         termdeck::cli::CliCommand::Launch { workspace } => {

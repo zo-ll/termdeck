@@ -97,13 +97,7 @@ pub fn parse_with_environment(
         [workspace] if config_path.is_some() => CliCommand::Launch {
             workspace: Some(workspace.clone()),
         },
-        [path] if config_path.is_none() && Path::new(path).is_file() => {
-            config_path = Some(PathBuf::from(path));
-            CliCommand::Launch { workspace: None }
-        }
-        [path] if config_path.is_none() && Path::new(path).is_dir() => CliCommand::Folder {
-            root: PathBuf::from(path),
-        },
+        [path] if config_path.is_none() => resolve_path(path, &mut config_path)?,
         _ => return Err(CliError::new(usage())),
     };
     let config_path = match &command {
@@ -145,12 +139,36 @@ pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>
     let intent = parse(arguments)?;
     match intent.command {
         CliCommand::Folder { .. } => Ok(None),
-        CliCommand::Picker => Err(CliError::new("folder picker pending A2").into()),
+        // The binary owns the interactive picker, so this helper does not
+        // attempt to open one.
+        CliCommand::Picker => Ok(None),
         CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
             let config_path = intent.config_path.as_deref().expect("config command");
             let config = load(config_path)?;
             Ok(inspect(&intent, &config)?)
         }
+    }
+}
+
+/// Resolves the one positional entry without guessing whether a misspelled
+/// folder was meant to be a workspace name.
+fn resolve_path(path: &str, config_path: &mut Option<PathBuf>) -> Result<CliCommand, CliError> {
+    let metadata = fs::metadata(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            CliError::new(format!("{path}: path does not exist"))
+        } else {
+            CliError::new(format!("cannot access {path}: {error}"))
+        }
+    })?;
+    if metadata.is_file() {
+        *config_path = Some(PathBuf::from(path));
+        Ok(CliCommand::Launch { workspace: None })
+    } else if metadata.is_dir() {
+        Ok(CliCommand::Folder {
+            root: PathBuf::from(path),
+        })
+    } else {
+        Err(CliError::new(format!("{path}: not a file or directory")))
     }
 }
 
@@ -508,6 +526,26 @@ mod tests {
 
         assert_eq!(intent.config_path, None);
         assert_eq!(intent.command, CliCommand::Picker);
+    }
+
+    #[test]
+    fn a_missing_folder_names_the_problem() {
+        let missing = test_root();
+
+        let error = parse_with_environment([missing.display().to_string()], environment())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains(&format!("{}: path does not exist", missing.display())));
+    }
+
+    #[test]
+    fn an_unknown_option_names_the_option() {
+        let error = parse_with_environment(["--unknown".to_owned()], environment())
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(error, "unknown option: --unknown");
     }
 
     #[test]
