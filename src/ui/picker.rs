@@ -3218,6 +3218,28 @@ mod tests {
         assert_eq!(sheet.marked().len(), 1, "`-` sheds one");
     }
 
+    /// The add sheet borrows the picker's range state: marking from an
+    /// unselected row adds every repository through the end of its listing.
+    #[test]
+    fn add_sheet_range_marks_every_repository_below_the_cursor() {
+        let mut sheet = sheet_state();
+        let rows = sheet_rows(&sheet);
+        let app = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-app")
+            .unwrap();
+        sheet.state_mut().point_at(app, rows.len());
+
+        assert!(sheet.state_mut().select_range(&rows, true));
+
+        let names: Vec<_> = sheet
+            .marked()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        assert_eq!(names, ["horizon-app", "horizon-infra", "termdeck"]);
+    }
+
     /// `⇧⇥` cycles the configured roots in place, and the marks survive it —
     /// the sheet's selection is as workspace-wide as the picker's.
     #[test]
