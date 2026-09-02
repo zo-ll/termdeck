@@ -449,3 +449,9 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
 - 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
   expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
   critic review.
+- 2026-09-02: #41 S1 (mouse-first: draggable stack-width divider, keyboard
+  parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
+  off main). Brief: visible divider + drag => live split (bounds decision),
+  keyboard nudge bindings as equivalence, no regression of wheel/drag/
+  promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
+  hint/help label should read "expand" while folded.

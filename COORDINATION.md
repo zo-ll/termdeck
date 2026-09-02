@@ -59,12 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: #41 S1 (mouse-first: draggable stack-width divider, keyboard
-  parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
-  off main). Brief: visible divider + drag => live split (bounds decision),
-  keyboard nudge bindings as equivalence, no regression of wheel/drag/
-  promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
-  hint/help label should read "expand" while folded.
 - 2026-09-02: RECONCILE (coordinator session truncated by a tmux bug; relay
   log recovered the missed turns): #41 S1 done by claude `bb29ff6` (draggable
   divider + ^g -/^g = parity, bounds 0.55-0.85, per-session persistence,
@@ -162,6 +156,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   Waves: A1 → A2(+A3-prep) → A3 → A4.
 - 2026-09-02: #48 A1 (CLI entries + discovery model) dispatched to codex (coord/48-cli-discovery). A2 (picker) design check with Claude Design deferred until A1 lands.
 - 2026-09-02: #48 A1 done (codex `6dd1401`: fs resolution + discovery model; 163 tests) — in critic review.
+- 2026-09-02: #48 A1 critic PASS (contracts empty; 2 non-blocking: redundant DEFAULT_SCROLLBACK, expect() invariants) → pushed coord/48-cli-discovery → PR #52. A2 (folder picker) now unblocks — user's Claude Design pass next.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
