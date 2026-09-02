@@ -427,3 +427,6 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
   in critic review; branch base predates #36/#37, integration onto main after
   review.
+- 2026-09-01: #34b integration done (claude; merge 307ca80, help.txt resolved
+  from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
+  close #34.
