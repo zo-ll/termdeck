@@ -323,12 +323,18 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
-                // The deck has no secondary-button or shift gesture: ignoring
-                // them here keeps every existing pointer action as it was.
+                // The deck has no gesture of its own for either, but the
+                // press that came before one may have armed a drag or a
+                // marker — a shift-click's own press decodes as an ordinary
+                // one. So they end that state rather than leaving it for
+                // whatever event happens to arrive next.
                 InputEvent::Mouse {
-                    action: MouseAction::SecondaryUp | MouseAction::RangeUp,
+                    action: action @ (MouseAction::SecondaryUp | MouseAction::RangeUp),
                     ..
-                } => {}
+                } => {
+                    marker_press = None;
+                    mouse_action(&mut deck, None, action, now(), &mut last_click);
+                }
                 InputEvent::Mouse { pointer, action } => {
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -669,8 +675,14 @@ fn mouse_action(
             deck.update_drag(position);
             None
         }
-        // The deck owns neither of these; the picker does.
-        MouseAction::SecondaryUp | MouseAction::RangeUp => None,
+        // The deck owns neither of these; the picker does. What they do here
+        // is let go: whatever the press before them armed ends with them, so
+        // a shift-click can never leave a drag hanging behind it.
+        MouseAction::SecondaryUp | MouseAction::RangeUp => {
+            deck.cancel_drag();
+            *last_click = None;
+            None
+        }
         MouseAction::Up => {
             deck.update_drag(position);
             let (source, target) = deck.finish_drag()?;
@@ -1112,6 +1124,58 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// A shift-click's press is an ordinary press as far as the deck can
+    /// tell, so it arms a drag. Its release is the picker's range gesture,
+    /// which the deck does not act on — but it must still let go, or the
+    /// session would carry a phantom drag until some later event cleared it.
+    #[test]
+    fn a_shifted_release_lets_go_of_whatever_its_press_armed() {
+        let mut state = DeckState::new(4);
+        let mut last_click = None;
+        let at = |millis| Timestamp {
+            unix_millis: millis,
+        };
+
+        mouse_action(
+            &mut state,
+            Some(1),
+            MouseAction::Down,
+            at(0),
+            &mut last_click,
+        );
+        assert_eq!(state.dragged(), Some(1), "the press armed a drag");
+
+        let action = mouse_action(
+            &mut state,
+            None,
+            MouseAction::RangeUp,
+            at(1),
+            &mut last_click,
+        );
+
+        assert_eq!(action, None, "the deck has no gesture for it");
+        assert_eq!(state.dragged(), None, "and it let go of the one it had");
+        assert_eq!(last_click, None, "including the armed double-click");
+
+        // The secondary button lets go the same way.
+        mouse_action(
+            &mut state,
+            Some(2),
+            MouseAction::Down,
+            at(2),
+            &mut last_click,
+        );
+        assert_eq!(state.dragged(), Some(2));
+        mouse_action(
+            &mut state,
+            None,
+            MouseAction::SecondaryUp,
+            at(3),
+            &mut last_click,
+        );
+        assert_eq!(state.dragged(), None);
     }
 
     #[test]
