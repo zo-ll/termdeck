@@ -455,3 +455,9 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   keyboard nudge bindings as equivalence, no regression of wheel/drag/
   promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
   hint/help label should read "expand" while folded.
+- 2026-09-02: RECONCILE (coordinator session truncated by a tmux bug; relay
+  log recovered the missed turns): #41 S1 done by claude `bb29ff6` (draggable
+  divider + ^g -/^g = parity, bounds 0.55-0.85, per-session persistence,
+  ceil-fix, 151 tests) and critic PASS (region discrimination + ceil-fix
+  regression tested, 3 non-blocking). Pushed coord/41-mouse-ratio → PR #43,
+  awaiting user approval. (Also fixed a duplicated '

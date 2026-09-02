@@ -59,12 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: RECONCILE (coordinator session truncated by a tmux bug; relay
-  log recovered the missed turns): #41 S1 done by claude `bb29ff6` (draggable
-  divider + ^g -/^g = parity, bounds 0.55-0.85, per-session persistence,
-  ceil-fix, 151 tests) and critic PASS (region discrimination + ceil-fix
-  regression tested, 3 non-blocking). Pushed coord/41-mouse-ratio → PR #43,
-  awaiting user approval. (Also fixed a duplicated '
 - 2026-09-02: USER — give codex permissions too (parity with claude): codex
   now runs danger-full-access (safety = worker contract + critic + user
   approval; supersedes the earlier no-full-access stance for worker parity).
@@ -157,6 +151,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #48 A1 (CLI entries + discovery model) dispatched to codex (coord/48-cli-discovery). A2 (picker) design check with Claude Design deferred until A1 lands.
 - 2026-09-02: #48 A1 done (codex `6dd1401`: fs resolution + discovery model; 163 tests) — in critic review.
 - 2026-09-02: #48 A1 critic PASS (contracts empty; 2 non-blocking: redundant DEFAULT_SCROLLBACK, expect() invariants) → pushed coord/48-cli-discovery → PR #52. A2 (folder picker) now unblocks — user's Claude Design pass next.
+- 2026-09-02: synced updated mockups (picker) into reference `63c5b4c`; dispatached claude_design MCP prompt to claude for the A2 picker design (import project, implement Termdeck TUI.dc.html).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
