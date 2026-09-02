@@ -59,11 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-01: #34b review PASS but branch integration onto main CONFLICTED in
-  src/ui/testdata/help.txt (both #32 and #34b edits) — conflict resolution
-  routed to claude (same worker; left in conflicted state, not hand-fixed).
-  FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
-  should use the deck's count after the cap lift.
 - 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
   once: cap lift + scrollable stack live). Release binary rebuilt +
   reinstalled. Open tracker: only #33 (animations, parked).
@@ -171,6 +166,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #44 done (claude `c1d614f`: min-width start 0.85, examples stop pinning 0.70 so override works, strip degrades at 15% instead of truncating, zero fixtures re-blessed, fresh-start.txt; 157 tests) — in critic review.
 - 2026-09-02: #44 critic PASS → pushed coord/44-min-stack → PR #45, awaiting user approval.
 - 2026-09-02: #46 (quit modal 'y' doesn't quit) dispatched to claude (same session; coord/46-quit-modal).
+- 2026-09-02: #46 done (claude `76c82c0`: root cause = shutdown sent only SIGTERM which shells ignore; now HUP+TERM, quit exits ~20ms, escalation/no-orphan unchanged; 158 tests) — in critic review.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

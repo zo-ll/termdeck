@@ -430,3 +430,8 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
 - 2026-09-01: #34b integration done (claude; merge 307ca80, help.txt resolved
   from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
   close #34.
+- 2026-09-01: #34b review PASS but branch integration onto main CONFLICTED in
+  src/ui/testdata/help.txt (both #32 and #34b edits) — conflict resolution
+  routed to claude (same worker; left in conflicted state, not hand-fixed).
+  FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
+  should use the deck's count after the cap lift.
