@@ -6,19 +6,19 @@
 │                                                                                                ││                                             
 │    VITE v5.4.8  ready in 412 ms                                                                ││                                             
 │                                                                                                ││                                             
-│    ➜  Local:   http://localhost:5173/                                                          ││                                             
-│    ➜  Network: http://192.168.1.24:5173/┌─ help ──────────────────────────────────────────── ^g ? ─┐                                          
-│    ➜  press h + enter to show help      │                                                          │                                          
-│                                         │  NAVIGATE                                                │                                          
-│  12:03:58 [vite] page reload src/main.ts│  ^g j  ^g k       promote next / previous                │                                          
-│  12:04:12 [vite] hmr update /src/routes/│  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
-│  12:04:12 [vite] hmr update /src/styles/│  ^g 1 … ^g 4      promote by configured position         │                                          
-│  12:04:29 [vite] hmr update /src/routes/│                                                          │                                          
-│  12:04:41 [vite] optimized dependencies │  VIEW                                                    │                                          
-│                                         │  ^g z             toggle zoom                            │                                          
-│    VITE v5.4.8  ready in 268 ms         │  ^g c             collapse / expand previews             │                                          
-│                                         │  ^g pgup/pgdn     page the preview stack                 │                                          
-│  12:05:02 [vite] hmr update /src/compone│  ^g -  ^g =       narrow / widen the master              │                                          
+│    ➜  Local:   http://localhost:5173/   ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                          
+│    ➜  Network: http://192.168.1.24:5173/│                                                          │                                          
+│    ➜  press h + enter to show help      │  NAVIGATE                                                │                                          
+│                                         │  ^g j  ^g k       promote next / previous                │                                          
+│  12:03:58 [vite] page reload src/main.ts│  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
+│  12:04:12 [vite] hmr update /src/routes/│  ^g 1 … ^g 4      promote by configured position         │                                          
+│  12:04:12 [vite] hmr update /src/styles/│                                                          │                                          
+│  12:04:29 [vite] hmr update /src/routes/│  VIEW                                                    │                                          
+│  12:04:41 [vite] optimized dependencies │  ^g z             toggle zoom                            │                                          
+│                                         │  ^g c             collapse / expand previews             │                                          
+│    VITE v5.4.8  ready in 268 ms         │  ^g pgup/pgdn     page the preview stack                 │                                          
+│                                         │  ^g -  ^g =       narrow / widen the master              │                                          
+│  12:05:02 [vite] hmr update /src/compone│  ^g a             add a terminal                         │                                          
 │  12:05:09 warning  src/components/PaneTi│  ^g [             enter scrollback mode                  │                                          
 │           'status' is declared but its v│                                                          │                                          
 │  12:05:17 [vite] hmr update /src/compone│  TERMINAL                                                │                                          
@@ -39,4 +39,4 @@
 │                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  3 collapsed · ^g c expand all              
                                                                                                                                                 
-   idp   4 terminals   > 1 frontend  ·  0 open  ·  3 collapsed                                                    ^g ? help open  ·  esc close  
+   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                          ^g ? help open  ·  esc close  

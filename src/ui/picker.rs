@@ -365,6 +365,12 @@ impl PickerState {
         true
     }
 
+    /// Moves the listing to another folder, keeping the selection. The cursor
+    /// starts at the top of wherever it lands and the query does not travel.
+    pub fn go_to(&mut self, path: impl Into<PathBuf>) -> bool {
+        self.go(path.into())
+    }
+
     fn go(&mut self, path: PathBuf) -> bool {
         if self.workspace.is_empty() || self.selection.is_empty() {
             self.workspace = folder_name(&path);
@@ -607,17 +613,12 @@ impl PickerState {
     /// `-2`, `-3`, skipping anything already spoken for. Names are what the
     /// engine keys a terminal by, so they leave the picker unique.
     fn unique_name(&self, base: &str) -> String {
-        if !self.taken(base) {
-            return base.to_owned();
-        }
-        (2..)
-            .map(|instance| format!("{base}-{instance}"))
-            .find(|candidate| !self.taken(candidate))
-            .expect("an unused suffix exists")
-    }
-
-    fn taken(&self, name: &str) -> bool {
-        self.selection.iter().any(|instance| instance.name == name)
+        let taken: Vec<&str> = self
+            .selection
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        unique_name(&taken, base)
     }
 }
 
@@ -625,6 +626,22 @@ impl Default for PickerState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// The name a new instance of `base` takes: the plain name first, then `-2`,
+/// `-3`, skipping anything in `taken`.
+///
+/// The picker names what it is about to open; the runtime-add sheet (#50)
+/// names against what is already running as well, so the rule lives here
+/// rather than inside either of them.
+pub fn unique_name(taken: &[&str], base: &str) -> String {
+    if !taken.contains(&base) {
+        return base.to_owned();
+    }
+    (2..)
+        .map(|instance| format!("{base}-{instance}"))
+        .find(|candidate| !taken.iter().any(|name| *name == candidate))
+        .expect("an unused suffix exists")
 }
 
 /// Case-insensitive substring match, which is what the filter promises.
@@ -657,7 +674,7 @@ use ratatui::{
     layout::{Position, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Widget},
+    widgets::{Block, Clear, Widget},
 };
 
 use super::palette::*;
@@ -3021,6 +3038,220 @@ mod tests {
         assert!(rule < docs, "the rule comes first");
     }
 
+    // ---- the runtime-add sheet (#50 A3) -------------------------------
+
+    fn open_two() -> Vec<Open> {
+        vec![
+            Open {
+                path: code().join("horizon-frontend"),
+                pane: 1,
+            },
+            Open {
+                path: code().join("horizon-backend"),
+                pane: 2,
+            },
+        ]
+    }
+
+    fn sheet_state() -> SheetState {
+        SheetState::new(&Fixture.roots())
+    }
+
+    fn sheet_rows(sheet: &SheetState) -> Vec<Entry> {
+        sheet.rows(&Fixture, &Fixture.roots())
+    }
+
+    fn render_sheet(sheet: &SheetState, open: &[Open]) -> Buffer {
+        let rows = sheet_rows(sheet);
+        let roots = Fixture.roots();
+        let view = Sheet {
+            state: sheet,
+            rows: &rows,
+            roots: &roots,
+            open,
+            home: Some(Path::new("/home/dev")),
+            next_pane: open.len() + 1,
+        };
+        let mut terminal = Terminal::new(TestBackend::new(144, 42)).unwrap();
+        terminal.draw(|frame| view.render(frame)).unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    /// The sheet lists the current root's repositories, and says which of
+    /// them the session already holds.
+    #[test]
+    fn the_sheet_lists_repositories_and_locks_the_open_ones() {
+        let sheet = sheet_state();
+        let open = open_two();
+
+        let rendered = text(&render_sheet(&sheet, &open));
+
+        assert!(rendered.contains("> add terminal"), "{rendered}");
+        assert!(rendered.contains("ROOT ~/code"), "{rendered}");
+        assert!(rendered.contains("2 already open"), "{rendered}");
+        assert!(
+            rendered.contains("[·] ◆  horizon-frontend       · already open · pane 1"),
+            "{rendered}"
+        );
+        assert!(
+            !rendered.contains("archive"),
+            "a folder is not a terminal the sheet offers: {rendered}"
+        );
+        assert!(rendered.contains("[ ] ◆  termdeck"), "an unopened one");
+        assert!(
+            rendered.contains("esc cancel · master unchanged"),
+            "{rendered}"
+        );
+    }
+
+    /// `⏎` marks a row, and the lock is what stops it re-adding a pane the
+    /// session already has.
+    #[test]
+    fn enter_marks_a_row_but_not_one_that_is_already_open() {
+        let mut sheet = sheet_state();
+        let rows = sheet_rows(&sheet);
+        let roots = Fixture.roots();
+        let open = open_two();
+        let frontend = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+        sheet.state_mut().point_at(frontend, rows.len());
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert!(sheet.marked().is_empty(), "the lock held");
+
+        let termdeck = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
+        sheet.state_mut().point_at(termdeck, rows.len());
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+
+        assert_eq!(sheet.marked().len(), 1);
+        assert_eq!(sheet.marked()[0].name, "termdeck");
+        let rendered = text(&render_sheet(&sheet, &open));
+        assert!(rendered.contains("[+] ◆  termdeck"), "{rendered}");
+        assert!(rendered.contains("o  Add 1 terminal"), "{rendered}");
+    }
+
+    /// The note's relaxation: `+` on a locked row asks for *another* instance
+    /// of a repository that is already open.
+    #[test]
+    fn plus_appends_another_instance_of_an_open_repository() {
+        let mut sheet = sheet_state();
+        let rows = sheet_rows(&sheet);
+        let roots = Fixture.roots();
+        let open = open_two();
+        let frontend = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+        sheet.state_mut().point_at(frontend, rows.len());
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('+'));
+
+        assert_eq!(sheet.marked().len(), 1, "the lock never stopped `+`");
+        assert_eq!(sheet.marked()[0].path, code().join("horizon-frontend"));
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('+'));
+        assert_eq!(sheet.marked().len(), 2, "and again for a third pane");
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('-'));
+        assert_eq!(sheet.marked().len(), 1, "`-` sheds one");
+    }
+
+    /// `⇧⇥` cycles the configured roots in place, and the marks survive it —
+    /// the sheet's selection is as workspace-wide as the picker's.
+    #[test]
+    fn the_sheet_cycles_roots_and_keeps_what_is_marked() {
+        let mut sheet = sheet_state();
+        let roots = Fixture.roots();
+        let rows = sheet_rows(&sheet);
+        let open = open_two();
+        let termdeck = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
+        sheet.state_mut().point_at(termdeck, rows.len());
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert_eq!(sheet.root(), 0);
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Tab);
+
+        assert_eq!(sheet.root(), 1, "the next configured root");
+        assert_eq!(
+            sheet.marked().len(),
+            1,
+            "and the mark made under the first one is still there"
+        );
+    }
+
+    /// `esc` closes without adding; `o` commits what is marked.
+    #[test]
+    fn escape_cancels_the_sheet_and_o_commits_it() {
+        let mut sheet = sheet_state();
+        let rows = sheet_rows(&sheet);
+        let roots = Fixture.roots();
+        let open = open_two();
+
+        assert_eq!(
+            sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('o')),
+            None,
+            "nothing marked, nothing to add"
+        );
+        assert_eq!(
+            sheet_press(&mut sheet, &rows, &roots, &open, Key::Escape),
+            Some(PickerReaction::Quit)
+        );
+
+        let termdeck = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
+        sheet.state_mut().point_at(termdeck, rows.len());
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert_eq!(
+            sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('o')),
+            Some(PickerReaction::Launch)
+        );
+    }
+
+    /// The naming rule the session uses when it commits: a second instance of
+    /// an open path takes `-2`, skipping what is already running.
+    #[test]
+    fn an_instance_of_an_open_path_is_named_around_the_running_ones() {
+        let running = ["horizon-frontend", "horizon-backend"];
+        let taken: Vec<&str> = running.to_vec();
+
+        assert_eq!(unique_name(&taken, "termdeck"), "termdeck");
+        assert_eq!(
+            unique_name(&taken, "horizon-frontend"),
+            "horizon-frontend-2"
+        );
+
+        let taken = ["horizon-frontend", "horizon-frontend-2"];
+        assert_eq!(
+            unique_name(taken.as_ref(), "horizon-frontend"),
+            "horizon-frontend-3"
+        );
+    }
+
+    #[test]
+    fn add_sheet_matches_the_runtime_add_canvas() {
+        let mut sheet = sheet_state();
+        let rows = sheet_rows(&sheet);
+        let open = open_two();
+        let roots = Fixture.roots();
+        let termdeck = rows
+            .iter()
+            .position(|entry| entry.name == "termdeck")
+            .unwrap();
+        sheet.state_mut().point_at(termdeck, rows.len());
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+
+        assert_snapshot("add-sheet", &render_sheet(&sheet, &open));
+    }
+
     #[test]
     fn browse_matches_the_picker_canvas() {
         assert_snapshot("picker-browse", &render(&browsing()));
@@ -3077,4 +3308,483 @@ mod tests {
         );
         assert_snapshot("picker-roots", &buffer);
     }
+}
+
+// ---------------------------------------------------------------------------
+// The runtime-add sheet (#50 A3)
+// ---------------------------------------------------------------------------
+
+/// A repository the session already holds, and the pane it is in.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Open {
+    pub path: PathBuf,
+    pub pane: usize,
+}
+
+/// What `^g a` opens: the picker's language reduced to a sheet over the live
+/// session (note §6).
+///
+/// It is the picker with three differences, all of them here rather than in
+/// [`PickerState`], which it borrows wholesale: repositories already open are
+/// listed but locked, marks append rather than order, and the master never
+/// changes. `⇧⇥` cycles the configured roots in place, because the sheet has
+/// no room for a browse crumb.
+#[derive(Clone, Debug)]
+pub struct SheetState {
+    picker: PickerState,
+    root: usize,
+}
+
+impl SheetState {
+    /// Opens on the first configured root.
+    pub fn new(roots: &[Entry]) -> Self {
+        Self {
+            picker: roots
+                .first()
+                .map(|root| PickerState::at(&root.path))
+                .unwrap_or_default(),
+            root: 0,
+        }
+    }
+
+    pub fn state(&self) -> &PickerState {
+        &self.picker
+    }
+
+    pub fn state_mut(&mut self) -> &mut PickerState {
+        &mut self.picker
+    }
+
+    pub fn root(&self) -> usize {
+        self.root
+    }
+
+    /// `⇧⇥` — the next configured root, in place.
+    ///
+    /// What is marked survives the switch: the sheet's selection is as
+    /// workspace-wide as the picker's, so a repository marked under one root
+    /// is still going to be added after looking at another.
+    pub fn next_root(&mut self, roots: &[Entry]) -> bool {
+        if roots.len() < 2 {
+            return false;
+        }
+        self.root = (self.root + 1) % roots.len();
+        self.picker.go_to(roots[self.root].path.clone())
+    }
+
+    /// The repositories the sheet lists: everything under the current root,
+    /// narrowed by the query. Folders are not offered — the sheet adds
+    /// terminals, and browsing is the launch picker's job.
+    pub fn rows(&self, browser: &dyn Browse, roots: &[Entry]) -> Vec<Entry> {
+        let Some(root) = roots.get(self.root) else {
+            return Vec::new();
+        };
+        let query = self.picker.filter().unwrap_or_default();
+        browser
+            .search(&root.path)
+            .into_iter()
+            // Repositories only. The sheet adds terminals to a running
+            // session; browsing a tree for a plain folder is the launch
+            // picker's job, and the sheet has no crumb to browse with.
+            .filter(|entry| entry.kind == EntryKind::Repository)
+            .filter(|entry| entry.path.starts_with(&root.path))
+            .filter(|entry| matches(&entry.name, query))
+            .collect()
+    }
+
+    /// What the sheet will append, in the order it was marked.
+    pub fn marked(&self) -> &[Instance] {
+        self.picker.selection()
+    }
+}
+
+/// Whether this row is already a running terminal, and which pane it is.
+pub fn open_pane(open: &[Open], entry: &Entry) -> Option<usize> {
+    open.iter()
+        .find(|item| item.path == entry.path)
+        .map(|item| item.pane)
+}
+
+/// The sheet, drawn over the session it will add to.
+pub struct Sheet<'a> {
+    pub state: &'a SheetState,
+    pub rows: &'a [Entry],
+    pub roots: &'a [Entry],
+    pub open: &'a [Open],
+    pub home: Option<&'a Path>,
+    /// The pane number the first addition would take.
+    pub next_pane: usize,
+}
+
+/// The sheet's own width, from the note: 78 columns centred on the session.
+const SHEET_COLUMNS: u16 = 78;
+/// Its listing grid is the picker's, with the separator pulled in to fit.
+const SHEET_SEPARATOR: u16 = 30;
+
+impl Sheet<'_> {
+    /// Where the sheet sits on `area`.
+    pub fn rect(&self, area: Rect) -> Rect {
+        let width = SHEET_COLUMNS.min(area.width);
+        let height = (self.rows.len() as u16 + 9).clamp(11, area.height.saturating_sub(2));
+        Rect {
+            x: area.x + (area.width - width) / 2,
+            y: area.y + (area.height.saturating_sub(height)) / 2,
+            width,
+            height,
+        }
+    }
+
+    pub fn render(&self, frame: &mut Frame) {
+        let area = frame.area();
+        let buffer = frame.buffer_mut();
+        // The session stays live behind it and recedes by foreground alone,
+        // the way a modal's underlay does.
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                if let Some(cell) = buffer.cell_mut((x, y)) {
+                    cell.set_fg(UNDER_FG);
+                }
+            }
+        }
+        let rect = self.rect(area);
+        Clear.render(rect, buffer);
+        Block::bordered()
+            .border_style(Style::new().fg(ACCENT))
+            .style(Style::new().bg(CANVAS))
+            .render(rect, buffer);
+        let content = Rect {
+            x: rect.x + 1,
+            y: rect.y + 1,
+            width: rect.width.saturating_sub(2),
+            height: rect.height.saturating_sub(2),
+        };
+        if content.width < 2 * INSET || content.height < 5 {
+            return;
+        }
+        self.title(buffer, rect);
+        self.header(buffer, content);
+        self.rows(buffer, content);
+        self.footer(buffer, content);
+    }
+
+    fn title(&self, buffer: &mut Buffer, rect: Rect) {
+        let spans = vec![
+            Span::styled(" ", Style::new().bg(CANVAS)),
+            Span::styled("> add terminal", Style::new().fg(ACCENT)),
+            Span::styled("  ·  ", Style::new().fg(SEPARATOR)),
+            Span::styled("^g a", Style::new().fg(MUTED)),
+            Span::styled(" ", Style::new().bg(CANVAS)),
+        ];
+        buffer.set_line(rect.x + INSET, rect.y, &Line::from(spans), rect.width);
+    }
+
+    fn header(&self, buffer: &mut Buffer, content: Rect) {
+        let root = self
+            .roots
+            .get(self.state.root())
+            .map(|root| display_path(&root.path, self.home))
+            .unwrap_or_default();
+        let open = self
+            .rows
+            .iter()
+            .filter(|entry| open_pane(self.open, entry).is_some())
+            .count();
+        let mut spans = vec![
+            Span::styled("ROOT ", Style::new().fg(MUTED)),
+            Span::styled(root, Style::new().fg(MASTER_FG)),
+            Span::styled("  ·  ", Style::new().fg(SEPARATOR)),
+            Span::styled(format!("{} repos", self.rows.len()), Style::new().fg(MUTED)),
+        ];
+        if open > 0 {
+            spans.push(Span::styled(
+                format!(" · {open} already open"),
+                Style::new().fg(MUTED),
+            ));
+        }
+        buffer.set_line(content.x + 1, content.y, &Line::from(spans), content.width);
+        if self.roots.len() > 1 {
+            let hint = "⇧⇥ switch root";
+            buffer.set_line(
+                content.x + content.width - hint.chars().count() as u16 - 1,
+                content.y,
+                &Line::from(Span::styled(hint, Style::new().fg(HINT))),
+                content.width,
+            );
+        }
+        buffer.set_line(
+            content.x + 1,
+            content.y + 1,
+            &Line::from(Span::styled(
+                "─".repeat(content.width as usize - 2),
+                Style::new().fg(HINT),
+            )),
+            content.width,
+        );
+    }
+
+    fn rows(&self, buffer: &mut Buffer, content: Rect) {
+        let top = content.y + 2;
+        let room = content.height.saturating_sub(6) as usize;
+        if self.rows.is_empty() {
+            buffer.set_line(
+                content.x + 1,
+                top,
+                &Line::from(Span::styled(
+                    match self.state.state().filter() {
+                        Some(query) => format!("no match for {query}"),
+                        None => "no repositories under this root".to_owned(),
+                    },
+                    Style::new().fg(MUTED),
+                )),
+                content.width,
+            );
+            return;
+        }
+        for slot in 0..self.rows.len().min(room) {
+            let index = self.state.state().offset() + slot;
+            let Some(entry) = self.rows.get(index) else {
+                break;
+            };
+            self.row(buffer, content, top + slot as u16, index, entry);
+        }
+    }
+
+    fn row(&self, buffer: &mut Buffer, content: Rect, y: u16, index: usize, entry: &Entry) {
+        let cursor = index == self.state.state().cursor();
+        let background = if cursor { DEMOTED_BG } else { CANVAS };
+        if cursor {
+            Block::new().style(Style::new().bg(background)).render(
+                Rect {
+                    y,
+                    height: 1,
+                    ..content
+                },
+                buffer,
+            );
+        }
+        let put = |buffer: &mut Buffer, column: u16, spans: Vec<Span<'static>>| {
+            buffer.set_line(
+                content.x + 1 + column,
+                y,
+                &Line::from(spans),
+                content.width.saturating_sub(column + 1),
+            );
+        };
+        let open = open_pane(self.open, entry);
+        let marks = self.state.state().instances(&entry.path);
+        // `[+]` marks an addition, `[·]` locks a repository the session
+        // already holds — locked against `⏎`, never against `+`.
+        let (box_text, box_colour) = match (marks, open) {
+            (0, Some(_)) => ("[·]".to_owned(), HINT),
+            (0, None) => ("[ ]".to_owned(), HINT),
+            (_, _) => ("[+]".to_owned(), ACCENT),
+        };
+        put(
+            buffer,
+            0,
+            vec![Span::styled(
+                box_text,
+                Style::new().fg(box_colour).bg(background),
+            )],
+        );
+        put(
+            buffer,
+            COL_GLYPH,
+            vec![Span::styled("◆", Style::new().fg(ACCENT).bg(background))],
+        );
+        put(
+            buffer,
+            COL_NAME,
+            vec![Span::styled(
+                clip(&entry.name, (SHEET_SEPARATOR - COL_NAME - 3) as usize),
+                Style::new().fg(MASTER_FG).bg(background),
+            )],
+        );
+        if marks > 1 {
+            let badge = format!("×{marks}");
+            put(
+                buffer,
+                SHEET_SEPARATOR - 3,
+                vec![Span::styled(badge, Style::new().fg(ACCENT).bg(background))],
+            );
+        }
+        let meta = match (open, entry.branch.as_deref()) {
+            (Some(pane), _) => vec![Span::styled(
+                format!("already open · pane {pane}"),
+                Style::new().fg(MUTED).bg(background),
+            )],
+            (None, Some(branch)) => vec![Span::styled(
+                format!("git · {branch}"),
+                Style::new().fg(MUTED).bg(background),
+            )],
+            (None, None) => Vec::new(),
+        };
+        if !meta.is_empty() {
+            put(
+                buffer,
+                SHEET_SEPARATOR,
+                vec![Span::styled("·", Style::new().fg(SEPARATOR).bg(background))],
+            );
+            put(buffer, SHEET_SEPARATOR + 2, meta);
+        }
+    }
+
+    fn footer(&self, buffer: &mut Buffer, content: Rect) {
+        let bottom = content.y + content.height;
+        buffer.set_line(
+            content.x + 1,
+            bottom - 4,
+            &Line::from(Span::styled(
+                "─".repeat(content.width as usize - 2),
+                Style::new().fg(HINT),
+            )),
+            content.width,
+        );
+        if let Some(query) = self.state.state().filter() {
+            buffer.set_line(
+                content.x + 1,
+                bottom - 3,
+                &Line::from(vec![
+                    Span::styled("/", Style::new().fg(HINT)),
+                    Span::styled(query.to_owned(), Style::new().fg(MASTER_FG)),
+                ]),
+                content.width,
+            );
+        }
+        let marked = self.state.marked().len();
+        if marked > 0 {
+            let appends = format!("appends as pane {}", self.next_pane);
+            buffer.set_line(
+                content.x + content.width - appends.chars().count() as u16 - 1,
+                bottom - 3,
+                &Line::from(Span::styled(appends, Style::new().fg(HINT))),
+                content.width,
+            );
+        }
+        let label = match marked {
+            0 => " o  nothing marked ".to_owned(),
+            1 => " o  Add 1 terminal ".to_owned(),
+            _ => format!(" o  Add {marked} terminals "),
+        };
+        buffer.set_line(
+            content.x + 1,
+            bottom - 2,
+            &Line::from(vec![
+                Span::styled(
+                    label,
+                    if marked > 0 {
+                        Style::new()
+                            .fg(CANVAS)
+                            .bg(ACCENT)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::new().fg(HINT).bg(DEMOTED_BG)
+                    },
+                ),
+                Span::styled("    ", Style::new()),
+                Span::styled("esc cancel · master unchanged", Style::new().fg(HINT)),
+            ]),
+            content.width,
+        );
+        let keys = "↑↓ move  ⏎ mark  + instance  ⇧⇥ root  / filter  o add";
+        buffer.set_line(
+            content.x + 1,
+            bottom - 1,
+            &Line::from(Span::styled(keys, Style::new().fg(HINT))),
+            content.width,
+        );
+    }
+
+    /// The row under `pointer`, for the sheet's own mouse parity.
+    pub fn row_at(&self, area: Rect, pointer: Position) -> Option<usize> {
+        let rect = self.rect(area);
+        if !rect.contains(pointer) {
+            return None;
+        }
+        let top = rect.y + 3;
+        let room = rect.height.saturating_sub(8);
+        if pointer.y < top || pointer.y >= top + room {
+            return None;
+        }
+        let index = self.state.state().offset() + (pointer.y - top) as usize;
+        (index < self.rows.len()).then_some(index)
+    }
+
+    /// Whether `pointer` is on the sheet's add button.
+    pub fn add_at(&self, area: Rect, pointer: Position) -> bool {
+        let rect = self.rect(area);
+        pointer.y + 3 == rect.y + rect.height && rect.contains(pointer)
+    }
+}
+
+/// One key inside the sheet. `⏎` marks the row, `+` marks another instance of
+/// it, `o` commits, `esc` closes without adding anything.
+pub fn sheet_press(
+    sheet: &mut SheetState,
+    rows: &[Entry],
+    roots: &[Entry],
+    open: &[Open],
+    key: Key,
+) -> Option<PickerReaction> {
+    if sheet.state().filtering()
+        && let Key::Char(character) = key
+        && !matches!(character, '+' | '-')
+    {
+        sheet.state_mut().push_filter(character);
+        return None;
+    }
+    let cursor = rows.get(sheet.state().cursor()).cloned();
+    let locked = cursor
+        .as_ref()
+        .is_some_and(|entry| open_pane(open, entry).is_some());
+    match key {
+        Key::Down | Key::Char('j') => {
+            sheet.state_mut().move_cursor(1, rows.len());
+        }
+        Key::Up | Key::Char('k') => {
+            sheet.state_mut().move_cursor(-1, rows.len());
+        }
+        // A repository the session already holds is locked against `⏎` — the
+        // lock is what stops a pane being re-added by accident — but never
+        // against `+`, which is how another instance of it is asked for.
+        Key::Enter | Key::Char(' ') => {
+            if let Some(entry) = cursor.as_ref()
+                && !locked
+            {
+                sheet.state_mut().toggle(entry);
+            }
+        }
+        Key::Char('+') => {
+            if let Some(entry) = cursor.as_ref() {
+                sheet.state_mut().add(entry);
+            }
+        }
+        Key::Char('-') => {
+            if let Some(entry) = cursor.as_ref() {
+                sheet.state_mut().drop_one(entry);
+            }
+        }
+        // `⇧⇥` is what the note names; plain `⇥` does the same, because a
+        // sheet with one way through it should not be fussy about which.
+        Key::ShiftTab | Key::Tab => {
+            sheet.next_root(roots);
+        }
+        Key::Char('/') => {
+            sheet.state_mut().begin_filter();
+        }
+        Key::Backspace => {
+            sheet.state_mut().pop_filter();
+        }
+        Key::Char('o') => {
+            if !sheet.marked().is_empty() {
+                return Some(PickerReaction::Launch);
+            }
+        }
+        // The first `esc` clears the query; the second closes the sheet
+        // without adding anything, exactly as the picker's does.
+        Key::Escape if !sheet.state_mut().clear_filter() => return Some(PickerReaction::Quit),
+        Key::Escape => {}
+        _ => {}
+    }
+    None
 }

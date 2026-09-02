@@ -28,7 +28,7 @@ use crate::{
     engine::NativeEngine,
     ui::{
         Browse, Deck, DeckState, FsBrowse, Input, Key, Picker, PickerReaction, PickerState,
-        Reaction, picker,
+        Reaction, Sheet, SheetState, picker,
     },
 };
 
@@ -148,6 +148,45 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
     Ok(chosen)
 }
 
+/// What the session is already running, for the sheet's `[·]` locks.
+fn open_terminals(projects: &[Project]) -> Vec<crate::ui::Open> {
+    projects
+        .iter()
+        .enumerate()
+        .map(|(index, project)| crate::ui::Open {
+            path: project.path.clone(),
+            pane: index + 1,
+        })
+        .collect()
+}
+
+/// The projects a committed sheet adds, named against what is already
+/// running so a second instance of an open path becomes `-2` rather than a
+/// duplicate identity the engine would refuse.
+fn chosen(sheet: &SheetState, projects: &[Project]) -> Vec<Project> {
+    let mut taken: Vec<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
+    let mut added = Vec::new();
+    for instance in sheet.marked() {
+        let base = instance
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| instance.name.clone());
+        let names: Vec<&str> = taken.iter().map(String::as_str).collect();
+        let name = picker::unique_name(&names, &base);
+        taken.push(name.clone());
+        added.push(Project {
+            terminal: TerminalId::new(name),
+            path: instance.path.clone(),
+            command: vec!["bash".to_owned(), "-l".to_owned()],
+        });
+    }
+    added
+}
+
 /// Turns the picker's ordered `(name, path)` pairs into the workspace the
 /// session opens. The first pair is pane 1 and therefore the master.
 fn workspace_of(state: &PickerState) -> Workspace {
@@ -181,14 +220,20 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut engine = NativeEngine::spawn(&workspace.projects, size)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
+    // The workspace opened this list; `^g a` can lengthen it, so the session
+    // owns it from here (#50 A3).
+    let mut projects = workspace.projects.clone();
     // The configuration seeds the split; the divider owns it from there.
-    let mut deck =
-        DeckState::new(workspace.projects.len()).with_master_ratio(workspace.master_ratio.get());
+    let mut deck = DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get());
     let mut input = Input::new(size.rows.saturating_sub(4));
     let mut keys = KeyReader::default();
     let mut last_click = None;
     // The preview whose disclosure marker is being pressed, if any.
     let mut marker_press: Option<usize> = None;
+    // The runtime-add sheet, while it is open. It owns every key it sees.
+    let mut sheet: Option<SheetState> = None;
+    let browser = FsBrowse::new(crate::cli::picker_roots());
+    let roots = Browse::roots(&browser);
 
     let mut dirty = true;
     'session: loop {
@@ -197,7 +242,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         }
         let current_size = screen_size()?;
         if current_size != size {
-            for project in &workspace.projects {
+            for project in &projects {
                 engine.dispatch(EngineCommand::Resize {
                     terminal: project.terminal.clone(),
                     size: current_size,
@@ -212,6 +257,68 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
 
         for event in keys.read(POLL_INTERVAL)? {
             dirty = true;
+            // The sheet takes every key and every click while it is open, the
+            // way a modal does: the session behind it stays live but is not
+            // being driven (#50 A3).
+            if let Some(open_sheet) = sheet.as_mut() {
+                let rows = open_sheet.rows(&browser, &roots);
+                let open = open_terminals(&projects);
+                let reaction = match event {
+                    InputEvent::Key(key) => {
+                        picker::sheet_press(open_sheet, &rows, &roots, &open, key)
+                    }
+                    InputEvent::Mouse {
+                        pointer,
+                        action: MouseAction::Up,
+                    } => {
+                        let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
+                        let view = Sheet {
+                            state: open_sheet,
+                            rows: &rows,
+                            roots: &roots,
+                            open: &open,
+                            home: browser.home(),
+                            next_pane: projects.len() + 1,
+                        };
+                        let hit = view.row_at(area, pointer);
+                        let add = view.add_at(area, pointer);
+                        match (hit, add) {
+                            (Some(index), _) => {
+                                let entry = rows[index].clone();
+                                open_sheet.state_mut().point_at(index, rows.len());
+                                if picker::open_pane(&open, &entry).is_none() {
+                                    open_sheet.state_mut().toggle(&entry);
+                                }
+                                None
+                            }
+                            (None, true) if !open_sheet.marked().is_empty() => {
+                                Some(PickerReaction::Launch)
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                match reaction {
+                    Some(PickerReaction::Launch) => {
+                        for project in chosen(open_sheet, &projects) {
+                            match engine.add(project.clone(), size) {
+                                Ok(()) => {
+                                    projects.push(project);
+                                    deck.push_terminal();
+                                }
+                                // A terminal that will not start is not worth
+                                // ending the session over; the rest still do.
+                                Err(_) => continue,
+                            }
+                        }
+                        sheet = None;
+                    }
+                    Some(PickerReaction::Quit) => sheet = None,
+                    None => {}
+                }
+                continue;
+            }
             match event {
                 InputEvent::Key(key) => {
                     deck.cancel_drag();
@@ -219,14 +326,14 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     marker_press = None;
                     deck.set_resizing(false);
                     let was_scrollback = deck.scrollback();
-                    let reaction = input.press(key, &mut deck, &workspace.projects, now());
+                    let reaction = input.press(key, &mut deck, &projects, now());
                     if was_scrollback
                         && key == Key::Escape
                         && !deck.scrollback()
                         && let Some(active) = deck.active()
                     {
                         engine.dispatch(EngineCommand::Scroll {
-                            terminal: workspace.projects[active].terminal.clone(),
+                            terminal: projects[active].terminal.clone(),
                             command: crate::contracts::ScrollCommand::Bottom,
                         });
                     }
@@ -241,7 +348,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 };
                                 dispatch_live_input(
                                     &mut engine,
-                                    workspace.projects[active].terminal.clone(),
+                                    projects[active].terminal.clone(),
                                     bytes,
                                 );
                             }
@@ -250,7 +357,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         Some(Reaction::Scroll(command)) => {
                             if let Some(active) = deck.active() {
                                 engine.dispatch(EngineCommand::Scroll {
-                                    terminal: workspace.projects[active].terminal.clone(),
+                                    terminal: projects[active].terminal.clone(),
                                     command,
                                 });
                             }
@@ -261,7 +368,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             let window =
                                 Deck {
                                     workspace: &workspace.name,
-                                    projects: &workspace.projects,
+                                    projects: &projects,
                                     state: &deck,
                                     home: None,
                                     master_ratio: deck.master_ratio(),
@@ -275,10 +382,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         Some(Reaction::Respawn) => {
                             if let Some(active) = deck.active() {
                                 engine.dispatch(EngineCommand::Respawn {
-                                    terminal: workspace.projects[active].terminal.clone(),
+                                    terminal: projects[active].terminal.clone(),
                                 });
                             }
                         }
+                        Some(Reaction::AddTerminal) => sheet = Some(SheetState::new(&roots)),
                         Some(Reaction::Quit) => break 'session,
                         None => {}
                     }
@@ -293,7 +401,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         let (terminal, list) = {
                             let pane = Deck {
                                 workspace: &workspace.name,
-                                projects: &workspace.projects,
+                                projects: &projects,
                                 state: &deck,
                                 home: None,
                                 master_ratio: deck.master_ratio(),
@@ -304,7 +412,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 // A collapsed preview has no viewport, so there
                                 // is nothing under the pointer to scroll.
                                 .filter(|position| !deck.collapsed(*position))
-                                .and_then(|position| workspace.projects.get(position))
+                                .and_then(|position| projects.get(position))
                                 .map(|project| project.terminal.clone());
                             // Off the previews, the wheel belongs to the list:
                             // the gutter, the gaps and the footer page it.
@@ -341,7 +449,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         let (marker, divider, split, position) = {
                             let pane = Deck {
                                 workspace: &workspace.name,
-                                projects: &workspace.projects,
+                                projects: &projects,
                                 state: &deck,
                                 home: None,
                                 master_ratio: deck.master_ratio(),
@@ -359,6 +467,23 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 },
                             )
                         };
+                        // The status bar's `+` opens the same sheet `^g a`
+                        // does — the pointer's half of the affordance.
+                        let plus = {
+                            let bar = Deck {
+                                workspace: &workspace.name,
+                                projects: &projects,
+                                state: &deck,
+                                home: None,
+                                master_ratio: deck.master_ratio(),
+                                now: now(),
+                            };
+                            action == MouseAction::Up && bar.add_at(area, pointer)
+                        };
+                        if plus {
+                            sheet = Some(SheetState::new(&roots));
+                            continue;
+                        }
                         // The divider is in the gutter, which belongs to no
                         // pane, so holding it can never be a pane drag. Once
                         // held it keeps the pointer until release, wherever
@@ -400,7 +525,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     now(),
                                     &mut last_click,
                                 ) {
-                                    deck.apply(&action, &workspace.projects, now());
+                                    deck.apply(&action, &projects, now());
                                 }
                             }
                         }
@@ -417,7 +542,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     {
                         dispatch_live_input(
                             &mut engine,
-                            workspace.projects[active].terminal.clone(),
+                            projects[active].terminal.clone(),
                             text.into_bytes(),
                         );
                     }
@@ -428,7 +553,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             terminal.draw(|frame| {
                 Deck {
                     workspace: &workspace.name,
-                    projects: &workspace.projects,
+                    projects: &projects,
                     state: &deck,
                     home: std::env::var_os("HOME")
                         .as_deref()
@@ -437,6 +562,18 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     now: now(),
                 }
                 .render(&engine, frame);
+                if let Some(open_sheet) = sheet.as_ref() {
+                    let rows = open_sheet.rows(&browser, &roots);
+                    Sheet {
+                        state: open_sheet,
+                        rows: &rows,
+                        roots: &roots,
+                        open: &open_terminals(&projects),
+                        home: browser.home(),
+                        next_pane: projects.len() + 1,
+                    }
+                    .render(frame);
+                }
             })?;
             dirty = false;
         }
@@ -768,6 +905,7 @@ impl KeyReader {
                 // read as an escape followed by junk.
                 (b"\x1b[1;2A".as_slice(), Key::ShiftUp),
                 (b"\x1b[1;2B".as_slice(), Key::ShiftDown),
+                (b"\x1b[Z".as_slice(), Key::ShiftTab),
                 (b"\x1b[A".as_slice(), Key::Up),
                 (b"\x1b[B".as_slice(), Key::Down),
                 (b"\x1b[C".as_slice(), Key::Right),
@@ -977,16 +1115,20 @@ fn colour(colour: Color, foreground: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{InputEvent, KeyReader, MouseAction, dispatch_live_input, mouse_action};
+    use super::{
+        InputEvent, KeyReader, MouseAction, chosen, dispatch_live_input, mouse_action,
+        open_terminals,
+    };
     use crate::{
         contracts::{
-            ActionCommand, ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId,
+            ActionCommand, Project, ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId,
             TerminalMetadata, Timestamp,
         },
         engine::FakeEngine,
-        ui::{DeckState, Key},
+        ui::{DeckState, Key, SheetState},
     };
     use ratatui::layout::Position;
+    use std::path::PathBuf;
 
     #[test]
     fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
@@ -1033,6 +1175,12 @@ mod tests {
         assert!(matches!(events[8], InputEvent::Key(Key::Char('界'))));
     }
 
+    fn reader_of(bytes: &[u8]) -> KeyReader {
+        KeyReader {
+            bytes: bytes.to_vec(),
+        }
+    }
+
     /// The picker's range keys arrive as modified arrows, which nothing read
     /// before #56 — `\x1b[1;2A` would have been torn into an escape and the
     /// characters `1;2A`.
@@ -1046,6 +1194,13 @@ mod tests {
 
         assert!(matches!(events[0], InputEvent::Key(Key::ShiftUp)));
         assert!(matches!(events[1], InputEvent::Key(Key::ShiftDown)));
+        assert!(
+            matches!(
+                reader_of(b"\x1b[Z").decode(true)[0],
+                InputEvent::Key(Key::ShiftTab)
+            ),
+            "and `⇧⇥`, which the runtime-add sheet cycles roots with"
+        );
         assert!(
             matches!(events[2], InputEvent::Key(Key::Up)),
             "and the plain arrows still read as themselves"
@@ -1176,6 +1331,70 @@ mod tests {
             &mut last_click,
         );
         assert_eq!(state.dragged(), None);
+    }
+
+    /// What a committed sheet adds (#50 A3): names are made against what is
+    /// already running, so a second instance of an open path becomes `-2`
+    /// rather than an identity the engine would refuse.
+    #[test]
+    fn a_committed_sheet_names_its_additions_around_the_running_ones() {
+        let running = [
+            Project {
+                terminal: TerminalId::new("api"),
+                path: PathBuf::from("/code/api"),
+                command: vec!["sh".to_owned()],
+            },
+            Project {
+                terminal: TerminalId::new("web"),
+                path: PathBuf::from("/code/web"),
+                command: vec!["sh".to_owned()],
+            },
+        ];
+        let roots = [crate::ui::Entry::folder("code", "/code")];
+        let mut sheet = SheetState::new(&roots);
+        let api = crate::ui::Entry::repository("api", "/code/api");
+        let docs = crate::ui::Entry::repository("docs", "/code/docs");
+        // One repository the session already holds, asked for again, and one
+        // it does not.
+        sheet.state_mut().add(&api);
+        sheet.state_mut().add(&docs);
+        sheet.state_mut().add(&api);
+
+        let added = chosen(&sheet, &running);
+
+        let names: Vec<String> = added
+            .iter()
+            .map(|project| project.terminal.to_string())
+            .collect();
+        assert_eq!(names, ["api-2", "docs", "api-3"], "{names:?}");
+        assert_eq!(added[0].path, PathBuf::from("/code/api"));
+        assert_eq!(
+            added[2].path, added[0].path,
+            "both instances run in the same directory"
+        );
+    }
+
+    /// The sheet's `[·]` locks read the running panes in order.
+    #[test]
+    fn the_open_terminals_are_listed_with_their_pane_numbers() {
+        let running = [
+            Project {
+                terminal: TerminalId::new("api"),
+                path: PathBuf::from("/code/api"),
+                command: vec!["sh".to_owned()],
+            },
+            Project {
+                terminal: TerminalId::new("web"),
+                path: PathBuf::from("/code/web"),
+                command: vec!["sh".to_owned()],
+            },
+        ];
+
+        let open = open_terminals(&running);
+
+        assert_eq!(open[0].pane, 1);
+        assert_eq!(open[1].pane, 2);
+        assert_eq!(open[1].path, PathBuf::from("/code/web"));
     }
 
     #[test]

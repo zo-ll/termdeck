@@ -371,6 +371,26 @@ the filter line works exactly as in §4. The launch line reads `o  Add N
 terminal(s)` — A3 inherits §7's revised map, so `⏎` marks a row there too and
 `o` is what commits the sheet.
 
+**As built (A3).** Three things the export leaves open, decided here:
+
+- **Repositories only.** The sheet has no crumb, so it cannot browse; it lists
+  what the current root's search finds and leaves plain folders to the launch
+  picker, which can walk to them.
+- **Marks survive a root switch.** `⇧⇥` changes what is listed, not what is
+  going to be added — the sheet's selection is as workspace-wide as the
+  picker's.
+- **The `+` in the status bar keeps its label only where there is room.**
+  Below `WIDE_COLUMNS` the affordance shrinks to a bare `+`, the way the key
+  hints shed their labels, because it is the only pointer path to the sheet
+  and so goes last rather than first. In the narrow fallback there is no row
+  to put it on and no `+` is drawn.
+
+Adding commits through the same naming rule the picker uses, applied to the
+running session: a repository already open takes `-2`, then `-3`, skipping
+any name a live terminal already holds. The new panes land at the end of the
+stack, folded like every other new preview (#39), and the master keeps the
+frame — which is what `esc cancel · master unchanged` promises.
+
 The affordance lives in the **status bar**: `> 1 frontend · + add`, and the
 spec board says clicking the `+` opens the same sheet — *"No corner buttons, no
 divider handles."* `^g a` is the **only new session binding** in the whole
