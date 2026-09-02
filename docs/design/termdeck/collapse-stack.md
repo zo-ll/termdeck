@@ -362,6 +362,36 @@ This is the *only* change issue #32 makes to the marker: colour (`HINT`),
 column (§3.1's A11 one-column offset), the 2-column title budget cost and the
 click target are all unchanged.
 
+### 3.4b The state a run starts in
+
+**Revised by issue #39 — every preview starts folded.** The export's screens
+01–04 show an open stack, and until #39 `DeckState::new` matched them. The user
+inverted the default: a fresh run draws the §5 "all previews collapsed" state —
+strips top-aligned at the head of the column, blank column below, footer
+`{n} collapsed · ^g c expand all`, status `0 open  ·  {n} collapsed` — and a
+marker click (or `^g c`) is what opens a preview.
+
+Nothing else in this document changes. The geometry, the strip contents, the
+marker cells, the footer and status precedence and the §4 interplay rules are
+all read from the same flags; only the value they start at is inverted. Two
+consequences are worth stating because they are now the *first* frame rather
+than an edge case:
+
+- **`^g c` reads as expand-all first.** It is still one toggle — collapse-all
+  while any preview is open, expand-all once none is (§2 (a)) — but the stack
+  it starts from is folded, so the first press opens it.
+- **The demoted master stays open.** §4's "the demoted old master lands in the
+  vacated slot **open** (it was never collapsed)" survives as the invariant *a
+  pane that has held the master frame is open*: `promote` clears the flag of
+  what it promotes, and the terminal that opens as master carries no fold from
+  the start. Every other terminal has only ever been a preview, so it starts
+  folded.
+- **Zoom keeps the unfolded hint row.** §4 says the zoom status line "says
+  nothing about collapse", and §3.5's swap of `^g [ scroll` for `^g c collapse`
+  is now true from frame one, so the two collided on every zoomed screen. The
+  more specific rule wins: while the stack is hidden the fold is inert and the
+  hint row keeps `^g [ scroll`. `zoomed.txt` is unchanged by #39 as a result.
+
 ### 3.5 Status bar
 
 Screen 05's left segment:
