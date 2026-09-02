@@ -459,14 +459,28 @@ impl PickerState {
         if rows.is_empty() {
             return false;
         }
-        let cursor = self.cursor.min(rows.len() - 1);
-        let range = if downward {
-            &rows[cursor..]
-        } else {
-            &rows[..=cursor]
-        };
+        self.select_between(rows, if downward { rows.len() - 1 } else { 0 })
+    }
+
+    /// The range itself: every selectable row between the cursor and `target`,
+    /// inclusive, whichever of the two comes first. `⇧↓` and `⇧↑` hand it the
+    /// end of the listing; a shift-click hands it the row that was clicked.
+    ///
+    /// It leaves the cursor alone — the caller decides whether the gesture
+    /// moves the highlight, and only the pointer's does.
+    pub fn select_between(&mut self, rows: &[Entry], target: usize) -> bool {
+        if rows.is_empty() {
+            return false;
+        }
+        let last = rows.len() - 1;
+        let cursor = self.cursor.min(last);
+        let target = target.min(last);
+        let (first, final_row) = (cursor.min(target), cursor.max(target));
         let mut added = false;
-        for entry in range.iter().filter(|entry| entry.selectable()) {
+        for entry in rows[first..=final_row]
+            .iter()
+            .filter(|entry| entry.selectable())
+        {
             if self.instances(&entry.path) == 0 {
                 added |= self.add(entry);
             }
@@ -1749,6 +1763,22 @@ pub fn descend(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
     state.enter(&entry)
 }
 
+/// Shift held on a click: the pointer twin of `⇧↓` / `⇧↑`. It selects every
+/// selectable row between the highlight and the row that was clicked, then
+/// moves the highlight there — so a second shift-click carries on from where
+/// the first one stopped.
+pub fn click_range(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
+    let (Hit::Row(index) | Hit::Box(index) | Hit::Badge(index)) = hit else {
+        return false;
+    };
+    if index >= rows.len() {
+        return false;
+    }
+    let selected = state.select_between(rows, index);
+    state.point_at(index, rows.len());
+    selected
+}
+
 /// The secondary button's own gesture: on the `×N` badge it is `-`, which
 /// sheds one instance of that path. The parity table gives the primary button
 /// the additions and the secondary button the subtraction, so a pointer can
@@ -2615,6 +2645,125 @@ mod tests {
                 "column {column}"
             );
         }
+    }
+
+    /// Shift-click is the range's pointer twin: everything between the
+    /// highlight and the clicked row, and the highlight follows the click.
+    #[test]
+    fn shift_click_selects_from_the_highlight_to_the_clicked_row() {
+        let mut state = browsing();
+        let rows = rows_of(&state);
+        let from = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-backend")
+            .unwrap();
+        let to = rows
+            .iter()
+            .position(|entry| entry.name == "vendor")
+            .unwrap();
+        state.point_at(from, rows.len());
+
+        assert!(click_range(&mut state, &rows, Hit::Row(to)));
+
+        let names: Vec<_> = state
+            .selection()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "horizon-backend",
+                "horizon-app",
+                "horizon-infra",
+                "notes",
+                "termdeck",
+                "vendor"
+            ],
+            "the whole span, in listing order: {names:?}"
+        );
+        assert!(names.contains(&"notes"), "a folder inside the span");
+        assert!(!names.contains(&"README.md"), "but not a file");
+        assert_eq!(state.cursor(), to, "the highlight follows the click");
+    }
+
+    /// Clicking *above* the highlight is the same span read the other way,
+    /// and the panes still read downwards.
+    #[test]
+    fn shift_click_above_the_highlight_selects_the_same_span() {
+        let mut state = browsing();
+        let rows = rows_of(&state);
+        let from = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-app")
+            .unwrap();
+        let to = rows
+            .iter()
+            .position(|entry| entry.name == "archive")
+            .unwrap();
+        state.point_at(from, rows.len());
+
+        click_range(&mut state, &rows, Hit::Row(to));
+
+        let names: Vec<_> = state
+            .selection()
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "archive",
+                "horizon-frontend",
+                "horizon-backend",
+                "horizon-app"
+            ],
+            "{names:?}"
+        );
+        assert_eq!(
+            state.selection()[0].name,
+            "archive",
+            "the topmost of the span is pane 1"
+        );
+        assert_eq!(state.cursor(), to);
+    }
+
+    /// Additive and idempotent, exactly as the keys are: a second shift-click
+    /// carries on from where the first stopped without multiplying anything.
+    #[test]
+    fn shift_click_adds_to_the_selection_without_multiplying_it() {
+        let mut state = browsing();
+        let rows = rows_of(&state);
+        let frontend = entry(&state, "horizon-frontend");
+        state.add(&frontend);
+        state.add(&frontend);
+        state.point_at(0, rows.len());
+
+        let app = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-app")
+            .unwrap();
+        click_range(&mut state, &rows, Hit::Row(app));
+        let after_first = state.selection().len();
+
+        // From here the highlight is on horizon-app, so the next one extends.
+        let vendor = rows
+            .iter()
+            .position(|entry| entry.name == "vendor")
+            .unwrap();
+        click_range(&mut state, &rows, Hit::Row(vendor));
+
+        assert_eq!(
+            state.instances(&frontend.path),
+            2,
+            "a deliberate instance is not multiplied by a range"
+        );
+        assert!(state.selection().len() > after_first, "it carried on");
+        // And running the same span again changes nothing at all.
+        let before = state.selection().len();
+        state.point_at(app, rows.len());
+        click_range(&mut state, &rows, Hit::Row(vendor));
+        assert_eq!(state.selection().len(), before);
     }
 
     /// The pointer follows the same two keys: one click selects, a second on

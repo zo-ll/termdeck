@@ -88,7 +88,8 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
                 InputEvent::Key(key) => picker::press(&mut state, &rows, &roots, key),
                 InputEvent::Mouse {
                     pointer,
-                    action: action @ (MouseAction::Up | MouseAction::SecondaryUp),
+                    action:
+                        action @ (MouseAction::Up | MouseAction::SecondaryUp | MouseAction::RangeUp),
                 } => {
                     let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
                     let view = Picker {
@@ -119,6 +120,13 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
                             } else {
                                 picker::click(&mut state, &rows, hit)
                             }
+                        }
+                        // Shift held: the range gesture, which is the same
+                        // selection `⇧↓` makes, bounded by where it landed.
+                        (Some(hit), MouseAction::RangeUp) => {
+                            last_click = None;
+                            picker::click_range(&mut state, &rows, hit);
+                            None
                         }
                         (Some(hit), _) => {
                             picker::click_secondary(&mut state, &rows, hit);
@@ -315,12 +323,18 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
-                // The deck has no secondary-button gesture: ignoring it here
-                // keeps every existing pointer action exactly as it was.
+                // The deck has no gesture of its own for either, but the
+                // press that came before one may have armed a drag or a
+                // marker — a shift-click's own press decodes as an ordinary
+                // one. So they end that state rather than leaving it for
+                // whatever event happens to arrive next.
                 InputEvent::Mouse {
-                    action: MouseAction::SecondaryUp,
+                    action: action @ (MouseAction::SecondaryUp | MouseAction::RangeUp),
                     ..
-                } => {}
+                } => {
+                    marker_press = None;
+                    mouse_action(&mut deck, None, action, now(), &mut last_click);
+                }
                 InputEvent::Mouse { pointer, action } => {
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -639,6 +653,9 @@ enum MouseAction {
     /// A secondary-button release. The deck has no gesture for it; the picker
     /// uses it for the minus its parity table gives the badge (#42 A2).
     SecondaryUp,
+    /// A primary release with shift held: the pointer twin of `⇧↓` / `⇧↑`.
+    /// The deck has no gesture for this one either.
+    RangeUp,
 }
 
 fn mouse_action(
@@ -658,8 +675,14 @@ fn mouse_action(
             deck.update_drag(position);
             None
         }
-        // The deck has no secondary-button gesture; the picker owns that one.
-        MouseAction::SecondaryUp => None,
+        // The deck owns neither of these; the picker does. What they do here
+        // is let go: whatever the press before them armed ends with them, so
+        // a shift-click can never leave a drag hanging behind it.
+        MouseAction::SecondaryUp | MouseAction::RangeUp => {
+            deck.cancel_drag();
+            *last_click = None;
+            None
+        }
         MouseAction::Up => {
             deck.update_drag(position);
             let (source, target) = deck.finish_drag()?;
@@ -823,10 +846,14 @@ fn mouse_event(bytes: &[u8], terminator: u8) -> Option<InputEvent> {
         };
         return Some(InputEvent::Wheel { pointer, command });
     }
+    // Bit 2 of the code is shift, and a release carries it like any other
+    // report, so the range gesture is still legible at the point it arrives.
+    let shifted = code & 0b100 != 0;
     let action = match (terminator, code & 0b11, code & 32) {
         // A release reports the button it releases, so the secondary one is
         // still distinguishable at the point it arrives.
         (b'm', 2, _) => MouseAction::SecondaryUp,
+        (b'm', _, _) if shifted => MouseAction::RangeUp,
         (b'm', _, _) => MouseAction::Up,
         (b'M', 0, 0) => MouseAction::Down,
         (b'M', _, 32) => MouseAction::Move,
@@ -1004,6 +1031,151 @@ mod tests {
             }
         ));
         assert!(matches!(events[8], InputEvent::Key(Key::Char('界'))));
+    }
+
+    /// The picker's range keys arrive as modified arrows, which nothing read
+    /// before #56 — `\x1b[1;2A` would have been torn into an escape and the
+    /// characters `1;2A`.
+    #[test]
+    fn the_decoder_reads_shift_arrows() {
+        let mut reader = KeyReader {
+            bytes: b"\x1b[1;2A\x1b[1;2B\x1b[A\x1b[B".to_vec(),
+        };
+
+        let events = reader.decode(true);
+
+        assert!(matches!(events[0], InputEvent::Key(Key::ShiftUp)));
+        assert!(matches!(events[1], InputEvent::Key(Key::ShiftDown)));
+        assert!(
+            matches!(events[2], InputEvent::Key(Key::Up)),
+            "and the plain arrows still read as themselves"
+        );
+        assert!(matches!(events[3], InputEvent::Key(Key::Down)));
+        assert_eq!(events.len(), 4);
+    }
+
+    /// Half of a sequence is not an escape key. A terminal can deliver one in
+    /// two reads, and the half that arrived must wait for its other half
+    /// rather than becoming `esc` followed by stray characters.
+    #[test]
+    fn a_half_arrived_sequence_waits_for_the_rest() {
+        let mut reader = KeyReader {
+            bytes: b"\x1b[1;".to_vec(),
+        };
+
+        assert!(
+            reader.decode(false).is_empty(),
+            "nothing is decided from half a sequence"
+        );
+        assert_eq!(reader.bytes, b"\x1b[1;", "and none of it is thrown away");
+
+        reader.bytes.extend_from_slice(b"2B");
+        let events = reader.decode(false);
+
+        assert!(matches!(events[0], InputEvent::Key(Key::ShiftDown)));
+        assert!(reader.bytes.is_empty());
+    }
+
+    /// The same guard must not swallow a real escape: once the poll has timed
+    /// out with nothing following it, `esc` is `esc`.
+    #[test]
+    fn a_lone_escape_is_still_the_escape_key() {
+        let mut reader = KeyReader {
+            bytes: b"\x1b".to_vec(),
+        };
+        assert!(
+            reader.decode(false).is_empty(),
+            "it might still be a prefix"
+        );
+
+        let events = reader.decode(true);
+
+        assert!(matches!(events[0], InputEvent::Key(Key::Escape)));
+    }
+
+    /// Shift held on a click is the range gesture, and it is distinguishable
+    /// from the ordinary release and from the secondary button.
+    #[test]
+    fn the_decoder_reads_a_shifted_click() {
+        let mut reader = KeyReader {
+            bytes: b"\x1b[<4;7;9m\x1b[<0;7;9m\x1b[<2;7;9m".to_vec(),
+        };
+
+        let events = reader.decode(true);
+
+        assert!(matches!(
+            events[0],
+            InputEvent::Mouse {
+                pointer: Position { x: 6, y: 8 },
+                action: MouseAction::RangeUp,
+            }
+        ));
+        assert!(matches!(
+            events[1],
+            InputEvent::Mouse {
+                action: MouseAction::Up,
+                ..
+            }
+        ));
+        assert!(matches!(
+            events[2],
+            InputEvent::Mouse {
+                action: MouseAction::SecondaryUp,
+                ..
+            }
+        ));
+    }
+
+    /// A shift-click's press is an ordinary press as far as the deck can
+    /// tell, so it arms a drag. Its release is the picker's range gesture,
+    /// which the deck does not act on — but it must still let go, or the
+    /// session would carry a phantom drag until some later event cleared it.
+    #[test]
+    fn a_shifted_release_lets_go_of_whatever_its_press_armed() {
+        let mut state = DeckState::new(4);
+        let mut last_click = None;
+        let at = |millis| Timestamp {
+            unix_millis: millis,
+        };
+
+        mouse_action(
+            &mut state,
+            Some(1),
+            MouseAction::Down,
+            at(0),
+            &mut last_click,
+        );
+        assert_eq!(state.dragged(), Some(1), "the press armed a drag");
+
+        let action = mouse_action(
+            &mut state,
+            None,
+            MouseAction::RangeUp,
+            at(1),
+            &mut last_click,
+        );
+
+        assert_eq!(action, None, "the deck has no gesture for it");
+        assert_eq!(state.dragged(), None, "and it let go of the one it had");
+        assert_eq!(last_click, None, "including the armed double-click");
+
+        // The secondary button lets go the same way.
+        mouse_action(
+            &mut state,
+            Some(2),
+            MouseAction::Down,
+            at(2),
+            &mut last_click,
+        );
+        assert_eq!(state.dragged(), Some(2));
+        mouse_action(
+            &mut state,
+            None,
+            MouseAction::SecondaryUp,
+            at(3),
+            &mut last_click,
+        );
+        assert_eq!(state.dragged(), None);
     }
 
     #[test]

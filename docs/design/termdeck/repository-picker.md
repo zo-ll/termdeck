@@ -394,7 +394,7 @@ those three ambiguous was removed rather than kept beside them.
 | --- | --- | --- |
 | `↑↓` / `j` `k` | move cursor | hover |
 | `⏎` / `space` | select the row · press again to let go | click row — **any row**, folder or repository |
-| `⇧↓` / `⇧↑` | select every selectable row from the cursor to the end · to the start | — |
+| `⇧↓` / `⇧↑` | select every selectable row from the cursor to the end · to the start | **shift-click** a row: the same span, bounded by where it landed |
 | `→` / `l` `⇥` | go inside — a folder **or a repository** | click the row again |
 | `←` / `h` | back one level | — |
 | `~` / `g` | home · root | click crumb |
@@ -420,10 +420,17 @@ predictable:
   row pane 1, not the fifth.
 - **The cursor does not move.** The range is what travelled, not the cursor.
 
-They have no pointer twin, and that is deliberate: a drag across rows would be
-a second meaning for the press that already selects, and the note's own rule is
-that when two actions collide, the simple one wins. The bottom bar states them
-(`⇧↑↓ range`) so the keyboard-only gesture is still discoverable.
+**The pointer twin is shift-click**, not a drag. Holding shift and clicking a
+row selects everything between the highlight and that row, in the same listing
+order and on the same additive terms, and then moves the highlight there — so
+a second shift-click carries on from where the first stopped rather than
+starting again. A drag was the other candidate and was refused: dragging would
+give the press that already selects a second meaning, and the rule here is that
+when two actions collide the simple one wins. Shift is a modifier on a gesture
+the pointer already has, which costs the plain click nothing.
+
+The bottom bar states the keys (`⇧↑↓ range`); shift-click needs no row of its
+own, because it is the same gesture the table pairs it with.
 
 Two consequences of the revision, both **Chosen** because the export cannot
 answer them:
