@@ -56,7 +56,8 @@ scope.
 
 ## Handoffs
 
-The last ~15 events. Older ones live in `.coordinator/journal/history-YYYY-MM.md` (rotated, never deleted).
+Rotated history: `.coordinator/journal/` (latest archive: 2026-08, 11 events).
+The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
 handoff requirement.
   blocked until issue 1 freezes the shared contract.
