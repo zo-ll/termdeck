@@ -59,7 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: #49 A2 done (claude `67358d3` after coordinator rebase onto main — its local A1 merge dropped; gate 180) — in critic review.
 - 2026-09-02: #49 A2 critic BLOCK (read_dir errors flatten to false-empty; empty-folder branch unreachable). Correction to claude (error-vs-empty surfacing + tests; plus non-blockings: elsewhere stub, dead Listing fields, secondary-button minus parity).
 - 2026-09-02: #49 correction done (claude `4ad98fc`: error-vs-empty surfaced, 3 tests, elsewhere partition, dead fields removed, secondary-minus SGR parity; 185 tests) — re-review handed to critic.
 - 2026-09-02: #49 re-review PASS → pushed coord/49-picker → PR #54. 1 new non-blocking: overlapping roots duplicate filter matches (cwd ⊂ HOME) — recorded; offer optional tiny fix. A3 unblocks after merge.
@@ -74,6 +73,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #56 merged (`88bec35`, 195 tests); binary rebuilt (keyboard range live). Shift+click twin + decoder tests dispatched to claude (coord/49-shift-click).
 - 2026-09-02: shift+click twin done (claude `1bddfb2`: shared select_between, shift-on-release SGR bit 2, 4 decoder tests incl. torn-guard; note 7 pairs it; no fixture moved; 202 tests) — critic review.
 - 2026-09-02: Shift+click twin MERGED via #57 (`910c31d`, 203 tests) — binary rebuilt (full picker parity: Enter/arrows/o, shift+down/up + shift+click, mouse select incl folders, / filter, multi-instance). #42 remains: A3 (runtime add) + A4 (integration).
+- 2026-09-02: #50 A3 (runtime add: + / ^g a chooser, dynamic spawn + re-layout, same-path instances) DISPATCHED to claude (coord/50-runtime-add).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
