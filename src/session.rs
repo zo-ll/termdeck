@@ -53,8 +53,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut last_click = None;
     // The preview whose disclosure marker is being pressed, if any.
     let mut marker_press: Option<usize> = None;
-    // Whether the pointer is holding the split divider.
-    let mut resizing = false;
 
     let mut dirty = true;
     'session: loop {
@@ -83,7 +81,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
-                    resizing = false;
                     deck.set_resizing(false);
                     let was_scrollback = deck.scrollback();
                     let reaction = input.press(key, &mut deck, &workspace.projects, now());
@@ -154,7 +151,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
-                    resizing = false;
                     deck.set_resizing(false);
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -219,12 +215,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         // pane, so holding it can never be a pane drag. Once
                         // held it keeps the pointer until release, wherever
                         // the pointer travels.
-                        if divider && action == MouseAction::Down || resizing {
+                        if divider && action == MouseAction::Down || deck.resizing() {
                             deck.cancel_drag();
                             last_click = None;
                             marker_press = None;
-                            resizing = action != MouseAction::Up;
-                            deck.set_resizing(resizing);
+                            deck.set_resizing(action != MouseAction::Up);
                             if action != MouseAction::Down
                                 && let Some(split) = split
                             {
@@ -267,6 +262,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    deck.set_resizing(false);
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()
                         && !deck.scrollback()

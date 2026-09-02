@@ -85,8 +85,11 @@ is column 77 (0.55) to column 120 (0.85).
 
 The interface holds its own copy of the range (`src/ui/state.rs`) rather than
 importing the configuration's, because the architecture boundary keeps
-`src/config` out of `src/ui`. **Risk:** the two copies can drift. Promoting the
-range to `src/contracts` would fix that and belongs to the owner of contracts.
+`src/config` out of `src/ui`. The two copies — both ends of the range and the
+0.70 default — are held equal by a cross-check in the configuration's own
+tests (`the_interfaces_split_range_is_the_one_this_file_validates`), which
+fails if either side moves. Sharing one constant from `src/contracts` would
+retire the duplication outright, and belongs to the owner of contracts.
 
 ## 4. Persistence
 

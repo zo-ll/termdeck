@@ -15,9 +15,10 @@ const DEMOTION_WINDOW: Elapsed = Elapsed { millis: 1_500 };
 /// This is deliberately the same range `defaults.master_ratio` accepts in the
 /// configuration, so a split reached by dragging or nudging is always a value
 /// the configuration file would also accept and the validator needs no
-/// widening. (The configuration owns its own copy of the range; the two are
-/// asserted equal by the range this module documents rather than shared,
-/// because the boundary keeps `src/config` out of the interface.)
+/// widening. The configuration owns its own copy, because the architecture
+/// boundary keeps `src/config` out of the interface; the two copies are held
+/// equal by `config::tests::the_interfaces_split_range_is_the_one_this_file_validates`,
+/// which fails if either side moves.
 pub const MIN_MASTER_RATIO: f64 = 0.55;
 pub const MAX_MASTER_RATIO: f64 = 0.85;
 /// One press of `^g -` / `^g =`. Six steps span the range end to end, and the
@@ -25,7 +26,7 @@ pub const MAX_MASTER_RATIO: f64 = 0.85;
 pub const MASTER_RATIO_STEP: f64 = 0.05;
 /// The split a deck starts at until the configuration says otherwise, and the
 /// configuration's own default.
-const DEFAULT_MASTER_RATIO: f64 = 0.70;
+pub const DEFAULT_MASTER_RATIO: f64 = 0.70;
 
 /// An overlay that takes focus from the deck. Only one can be open, and it
 /// captures every key until it closes: focus stays singular, so the modal

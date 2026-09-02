@@ -27,7 +27,7 @@ use ratatui::{
 };
 
 pub use input::{Input, Key, Reaction};
-pub use state::{DeckState, Modal};
+pub use state::{DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal};
 
 use crate::contracts::{
     CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, TerminalEngine, TerminalFrame,
