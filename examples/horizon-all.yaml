@@ -9,35 +9,35 @@ workspaces:
   horizon:
     root: /home/andrea/helper-horizonweb/projects
     terminals:
-      - name: fr-car
+      - name: fe-car
         cwd: frontends/car
-      - name: fr-cmf
+      - name: fe-cmf
         cwd: frontends/cmf
-      - name: fr-doc
+      - name: fe-doc
         cwd: frontends/doc
-      - name: fr-euv
+      - name: fe-euv
         cwd: frontends/euv
-      - name: fr-ibs
+      - name: fe-ibs
         cwd: frontends/ibs
-      - name: fr-idp
+      - name: fe-idp
         cwd: frontends/idp
-      - name: fr-iqc
+      - name: fe-iqc
         cwd: frontends/iqc
-      - name: fr-pdf
+      - name: fe-pdf
         cwd: frontends/pdf
-      - name: ba-car
+      - name: be-car
         cwd: backends/car
-      - name: ba-cmf
+      - name: be-cmf
         cwd: backends/cmf
-      - name: ba-doc
+      - name: be-doc
         cwd: backends/doc
-      - name: ba-euv
+      - name: be-euv
         cwd: backends/euv
-      - name: ba-ibs
+      - name: be-ibs
         cwd: backends/ibs
-      - name: ba-idp
+      - name: be-idp
         cwd: backends/idp
-      - name: ba-iqc
+      - name: be-iqc
         cwd: backends/iqc
-      - name: ba-pdf
+      - name: be-pdf
         cwd: backends/pdf
