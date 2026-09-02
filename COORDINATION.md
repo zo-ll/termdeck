@@ -59,7 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: A2 picker DESIGN NOTE done (claude, coord/42-picker-spec `5b7a759` docs-only, off main): MCP import no-op — repo reference already matches live project (additive screens 06-08 + 5 boards); note fixes grid/colors/ordinal model/^g a sheet/click parity, answers 4 ambiguities, flags 1 export contradiction (/ root vs / filter+g root). Follow-up handed: same-path MULTI-INSTANCE support in picker + runtime-add (per-path counts, -2/-3 suffixes).
 - 2026-09-02: A2 design accepted (user: / = filter, g = root); design note pushed+merged `2bdaf5f`. #49 A2 DISPATCHED to claude (coord/49-picker): implement the picker per the note incl. multi-instance same-path.
 - 2026-09-02: #52/A1 MERGED (`7cab5ca`, gate 163) — #48 closed; A2 branch now needs to integrate main (claude builds on the seam; it read A1 from the branch meanwhile).
 - 2026-09-02: #49 A2 done (claude `67358d3` after coordinator rebase onto main — its local A1 merge dropped; gate 180) — in critic review.
@@ -74,6 +73,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: range-select done (claude `5f82232`: shift+down/up additive incl folders; ESC[1;2A/B decoding + torn-sequence guard; folder click verified already working + 2 pins; 195 tests) — in critic review.
 - 2026-09-02: USER — Shift+click = the range-select MOUSE TWIN (from highlighted row down to clicked row). Queued as a small follow-up after the keyboard-only range PR lands (followup-shift-click.md staged).
 - 2026-09-02: range-select critic PASS → pushed coord/49-range-select → PR #56. Follow-up queued (Shift+click twin + decoder/torn-guard tests).
+- 2026-09-02: #56 merged (`88bec35`, 195 tests); binary rebuilt (keyboard range live). Shift+click twin + decoder tests dispatched to claude (coord/49-shift-click).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
