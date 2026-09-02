@@ -85,3 +85,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   `coord/*` branches were first pushed on 2026-08-31.
 '
   heading from the earlier rotation run.)
+- 2026-09-02: USER directive — monitor claude every 2 min; at 99% usage FORK
+  the active slice (49-range-toggle) to codex. Monitor running detached
+  (claude-monitor.sh): pings the inbox at >=99% or if the pane dies;
+  log /tmp/shipwright/claude-monitor.log.
