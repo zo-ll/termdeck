@@ -56,115 +56,9 @@ scope.
 
 ## Handoffs
 
-Rotated history: `.coordinator/journal/` (latest archive: 2026-08, 11 events).
-The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-handoff requirement.
-  blocked until issue 1 freezes the shared contract.
-  pushed through branch tip `3e1b78b`. Format, all-feature tests (5 passed),
-  Clippy with warnings denied, `check`, and `list` passed. Issue 1 remains in
-  progress pending the UI contract gaps found by Claude.
-  character loss, and duplicate exit-code authority. Claude preflight was
-  blocked on three missing reference states and contradictory access wording.
-  Corrections were routed back to the same workers.
-  the private remote became available; issues #1–#4 are now the visible tracker.
-  branch tip `8d0b12a`. Independent format, Clippy, 17-test, `check`, and `list`
-  verification passed with no remaining blocking findings.
-  pushed through `9364643`. Source/structural review passed: three artboards,
-  no external resources, accepted palette only, clean HTML structure, original
-  export untouched. Human browser inspection remains available before UI work.
-  visible on the same branch and review thread.
-  FakeEngine's three parallel state maps. Normal seam tracing also found no
-  native-output drain method. Both narrow corrections were returned to Codex;
-  PR #5 remains unmerged.
-  three net lines and added the neutral event-drain seam. PR #5 was squash-
-  merged as `b880b60` under the user's conditional approval; 18 post-merge
-  tests passed. Issue #1 remains open for user-controlled closure.
-  #7 and #8 are ready; UI slice #11 waits only for draft PR #6 approval/merge.
-  were created from that `main`; #7 and #11 were dispatched in new visible tmux
-  windows `codex-vt` and `claude-ui`. Historical worker panes remain intact.
-  sync: fmt, clippy `-D warnings`, 26 tests pass. All four PRs merged on
-  GitHub; the old `termdeck-agents` tmux session is gone (worker panes lost;
-  recreate per RESUME.md). All `coord/*` branches, local and remote, are
-  intentionally kept (user decision); their stale worktrees stay too.
-  GitHub labels on #12/#13 flipped `blocked` → `ready-for-agent` (the #11
-  merge opened both).
-  is tmux; Herdr not installed). Window `coordinator` hosts this session;
-  `codex` (worktree `~/.worktrees/termdeck/08-pty-transport`, branch
-  `coord/08-pty-transport`, Codex 0.152 interactive, gpt-5.6-terra/high,
-  workspace-write sandbox) received issue #8; `claude` (worktree
-  `~/.worktrees/termdeck/12-ui-master-stack`, branch `coord/12-ui-master-stack`,
-  Claude Code 2.1.251, opus/effort high, bypass permissions) received issue
-  #12 and must checkpoint after it — #13 waits for the coordinator's
-  go-ahead. Task contracts live in `/tmp/shipwright/termdeck/<task>/`;
-  prompts and logs retained there until integration. Workers commit on their
-  branches but never merge/push/PR — the coordinator pushes branches, opens
-  PRs, and merges only after review and user approval.
-  the pi critic session transcript: pi's TUI composer submits on every newline
-  received, so tmux `paste-buffer` of a multi-line prompt becomes one USER
-  message per line (~74 fragments for the contract). Codex/Claude tolerate
-  multi-line paste; pi does not. Rule: never multi-line-paste into a pi
-  interactive composer. The critic is a FULL interactive pi session (like
-  codex/claude panes), launched with the complete role contract as its
-  initial message argument (`launch-critic.sh` cats the contract into the
-  launch command — one message, no composer). Later review assignments will
-  be written to a full assignment file and handed to the critic as a short
-  single-line read-this-file pointer via `prompt-target`, keeping every
-  assignment complete and the transcript clean. Interim headless run removed;
-  its log kept (`/tmp/shipwright/termdeck/critic/boot.log`) and the
-  diagnostic transcript retained at
-  `~/.pi/agent/sessions/--home-andrea-personal-termdeck--/...01a05bf3*.jsonl`.
-  commit locally when their sandbox allows, but must STOP before pushing and
-  wait for review; ALL critic reviews run on LOCAL changes (never remote/PR);
-  the coordinator is the only one who pushes, and only after the critic
-  passes. Applied: codex Full-Access relaunch revoked (interrupted, resumed
-  `workspace-write`), claude go-ahead for #13 given. Codex then re-verified
-  the gate green (fmt, clippy `-D warnings`, 28 tests) and stopped without
-  committing (gitdir outside sandbox — expected); deliverable is the local
-  working tree on `coord/08-pty-transport` (Cargo.toml/Cargo.lock/
-  src/engine/mod.rs + untracked src/engine/pty.rs). Critic received its first
-  assignment — complete local review of #8 at
-  `/tmp/shipwright/termdeck/critic/review-8.md` (single-line pointer, no
-  paste fragmentation). Claude is implementing #13 with instructions to
-  commit locally and stop for review.
-  two points (critic was still working on #12, not delivered-yet-facts; claude
-  had FINISHED #13, not mid-work). Both critic verdicts are final and pass
-  (transcript turns: #8 verdict complete before push; #12 verdict pass with 3
-  non-blocking notes). #12/#13 had been committed on ONE shared branch —
-  split: `coord/12-ui-master-stack` reset to the exact reviewed commit
-  `9606976`, #13 preserved on new branch `coord/13-ui-chrome` (`fe7922c`) with
-  its own worktree. Pushed `coord/12-ui-master-stack` (PR #18); #8 stayed PR
-  #17. Claude was told to HOLD and not start #14 (unauthorized; #14 waits for
-  #12/#13 passes → merges). #13 handed to the critic for local review
-  (`/tmp/shipwright/termdeck/critic/review-13.md`).
-  merged; and the `#[allow(dead_code)]` on `pub(crate) mod pty` must be
-  removed. Correction forwarded to codex (same session,
-  `correction-allow-dead-code.md`): remove the attribute, keep the gate green
-  with the smallest real resolution, commit locally, no push. After codex
-  hands back, the critic re-checks ONLY the delta (re-review mode), then the
-  coordinator pushes the amended `coord/08-pty-transport` (PR #17).
-  workflow under test, not Termdeck-specific — patched into the coordinator
-  and shipwright skills). Workers/reviewers no longer just go idle: every
-  finished turn writes a one-line task-tagged timestamped marker at
-  `<checkout>/.scratch/status/<task-slug>.done` (format:
-  `/tmp/shipwright/termdeck/FINISH-PROTOCOL.md`) and best-effort pings
-  `personal:coordinator`. New `watcher` window polls marker dirs every 4s and
-  turns markers into a bell + banner ping plus a timestamped task-tagged row
-  in `/tmp/shipwright/termdeck/events.log` (smoke-tested). Clauide adopted
-  it while idle; codex/critic adopt from their next turn (in-flight turns not
-  interrupted). `.scratch/` already gitignored — no repo change needed.
-  PR #18 mergeable per user authorization. **#13 BLOCK** — one blocking
-  finding: the Starting lifecycle state is never rendered/asserted (only 4 of
-  5 states covered). Correction dispatched to claude (same session,
-  `correction-13.md`): add a focused Starting render+color test. Two
-  non-blocking #13 notes: `scroll_marker` chrome is not traceable to the
-  accepted supplement (user decides keep-vs-drop — it also edited the
-  already-reviewed `backend-promoted.txt`), and footer rule-row duplication
-  (cosmetic). #8 delta re-review in progress (critic, re-review mode on the
-  allow-removal + public-exposure change). Finish protocol WORKING live:
-  watcher logged claude's retroactive 13-ui-chrome marker (11:37:07, tagged
-  + timestamped).
-- 2026-08-31: Replaced broad next-wave implementation with GitHub slices #7–#14.
+Rotated history: `.coordinator/journal/` (latest archive: 2026-08, 11 events).
+The last ~15 events — older o
 - 2026-08-31: Reviewed design PR #6 squash-merged as `12bd431`. Fresh worktrees
 - 2026-08-31 (evening): Previous coordinator (Codex session in `visura:0`, now out of tokens) opened PR #15 and PR #16 and routed the fixture-cleanup correction to Claude. New coordinator session took over from its written handoff.
 - 2026-08-31 (evening): Independent review from source. PR #15 (`coord/07-vt-adapter`): adapter code verified against alacritty 0.26 sources (`point_to_viewport` semantics match); fmt/clippy clean, 23 tests pass in the worktree. PR #16 (`coord/11-ui-master-stack`): fixture cleanup verified (`pub mod fixture` → `#[cfg(test)] mod fixture`, docs updated, `termdeck::ui` exports only `Deck`, release build clean); fmt/clippy clean, 21 tests pass with cleanup applied. Main checks: fmt/clippy clean, 18 tests pass. No blocking findings in either PR.
@@ -179,8 +73,14 @@ handoff requirement.
 - 2026-09-01: USER: once the critic passes the pushed PRs, they may be
 - 2026-09-01: FINISH PROTOCOL adopted (part of the coordinator skill
 - 2026-09-01: Critic verdicts: **#12 pass** (3 non-blocking) — already pushed,
+- 2026-09-02: #41 S1 (mouse-first: draggable stack-width divider, keyboard
+  parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
+  off main). Brief: visible divider + drag => live split (bounds decision),
+  keyboard nudge bindings as equivalence, no regression of wheel/drag/
+  promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
+  hint/help label should read "expand" while folded.
 
-## Durable resumption
+## Durable resumption## Durable resumption
 
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

@@ -13,3 +13,4 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
 - 2026-08-31: Migrated the four original local workstream issues to GitHub after
 - 2026-08-31: Ponytail re-review passed after `0691fd7` reduced FakeEngine by
 - 2026-08-31: Pre-merge ponytail review found one simplification: consolidate
+- 2026-08-31: Replaced broad next-wave implementation with GitHub slices #7–#14.
