@@ -36,7 +36,7 @@
 │                                                                                                │  │ workspace name                           │
 │                                                                                                │  │  code   e rename                         │
 │                                                                                                │  │                                          │
-│   /zzq                                                                  esc clear · ⏎ accept   │  │  ⏎  Open 1 as terminal                   │
+│   /zzq                                                                  esc clear · ⏎ select   │  │  o  Open 1 as terminal                   │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
                                                                                                                                                 
-   type to narrow  ↑↓ move  space toggle  +/- instance  esc clear filter                                                 ⏎ open  esc esc quit   
+   type to narrow  ↑↓ move  ⏎ select  +/- instance  esc clear filter                                                     o open  esc esc quit   

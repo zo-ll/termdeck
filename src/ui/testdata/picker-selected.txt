@@ -1,6 +1,6 @@
-    termdeck   3 selected  ·  ⏎ opens them                                                                        ~/code › 3 roots configured   
+    termdeck   3 selected  ·  o opens them                                                                        ~/code › 3 roots configured   
                                                                                                                                                 
-┌── > browse  ·  ~/code  ·  h up · l enter · ~ home · g root ──────────── filter (/ to search) ──┐  ┌── selected · 3 ────── order = pane no. ──┐
+┌── > browse  ·  ~/code  ·  ← back · → inside · ~ home · g root ───────── filter (/ to search) ──┐  ┌── selected · 3 ────── order = pane no. ──┐
 │   ROOT ~/code  ·  9 items · 5 repos                                                            │  │ 1 horizon-frontend  MASTER               │
 │   ────────────────────────────────────────────────────────────────────────────────────────     │  │   ~/code/horizon-frontend                │
 │[ ] ▴  ..                                                                                       │  │                                          │
@@ -36,7 +36,7 @@
 │                                                                                                │  │ workspace name                           │
 │   ─── cursor on .. ────────────────────────────────────────────────────────────────────        │  │  code   e rename                         │
 │   ~                                                                                            │  │                                          │
-│                                                                                                │  │  ⏎  Open 3 as terminals                  │
+│                                                                                                │  │  o  Open 3 as terminals                  │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘  └──────────────────────────────────────────┘
                                                                                                                                                 
-   ↑↓ move  space toggle  +/- instance  l/⇥ enter  h up  a all repos here  / filter                                          ⏎ open  esc quit   
+   ↑↓ move  ⏎ select  → inside  ← back  +/- instance  a all repos here  / filter                                             o open  esc quit   

@@ -212,8 +212,9 @@ Rules, all stated on the spec boards:
   ("selection survives filtering and navigation — it is workspace-wide, not
   per-folder"), which makes it a promise to the user, not just an
   implementation note.
-- **With nothing selected the launch button renders `disabled`**, and `⏎` on a
-  folder navigates into it instead of launching.
+- **With nothing selected the launch button renders `disabled`.** (Since the
+  key map was revised, `⏎` on a folder selects it rather than navigating, and
+  `→` is what goes inside — §7.)
 
 ### 3.1 More than one terminal for the same path
 
@@ -243,7 +244,7 @@ twice.
 - **`a` and `A` stay idempotent.** Selecting every repo in a folder leaves a
   repo that is already selected at whatever count it has: a bulk key must not
   multiply what a deliberate one built.
-- **Every count is an instance count.** `selected · 4`, `⏎ Open 4 as
+- **Every count is an instance count.** `selected · 4`, `o Open 4 as
   terminals`, and `selection kept (4)` all count panes, not distinct repos.
   The listing's own `9 items · 5 repos` still counts what is on disk.
 
@@ -270,8 +271,9 @@ by exactly the thing that distinguishes the panes:
 ```
 
 The selection panel also carries the **workspace name** — a chip in accent,
-`e` to rename — and the launch button `⏎  Open N as terminals`, both pinned to
-the bottom of the panel.
+`e` to rename — and the launch button `o  Open N as terminals`, both pinned to
+the bottom of the panel. (The export drew `⏎` on that button; §7's revision
+moved launch to `o`, and everything that names the key follows it.)
 
 **Ambiguity.** The export shows the name `idp` for a selection of `horizon-*`
 repos under `~/code`, so the default name is derivable from neither the root
@@ -292,7 +294,7 @@ in what order; everything else about a terminal stays configuration's business.
 `/` opens a query line **pinned to the bottom of the listing — never a modal**:
 
 ```
-   /hor                                              esc clear · ⏎ accept
+   /hor                                              esc clear · ⏎ select
 ```
 
 - Matching substrings highlight in `ACCENT` inside the row's name
@@ -306,8 +308,9 @@ in what order; everything else about a terminal stays configuration's business.
   implementation: the query has to reach every configured root, not just the
   current listing.
 - The top bar reflects the mode (`filtering · 3 selected`), and the bottom bar
-  swaps to filter keys (`type to narrow · ↑↓ move · space toggle · esc clear
-  filter · ⏎ open · esc esc quit`).
+  swaps to filter keys (`type to narrow · ↑↓ move · ⏎ select · +/- instance ·
+  esc clear filter`, with `o open · esc esc quit` on the right). The export
+  wrote that row before the key map was revised; §7 is what it says now.
 
 `esc` clears the filter; a second `esc` quits — the export spells out the
 double press, so a filtered picker never quits on the first `esc`.
@@ -323,7 +326,7 @@ of them clears the selection**:
 | --- | --- | --- |
 | Zero results | `MATCH zzq · 0 of 9`, `no match for zzq`, `in ~/code or 3 other roots` | `⌫ edit · esc clear`, and `selection kept (3)` is printed |
 | Empty folder | the path, `..`, `empty folder` | `h go up · ~ home` |
-| At root, nothing selected | `ROOTS` and the configured roots as folder rows with repo counts (`~/code · 5 repos`) | `nothing selected · ⏎ disabled` |
+| At root, nothing selected | `ROOTS` and the configured roots as folder rows with repo counts (`~/code · 5 repos`) | `nothing selected · o disabled` |
 | **Unreadable folder** (added in A2) | `cannot read ~/code/secret` in `ERROR`, then the reason the filesystem gave | `h go up · ~ home` |
 
 The root list is the picker's own top level: the configured roots are drawn as
@@ -364,8 +367,9 @@ three differences, per the spec board:
 
 `⇧⇥` cycles configured roots in place (the sheet has no room for a browse
 crumb), the sheet header reads `ROOT ~/work · 12 repos · 4 already open`, and
-the filter line works exactly as in §4. The launch line reads `⏎  Add N
-terminal(s)`.
+the filter line works exactly as in §4. The launch line reads `o  Add N
+terminal(s)` — A3 inherits §7's revised map, so `⏎` marks a row there too and
+`o` is what commits the sheet.
 
 The affordance lives in the **status bar**: `> 1 frontend · + add`, and the
 spec board says clicking the `+` opens the same sheet — *"No corner buttons, no
@@ -377,23 +381,49 @@ update.
 ## 7. Key map and mouse parity
 
 The export gives every picker key a click equivalent, which makes this the
-first screen designed to the mouse-first epic's parity rule from the start:
+first screen designed to the mouse-first epic's parity rule from the start.
+
+**Revised by the user, after A2 shipped.** The export's map gave `⏎` two jobs
+(launch, and navigate when nothing was selected) and left entering a folder to
+`l`/`⇥`, which meant a repository could not be looked inside at all — a
+repository holding `projects/` was a dead end. The revision is three keys and
+one rule: **`⏎` selects, `→` goes inside, `←` comes back**. Anything that made
+those three ambiguous was removed rather than kept beside them.
 
 | Keys | Action | Pointer |
 | --- | --- | --- |
 | `↑↓` / `j` `k` | move cursor | hover |
-| `space` | toggle repo | click row |
-| `l` `⇥` `→` | enter folder | click name |
-| `h` `←` | go up | click `..` |
+| `⏎` / `space` | select the row · press again to let go | click row |
+| `→` / `l` `⇥` | go inside — a folder **or a repository** | click the row again |
+| `←` / `h` | back one level | — |
 | `~` / `g` | home · root | click crumb |
-| `a` `A` | all · recurse | click count |
+| `a` | all repos here | click count |
 | `m` | set master | click pane number |
-| `x` `X` | remove · clear | click `[n]` |
+| `x` `X` | remove the path · clear all | click `[n]` |
 | `+` | another instance of this path | click the `×N` badge |
 | `-` | drop the most recent instance | click the badge with the secondary button |
 | `/` | filter | click the filter slot |
-| `⏎` | launch | click the button |
-| `esc` | clear · quit | click away |
+| `o` | open the selection as terminals | click the button |
+| `esc` | clear the filter · quit | click away |
+
+Two consequences of the revision, both **Chosen** because the export cannot
+answer them:
+
+- **Launch moved to `o`.** `⏎` cannot both select a row and open the
+  selection, and select is the job the user gave it. The launch button reads
+  ` o  Open N as terminals ` and the status bar says `o open`, so the key is
+  stated wherever the action is.
+- **Any directory can be selected, not only a repository.** `⏎` selects "the
+  row's path", and a plain folder is a perfectly good working directory. `◆`
+  and `▸` still mean what they meant — the glyph says whether git is there,
+  not whether the row may be picked. A plain file still cannot be selected,
+  and neither can `..`.
+
+Because a single click selects, the pointer's "go inside" is a **second click
+on the same row**, which undoes the selection the first click made: the click
+was the user reaching for the folder, not for a pane. `click name` leaves the
+table for the same reason — with one click meaning select, a separate hit
+region inside the row would have made half of it do something else.
 
 `+` and `-` are **Chosen** (§0). They read as "one more of this / one fewer",
 they pair with the `+ add` affordance the export already puts in the session's
@@ -410,8 +440,8 @@ picker must not reuse: `^g z`, `^g c`, `^g [`, `^g 1-4`, `^g q`.
 **Contradiction in the export.** Screen 06's browse-panel title hint reads
 `h up · l enter · ~ home · / root`, but both the bottom bar and the key-map
 board give `/` to the filter and `~ / g` to `home · root`. **Chosen:** the key
-map board wins — `~` is home, `g` is root, `/` is filter. The panel hint is a
-typo for `g root`, and the implementation should draw it that way.
+map board wins — `~` is home, `g` is root, `/` is filter. The panel hint now
+reads `← back · → inside · ~ home · g root`, which is the revised map.
 
 ---
 
