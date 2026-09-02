@@ -28,6 +28,22 @@ Where the export is silent or contradicts itself this document says so under
 **Ambiguity** and states the reading it picks. Nothing here is invented beyond
 those marked points.
 
+### The one requirement the export does not show
+
+A user requirement arrived after the export: **the same project path may be
+opened as two or more terminals** (`fe-a` and `fe-a-2` in the same directory).
+The export draws no such thing — its selection box holds one ordinal per row
+and its runtime sheet locks a repo that is already open. §3.1, the `[·]`
+relaxation in §6, and the `+` / `-` rows in §7 are therefore **Chosen**, not
+derived, and are marked as such where they appear.
+
+The seam below it is already real, which is why this is a surface question
+only. Verified against the build on this branch: a workspace with two
+terminals sharing one `cwd` and distinct names passes `termdeck check`, lists
+as two terminals, and runs as two panes over two separate shells. Nothing in
+the engine, the contracts or the configuration has to move for the picker to
+offer it.
+
 ### Where this fits
 
 A1 (#48) has landed the entry points: no path resolves to `CliCommand::Picker`,
@@ -139,6 +155,13 @@ dirty count and the narrow fallback's `stack hidden`.
   — the export states that case explicitly, so a folder worth entering is
   distinguishable from one that is not before entering it.
 - **Files** carry nothing.
+- A repo selected **more than once** carries an instance badge `×2`, `×3` …
+  in `ACCENT`, right-aligned in the name field at cols 30–31 (29–31 once the
+  count reaches two digits), keeping col 32 blank so the badge never touches
+  the separator. It is a selection fact, so it takes the selection's colour and
+  sits with the name rather than in the meta the filesystem owns. A name long
+  enough to reach the badge is truncated by it, the way the field already
+  truncates at col 32.
 
 **Ambiguity.** The tail's relative time is unlabelled. In screen 06 the cursor
 row's detail says `last commit 4d ago` for the same repo whose tail says
@@ -191,6 +214,60 @@ Rules, all stated on the spec boards:
   implementation note.
 - **With nothing selected the launch button renders `disabled`**, and `⏎` on a
   folder navigates into it instead of launching.
+
+### 3.1 More than one terminal for the same path
+
+**Chosen** (§0): a path may be selected repeatedly. Each selection is an
+**instance** with its own pane number and its own terminal name, and the
+selection panel lists instances rather than unique repos — which is what keeps
+the first-selected-is-master rule and the ordering coherent when a path appears
+twice.
+
+```
+[1] ◆  horizon-frontend       ×2 · git · main          2h ago
+```
+
+- **The box holds the instance the path was *first* selected as.** Three cells
+  cannot hold two ordinals, and the selection panel is the authority for the
+  full mapping, so the row states where the path enters the order and the badge
+  states how many times it is in it.
+- **`+` adds another instance of the cursor row; `-` removes the most recent
+  one.** The new instance appends at the end of the order, exactly as a fresh
+  selection would — `+` is "another one of these", never a reordering.
+- **`space` and `x` address the whole path**: toggling off or removing a repo
+  drops every instance of it at once, and the remaining panes renumber. `-` is
+  the key for shedding one.
+- **`m` promotes that path's first instance**; inside the selection panel `m`,
+  `K` and `J` address instances individually, because that panel is the
+  instance list.
+- **`a` and `A` stay idempotent.** Selecting every repo in a folder leaves a
+  repo that is already selected at whatever count it has: a bulk key must not
+  multiply what a deliberate one built.
+- **Every count is an instance count.** `selected · 4`, `⏎ Open 4 as
+  terminals`, and `selection kept (4)` all count panes, not distinct repos.
+  The listing's own `9 items · 5 repos` still counts what is on disk.
+
+#### Names
+
+The picker generates them, because it is the only party that knows both the
+instance ordinal and what is already taken. The first instance keeps the name
+the folder entry point would derive; the second takes `-2`, the third `-3`,
+and a suffix already spoken for — a sibling repo genuinely called `foo-2`, or
+an open terminal of that name in the runtime sheet — is skipped rather than
+duplicated. Names are what the engine keys a terminal by, so they must come out
+of the picker unique or the workspace is invalid.
+
+The selection panel shows them, so a doubled path reads as two rows that differ
+by exactly the thing that distinguishes the panes:
+
+```
+1 horizon-frontend    MASTER
+  ~/code/horizon-frontend
+2 horizon-backend
+  ~/code/horizon-backend
+3 horizon-frontend-2
+  ~/code/horizon-frontend
+```
 
 The selection panel also carries the **workspace name** — a chip in accent,
 `e` to rename — and the launch button `⏎  Open N as terminals`, both pinned to
@@ -265,8 +342,12 @@ A **78-column sheet centred over the dimmed session** (the export dims the
 session to 34% and keeps it live). It is the picker's language with exactly
 three differences, per the spec board:
 
-1. Repos already open are listed but **locked**: `[·]`, meta `already open ·
-   pane 2`.
+1. Repos already open are listed but **locked** for ordinary selection: `[·]`,
+   meta `already open · pane 2`. **Chosen** (§0): the lock is what stops
+   `space` from re-adding a pane by accident, not a rule that a project may
+   only be open once — `+` on a locked row marks it `[+]` and appends *another
+   instance* of it, meta `another instance · appends as pane 5`. A repo open
+   more than once states every pane it holds: `already open · panes 1, 5`.
 2. Marks are `[+]`, because they **append** rather than order — the footer says
    `appends as pane 5`.
 3. **The master never changes**: `esc cancel · master unchanged` is printed on
@@ -299,9 +380,18 @@ first screen designed to the mouse-first epic's parity rule from the start:
 | `a` `A` | all · recurse | click count |
 | `m` | set master | click pane number |
 | `x` `X` | remove · clear | click `[n]` |
+| `+` | another instance of this path | click the `×N` badge |
+| `-` | drop the most recent instance | click the badge with the secondary button |
 | `/` | filter | click the filter slot |
 | `⏎` | launch | click the button |
 | `esc` | clear · quit | click away |
+
+`+` and `-` are **Chosen** (§0). They read as "one more of this / one fewer",
+they pair with the `+ add` affordance the export already puts in the session's
+status bar, and they leave `space` meaning exactly what the export says it
+means. They do not collide with the divider's `^g -` / `^g =`: those are
+session bindings and stay prefixed, while picker keys are bare and never reach
+a session or a shell.
 
 **Picker keys are bare** — no `^g` prefix, because no terminal has focus yet.
 Inside a session everything stays prefixed, so `a`, `m`, `x` and `/` are
@@ -337,14 +427,19 @@ typo for `g root`, and the implementation should draw it that way.
   the UI does not itself walk. It needs a read-only listing contract: entries
   with kind (repo/folder/file), name, and the meta each kind carries.
 - **A3** — the runtime-add sheet, which is this same view with the three
-  differences in §6, plus the `^g a` binding and the status-bar `+`.
+  differences in §6, plus the `^g a` binding and the status-bar `+`. Its
+  instance support is the same `+` key, with the extra duty of skipping names
+  the running session already holds.
 - **A4** — wiring: `CliCommand::Picker` returns a `Workspace` instead of
   `"folder picker pending A2"`, and the sheet appends terminals to a running
   engine.
 
 The seam this note assumes between the interface and everything else: the
 picker asks for *a directory's entries, already classified and already
-annotated*, and returns *an ordered list of paths plus a workspace name*. Git
+annotated*, and returns *an ordered list of (terminal name, path) pairs plus a
+workspace name* — pairs rather than paths, because instances (§3.1) mean the
+same path can appear more than once and only the picker knows what to call
+each one. Git
 inspection, filesystem walking and root configuration all sit behind that seam,
 on the engine/config side of the architecture boundary — the interface neither
 opens a repository nor stats a file.
