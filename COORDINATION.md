@@ -59,7 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: USER: picker nav must be SIMPLE — Enter selects the path, right arrow descends (repos incl.), left arrow up. Correction-49c routed to claude (note §7 + impl + tests).
 - 2026-09-02: NAV-AMENDMENT MERGED via PR #55 (coordinator mis-flow corrected: #54 had merged the original picker; nav-simple + key-row commits rebased onto main and shipped as their own PR — critic passed both). Binary rebuilt with the SIMPLE picker: Enter=select, →=descend (into repos too), ←=back, o=launch.
 - 2026-09-02: picker shift+down/up range-select + mouse folder selection dispatched to claude (coord/49-range-select).
 - 2026-09-02: range-select done (claude `5f82232`: shift+down/up additive incl folders; ESC[1;2A/B decoding + torn-sequence guard; folder click verified already working + 2 pins; 195 tests) — in critic review.
@@ -74,6 +73,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: PARALLEL: claude → add-sheet mouse parity (coord/50-sheet-parity); codex → A4 integration/acceptance (coord/51-integration) — both working.
 - 2026-09-02: USER testing feedback: shift-range must TOGGLE (unselect too) + per-row checkbox square (click/Tab toggles). Dispatched to claude (coord/49-range-toggle).
 - 2026-09-02: 49-range-toggle done (codex `4945b56`: toggle ranges + checkboxes; 222 tests) — critic review.
+- 2026-09-02: range-toggle/checkbox MERGED via #61 (222 tests); binary rebuilt. NBs recorded: filter-hint copy, deliberate-instance add-path test.
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
