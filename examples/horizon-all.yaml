@@ -3,7 +3,10 @@ version: 1
 defaults:
   command: ["/bin/bash", "-l"]
   scrollback: 10000
-  master_ratio: 0.70
+  # The stack starts at its minimum width (0.85); uncomment to pin a
+  # wider one. Accepted range 0.55-0.85, and ^g - / ^g = or the
+  # divider move it for the session either way.
+  # master_ratio: 0.70
 
 workspaces:
   horizon:

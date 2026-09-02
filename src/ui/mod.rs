@@ -813,17 +813,23 @@ impl Deck<'_> {
             ),
             Span::styled(" · ", separator),
             Span::styled(glyph, Style::new().fg(glyph_colour).bg(DEMOTED_BG)),
-            Span::styled(" · ", separator),
         ];
         // The strip sits two columns in, per the export's `padding:0 2ch`, and
         // keeps the same inset on the right.
         let width = area.width.saturating_sub(2 * PADDING);
         let taken: usize = spans.iter().map(|span| span.content.chars().count()).sum();
-        let (tail, colour) = self.strip_tail(engine, project, &status, &metadata);
-        spans.push(Span::styled(
-            clip(&tail, (width as usize).saturating_sub(taken)),
-            Style::new().fg(colour).bg(DEMOTED_BG),
-        ));
+        // The tail is the first thing the strip gives up. At the minimum stack
+        // width (#44) there is no room for it, and a separator with nothing
+        // after it states nothing, so the two go together.
+        let room = (width as usize).saturating_sub(taken + 3);
+        if room > 1 {
+            let (tail, colour) = self.strip_tail(engine, project, &status, &metadata);
+            spans.push(Span::styled(" · ", separator));
+            spans.push(Span::styled(
+                clip(&tail, room),
+                Style::new().fg(colour).bg(DEMOTED_BG),
+            ));
+        }
         buffer.set_line(area.x + PADDING, area.y, &Line::from(spans), width);
     }
 
@@ -889,8 +895,17 @@ impl Deck<'_> {
         }
         let collapsed = self.state.collapsed_count();
         if demoted.is_none() && collapsed > 0 {
+            let census = format!("{collapsed} collapsed");
+            // The key goes before the census does, the way the paging footer
+            // drops `^g pgup/pgdn` first: at the minimum stack width (#44) the
+            // column has room to say how many are folded but not to say the
+            // key as well, and half a key word says nothing at all.
+            const EXPAND: &str = " · ^g c expand all";
+            if census.chars().count() + EXPAND.chars().count() > usize::from(width) {
+                return vec![Span::styled(census, Style::new().fg(HINT))];
+            }
             return vec![
-                Span::styled(format!("{collapsed} collapsed · "), Style::new().fg(HINT)),
+                Span::styled(format!("{census} · "), Style::new().fg(HINT)),
                 Span::styled("^g c", Style::new().fg(PREVIEW_FG)),
                 Span::styled(" expand all", Style::new().fg(HINT)),
             ];
@@ -2090,7 +2105,7 @@ mod tests {
 
     /// The accepted 144x42 reference canvas with the first terminal as master.
     fn reference() -> (Buffer, Option<Position>) {
-        render(&fixture::frontend_active(), &DeckState::new(4), (144, 42))
+        render(&fixture::frontend_active(), &reference_deck(4), (144, 42))
     }
 
     /// Open previews own three bands of the column; the folded default is
@@ -2177,7 +2192,7 @@ mod tests {
     }
 
     fn promote(position: usize) -> DeckState {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         state.apply(
             &ActionCommand::SelectPosition(position),
             &fixture::projects(),
@@ -2187,7 +2202,7 @@ mod tests {
     }
 
     fn zoomed() -> DeckState {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         state.apply(
             &ActionCommand::ToggleZoom,
             &fixture::projects(),
@@ -2196,11 +2211,25 @@ mod tests {
         state
     }
 
+    /// The split the design export draws every screen at: 98 columns of
+    /// master, the 2-column gutter and the 44-column stack, which is a
+    /// `master_ratio` of 0.70.
+    ///
+    /// Since #44 a fresh deck starts at the top of the range instead, giving
+    /// the stack its minimum width, so the canvases the export fixes ask for
+    /// its split by name rather than inheriting it from the default. What the
+    /// default itself draws is held to account by `fresh_start_*` below.
+    const EXPORT_SPLIT: f64 = 0.70;
+
+    fn reference_deck(terminals: usize) -> DeckState {
+        DeckState::new(terminals).with_master_ratio(EXPORT_SPLIT)
+    }
+
     /// The export's screen 05: app and worker folded to their title rows.
     /// Since #39 every preview starts folded, so the one open preview is what
     /// this has to ask for; the rendered state is the same as before.
     fn collapsed() -> DeckState {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         assert!(state.toggle_collapse(1));
         state
     }
@@ -2209,7 +2238,7 @@ mod tests {
     /// a run starts in, so a test whose subject is open-preview chrome or
     /// geometry asks for it rather than leaning on the default.
     fn expanded(terminals: usize) -> DeckState {
-        let mut state = DeckState::new(terminals);
+        let mut state = reference_deck(terminals);
         assert!(state.toggle_collapse_all());
         assert_eq!(state.collapsed_count(), 0);
         state
@@ -2245,7 +2274,7 @@ mod tests {
     /// going to the topmost open pane.
     #[test]
     fn freed_rows_split_evenly_with_the_remainder_going_to_the_top() {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         state.toggle_collapse(1);
         state.toggle_collapse(2);
         assert_eq!(state.collapsed_count(), 1, "worker alone is left folded");
@@ -2264,7 +2293,7 @@ mod tests {
     #[test]
     fn folding_never_changes_the_height_the_stack_uses() {
         // Walked from the folded default outwards, one expansion at a time.
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
 
         for opened in 0..4 {
             let folds = 3 - opened;
@@ -2296,7 +2325,7 @@ mod tests {
     /// anything is expanded, and the master carries no marker at all.
     #[test]
     fn the_disclosure_markers_are_drawn_before_anything_is_expanded() {
-        let (plain, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
+        let (plain, _) = render(&fixture::frontend_active(), &reference_deck(4), (144, 42));
         let rendered = text(&plain);
 
         assert!(rendered.contains("▸ 2 backend"), "{rendered}");
@@ -2341,7 +2370,7 @@ mod tests {
     #[test]
     fn a_folded_running_pane_shows_its_last_output_line() {
         // Backend is folded from the first frame since #39.
-        let state = DeckState::new(4);
+        let state = reference_deck(4);
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
@@ -2456,7 +2485,7 @@ mod tests {
     #[test]
     fn the_markers_are_clickable_before_anything_is_expanded() {
         let projects = fixture::projects();
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         let area = Rect::new(0, 0, 144, 42);
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
@@ -2575,7 +2604,7 @@ mod tests {
     #[test]
     fn the_divider_column_is_the_divider_and_nothing_else() {
         let projects = fixture::projects();
-        let state = DeckState::new(4);
+        let state = reference_deck(4);
         let view = deck_for(&projects, &state);
 
         assert!(view.divider_at(SCREEN, Position::new(98, 20)));
@@ -2600,7 +2629,7 @@ mod tests {
     #[test]
     fn dragging_the_divider_puts_the_split_under_the_pointer() {
         let projects = fixture::projects();
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
 
         // Every column the range reaches, because the ratio a column maps to
         // is a division whose last bit must not move the split a column on.
@@ -2623,7 +2652,7 @@ mod tests {
     #[test]
     fn a_drag_past_the_ends_of_the_range_stops_at_them() {
         let projects = fixture::projects();
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
 
         let narrow = deck_for(&projects, &state).ratio_at(SCREEN, 20).unwrap();
         state.set_master_ratio(narrow);
@@ -2643,11 +2672,11 @@ mod tests {
     #[test]
     fn a_nudged_split_and_a_dragged_split_are_the_same_screen() {
         let projects = fixture::projects();
-        let mut nudged = DeckState::new(4);
+        let mut nudged = reference_deck(4);
         nudged.nudge_master_ratio(-1);
         assert_eq!(nudged.master_ratio(), 0.65);
 
-        let mut dragged = DeckState::new(4);
+        let mut dragged = reference_deck(4);
         let ratio = deck_for(&projects, &dragged).ratio_at(SCREEN, 91).unwrap();
         dragged.set_master_ratio(ratio);
 
@@ -2661,7 +2690,7 @@ mod tests {
     /// does: the gesture states itself for as long as it lasts.
     #[test]
     fn the_divider_takes_the_accent_while_it_is_held() {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         state.set_resizing(true);
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
@@ -2684,7 +2713,7 @@ mod tests {
         let zoom = zoomed();
         assert!(!deck_for(&projects, &zoom).divider_at(SCREEN, Position::new(98, 20)));
 
-        let state = DeckState::new(4);
+        let state = reference_deck(4);
         let narrow = Rect::new(0, 0, 84, 22);
         assert!(!deck_for(&projects, &state).divider_at(narrow, Position::new(50, 10)));
 
@@ -2705,6 +2734,79 @@ mod tests {
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
         assert_snapshot("split-dragged", &buffer);
+    }
+
+    /// Issue #44: a fresh run gives the stack its minimum width. The previews
+    /// start folded (#39), so a strip is all the column has to hold, and the
+    /// master takes everything the divider's range allows.
+    #[test]
+    fn a_fresh_run_gives_the_stack_its_minimum_width() {
+        let state = DeckState::new(4);
+        assert_eq!(state.master_ratio(), super::state::MAX_MASTER_RATIO);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        // 120 columns of master, the 2-column gutter, a 22-column stack.
+        assert_eq!(divider_column(&buffer), Some(120));
+        assert_eq!(buffer[(119u16, 0u16)].symbol(), "┐", "the master's border");
+        assert_eq!(buffer[(122u16, 0u16)].symbol(), " ", "the stack's padding");
+        // Which is the narrow end of the divider's travel: `^g -` and a drag
+        // both open the stack from here, and nothing widens it further.
+        let mut wider = state.clone();
+        assert!(!wider.nudge_master_ratio(1), "already at the top");
+        assert!(wider.nudge_master_ratio(-1));
+        let (opened, _) = render(&fixture::frontend_active(), &wider, (144, 42));
+        assert_eq!(divider_column(&opened), Some(113));
+    }
+
+    /// The minimum width is only worth having if a strip still reads there:
+    /// the marker, the configured number, the name and the status dot all
+    /// survive, and it is the tail that goes.
+    #[test]
+    fn a_strip_still_names_itself_at_the_minimum_stack_width() {
+        let (buffer, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
+        let rendered = text(&buffer);
+
+        // The shortest name keeps a clipped tail; the longer two spend the
+        // column on their own names, which is the right order to give things
+        // up in. A strip with no room left for a tail drops the separator
+        // with it, rather than ending on one that separates nothing.
+        assert!(rendered.contains("▸ 3 app · ✕ · exi…"), "{rendered}");
+        for (row, strip) in [(0u16, "▸ 2 backend · ●"), (4, "▸ 4 worker · ○")] {
+            let drawn: String = (122..144).map(|c| buffer[(c, row)].symbol()).collect();
+            assert_eq!(drawn.trim_end(), format!("  {strip}"), "row {row}");
+        }
+        // Every marker is still in its own two cells, so the affordance the
+        // fresh run depends on (#39) survives the narrower column.
+        let projects = fixture::projects();
+        let state = DeckState::new(4);
+        let view = deck_for(&projects, &state);
+        assert_eq!(view.marker_at(SCREEN, Position::new(124, 0)), Some(1));
+        assert_eq!(view.marker_at(SCREEN, Position::new(125, 4)), Some(3));
+    }
+
+    /// The stack footer gives up its key before it gives up the census, and
+    /// never renders half a word.
+    #[test]
+    fn the_fold_census_drops_its_key_when_the_column_is_narrow() {
+        let (narrow, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
+        let footer: String = (122..144).map(|c| narrow[(c, 39u16)].symbol()).collect();
+        assert_eq!(footer.trim(), "3 collapsed", "{footer}");
+
+        // The export's own column has room for both, and still states both.
+        let (wide, _) = render(&fixture::frontend_active(), &reference_deck(4), (144, 42));
+        assert!(
+            text(&wide).contains("3 collapsed · ^g c expand all"),
+            "{}",
+            text(&wide)
+        );
+    }
+
+    #[test]
+    fn fresh_start_matches_the_minimum_stack_width() {
+        let (buffer, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
+
+        assert_snapshot("fresh-start", &buffer);
     }
 
     #[test]
@@ -2873,7 +2975,7 @@ mod tests {
     }
 
     fn scrolling() -> DeckState {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         state.apply(
             &ActionCommand::ToggleScrollback,
             &fixture::projects(),
@@ -2939,7 +3041,7 @@ mod tests {
         let mut engine = fixture::frontend_active();
         engine.set_status(&TerminalId::new("frontend"), TerminalStatus::Starting);
 
-        let (buffer, _) = render(&engine, &DeckState::new(4), (144, 42));
+        let (buffer, _) = render(&engine, &reference_deck(4), (144, 42));
         let screen = text(&buffer);
 
         // A wide master names the state it is in.
@@ -3002,7 +3104,7 @@ mod tests {
     }
 
     fn opened(action: ActionCommand) -> DeckState {
-        let mut state = DeckState::new(4);
+        let mut state = reference_deck(4);
         state.apply(&action, &fixture::projects(), fixture::NOW);
         state
     }
@@ -3134,14 +3236,14 @@ mod tests {
 
     #[test]
     fn narrow_matches_the_reference_canvas() {
-        let (buffer, _) = render(&fixture::frontend_active(), &DeckState::new(4), (84, 22));
+        let (buffer, _) = render(&fixture::frontend_active(), &reference_deck(4), (84, 22));
 
         assert_snapshot("narrow", &buffer);
     }
 
     #[test]
     fn below_a_usable_preview_width_the_stack_becomes_a_pane_strip() {
-        let (buffer, _) = render(&fixture::frontend_active(), &DeckState::new(4), (84, 22));
+        let (buffer, _) = render(&fixture::frontend_active(), &reference_deck(4), (84, 22));
         let screen = text(&buffer);
 
         assert_eq!(screen.matches('┌').count(), 1, "{screen}");
@@ -3302,7 +3404,7 @@ mod tests {
     #[test]
     fn a_fresh_folded_stack_answers_every_pointer_gesture() {
         let projects = fixture::projects();
-        let state = DeckState::new(4);
+        let state = reference_deck(4);
         let view = deck_for(&projects, &state);
 
         for (position, row, terminal) in
@@ -3346,7 +3448,7 @@ mod tests {
     #[test]
     fn a_folded_list_longer_than_the_column_still_pages() {
         let projects = synthetic(24);
-        let mut state = DeckState::new(24);
+        let mut state = reference_deck(24);
 
         let window = deck_for(&projects, &state).stack_window(SCREEN);
         assert_eq!(window.visible, 19, "39 budget rows hold 19 x (1 + 1)");

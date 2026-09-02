@@ -83,10 +83,37 @@ range `defaults.master_ratio` accepts in the configuration, so:
 Both gestures clamp; a drag past either end stops at it. At 144 columns that
 is column 77 (0.55) to column 120 (0.85).
 
+### 3.1 Where a run starts (issue #44)
+
+At the **top** of that range: `DEFAULT_MASTER_RATIO = MAX_MASTER_RATIO`, so a
+fresh run gives the stack its minimum width — 22 columns of the reference 144
+— and the master everything else. The previews start folded (#39), so a strip
+is all the column has to hold until the user opens one, and the divider is
+already where dragging it left would widen the stack.
+
+The default lives in the constants (`src/ui/state.rs` and, because the
+boundary duplicates it, `src/config/mod.rs`), **not** in the shipped example
+configurations: a `defaults.master_ratio` that a workspace states is an
+override and still wins, which is why the examples now leave the key commented
+out rather than pinning the old 0.70.
+
+Two pieces of chrome had to learn the narrower column, both by giving up their
+least important part first, which is the rule the paging footer already
+followed:
+
+- a **strip** with no room for its tail drops the ` · ` that would have
+  introduced it, rather than ending on a separator that separates nothing;
+- the **fold census** drops ` · ^g c expand all` and keeps `{c} collapsed`,
+  rather than rendering half of `expand`.
+
+The marker, the configured number, the name and the status dot all still fit,
+so the affordance #39 depends on survives the minimum width. That is why the
+floor stayed where it is instead of being raised.
+
 The interface holds its own copy of the range (`src/ui/state.rs`) rather than
 importing the configuration's, because the architecture boundary keeps
 `src/config` out of `src/ui`. The two copies — both ends of the range and the
-0.70 default — are held equal by a cross-check in the configuration's own
+default — are held equal by a cross-check in the configuration's own
 tests (`the_interfaces_split_range_is_the_one_this_file_validates`), which
 fails if either side moves. Sharing one constant from `src/contracts` would
 retire the duplication outright, and belongs to the owner of contracts.

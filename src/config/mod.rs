@@ -98,8 +98,12 @@ const fn default_scrollback() -> usize {
     10_000
 }
 
+/// The top of the accepted range: a workspace that says nothing about the
+/// split starts with the stack at its minimum width (#44). The interface
+/// holds the same value; `tests::the_interfaces_split_range_is_the_one_this_file_validates`
+/// keeps the two equal.
 const fn default_master_ratio() -> f64 {
-    0.70
+    0.85
 }
 
 /// Loads and validates a Termdeck YAML configuration file.
@@ -277,6 +281,45 @@ mod tests {
         )
         .unwrap();
         config
+    }
+
+    /// #44: a workspace that says nothing about the split gets the minimum
+    /// stack width, and one that does say something gets what it says. The
+    /// default is a default, not a floor.
+    #[test]
+    fn a_configured_split_overrides_the_minimum_width_default() {
+        let root = test_root();
+        fs::create_dir_all(root.join("one")).unwrap();
+        let config = write_config(&root, "      - name: one\n        cwd: one\n");
+
+        let silent = load(&config).unwrap();
+        assert_eq!(
+            silent.workspaces["test"].master_ratio.get(),
+            super::default_master_ratio(),
+            "the stack starts at its minimum width"
+        );
+        assert_eq!(silent.workspaces["test"].master_ratio.get(), 0.85);
+
+        let stated = root.join("stated.yaml");
+        fs::write(
+            &stated,
+            fs::read_to_string(&config)
+                .unwrap()
+                .replace("  command: [sh]", "  command: [sh]\n  master_ratio: 0.60"),
+        )
+        .unwrap();
+
+        let config = load(&stated).unwrap();
+        assert_eq!(config.workspaces["test"].master_ratio.get(), 0.60);
+        // And that is the split the deck opens with, not the default it
+        // replaced: the seeding path the session uses.
+        assert_eq!(
+            crate::ui::DeckState::new(1)
+                .with_master_ratio(config.workspaces["test"].master_ratio.get())
+                .master_ratio(),
+            0.60
+        );
+        fs::remove_dir_all(&root).unwrap();
     }
 
     /// The interface offers the split as a live gesture (#41), within its own
