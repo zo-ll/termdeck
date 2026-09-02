@@ -550,3 +550,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   stable fe/be order). Slices opened: #48 A1 (codex, ready), #49 A2 (claude,
   blocked A1), #50 A3 (both; blocked A1), #51 A4 (codex; blocked A1+A2+A3).
   Waves: A1 → A2(+A3-prep) → A3 → A4.
+- 2026-09-02: #48 A1 (CLI entries + discovery model) dispatched to codex (coord/48-cli-discovery). A2 (picker) design check with Claude Design deferred until A1 lands.
