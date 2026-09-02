@@ -385,6 +385,28 @@ terminal(s)` — A3 inherits §7's revised map, so `⏎` marks a row there too a
   and so goes last rather than first. In the narrow fallback there is no row
   to put it on and no `+` is drawn.
 
+**Mouse parity inside the sheet.** Every key it has is also a target, because
+the epic's rule does not stop at the session's edge:
+
+| Keys | Action | Pointer |
+| --- | --- | --- |
+| `⏎` | mark the row (locked rows refuse both) | click the row |
+| `+` | another instance, locked or not | click the row's instance slot |
+| `-` | shed the most recent instance | secondary-click the same slot |
+| `⇧⇥` | next configured root | click `⇧⇥ switch root` in the header |
+| `/` | filter | click the query line |
+| `o` | add what is marked | click the button |
+| `esc` | close without adding | — |
+
+The instance slot is what makes `+` reachable at all: it is drawn on **every**
+row — a dim `+` when nothing is marked, an accent `+` at one, and `×N` beyond
+that — so a repository the session already holds still has somewhere to click
+for another instance of it. It takes two columns of the row and wins over the
+row beneath it, the way the picker's marker cells do.
+
+`esc` has no twin, deliberately: the sheet is a modal, and a click outside it
+should not be able to throw away a set of marks by accident.
+
 Adding commits through the same naming rule the picker uses, applied to the
 running session: a repository already open takes `-2`, then `-3`, skipping
 any name a live terminal already holds. The new panes land at the end of the
