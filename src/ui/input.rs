@@ -28,6 +28,10 @@ pub enum Key {
     Down,
     Left,
     Right,
+    /// Shift plus an arrow. The picker range-selects with these; a session
+    /// forwards them like any other arrow.
+    ShiftUp,
+    ShiftDown,
     PageUp,
     PageDown,
     Enter,
@@ -44,6 +48,8 @@ impl Key {
             // `ctrl+a` is 0x01, so the prefix's own literal byte is 0x07.
             Self::Ctrl(character) => vec![character.to_ascii_uppercase() as u8 & 0x1f],
             Self::Up => b"\x1b[A".to_vec(),
+            Self::ShiftUp => b"\x1b[1;2A".to_vec(),
+            Self::ShiftDown => b"\x1b[1;2B".to_vec(),
             Self::Down => b"\x1b[B".to_vec(),
             Self::Right => b"\x1b[C".to_vec(),
             Self::Left => b"\x1b[D".to_vec(),

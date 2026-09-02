@@ -393,7 +393,8 @@ those three ambiguous was removed rather than kept beside them.
 | Keys | Action | Pointer |
 | --- | --- | --- |
 | `↑↓` / `j` `k` | move cursor | hover |
-| `⏎` / `space` | select the row · press again to let go | click row |
+| `⏎` / `space` | select the row · press again to let go | click row — **any row**, folder or repository |
+| `⇧↓` / `⇧↑` | select every selectable row from the cursor to the end · to the start | — |
 | `→` / `l` `⇥` | go inside — a folder **or a repository** | click the row again |
 | `←` / `h` | back one level | — |
 | `~` / `g` | home · root | click crumb |
@@ -406,6 +407,24 @@ those three ambiguous was removed rather than kept beside them.
 | `o` | open the selection as terminals | click the button |
 | `esc` | clear the filter · quit | click away |
 
+**Amended again by the user: `⇧↓` and `⇧↑` range-select.** They take every
+selectable row between the cursor and that end of the listing — repositories
+and folders alike, never a file and never `..`. Three properties keep them
+predictable:
+
+- **Additive**, never a toggle: a row already selected keeps the instances it
+  has, so leaning on the key cannot multiply what a deliberate `+` built. It
+  is the same rule `a` follows.
+- **Listing order**, whichever way the range runs, so pane numbers read top to
+  bottom the way the screen does. `⇧↑` from the fifth row makes the *first*
+  row pane 1, not the fifth.
+- **The cursor does not move.** The range is what travelled, not the cursor.
+
+They have no pointer twin, and that is deliberate: a drag across rows would be
+a second meaning for the press that already selects, and the note's own rule is
+that when two actions collide, the simple one wins. The bottom bar states them
+(`⇧↑↓ range`) so the keyboard-only gesture is still discoverable.
+
 Two consequences of the revision, both **Chosen** because the export cannot
 answer them:
 
@@ -417,7 +436,10 @@ answer them:
   row's path", and a plain folder is a perfectly good working directory. `◆`
   and `▸` still mean what they meant — the glyph says whether git is there,
   not whether the row may be picked. A plain file still cannot be selected,
-  and neither can `..`.
+  and neither can `..`. This holds for **every** way of selecting: the
+  pointer's click, `⏎`, and the two range keys all take a folder on the same
+  terms as a repository. `a` is the one exception, and stays what the export
+  named it: *all repos here*.
 
 Because a single click selects, the pointer's "go inside" is a **second click
 on the same row**, which undoes the selection the first click made: the click
