@@ -56,11 +56,9 @@ scope.
 
 ## Handoffs
 
-Rotated history: `.coordinator/journal/` (latest archives: see journal dir).
+Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
-  critic review.
 - 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
   user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
   defined carefully vs #25 wheel; hit-testing by list offset; scroll
@@ -182,7 +180,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   deleted, paste-release added — key/wheel already released per doc, cross-
   check test for ratio constants; 152 tests). Re-review handed to the critic.
   (Skills: lean rewrite committed+pushed.)
-
+- 2026-09-02: #44 (stacked previews start at minimal width) dispatched to claude (same session; coord/44-min-stack).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.

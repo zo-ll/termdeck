@@ -415,3 +415,5 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
   vs direct) but queued to claude.
 - 2026-09-01: #34a critic PASS → committed → pushed → PR (#34a), merge
   before #34b. #34b still with claude.
+- 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
+  critic review.
