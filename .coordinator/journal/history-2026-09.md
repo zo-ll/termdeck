@@ -386,3 +386,12 @@ Automatically rotated from COORDINATION.md. Query with `rg`. Obsidian-compatible
 - 2026-09-01: #32 done (claude, `48ab5d3`: always-visible markers + help ^g c;
   gate 116) — in critic review.
 - 2026-09-02: #41 S1 done (claude, `bb29ff6`: draggable divider col 98 + ^g -/= parity, per-session persistence, ceil-rounding fix found live, gate 151) — in critic review.
+- 2026-09-01: #32 critic PASS → pushed → PR #36 R awaiting approval. #34a
+  (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
+  #34b (scrollable stack list, UI) next — awaiting user choice (design-first
+  vs direct) but queued to claude.
+- 2026-09-01: #34b (scrollable stack list) DISPATCHED to claude (DIRECT per
+  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
+  defined carefully vs #25 wheel; hit-testing by list offset; scroll
+  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
+  working (#34a codex, #34b claude).

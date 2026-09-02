@@ -112,6 +112,130 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   keyboard nudge bindings as equivalence, no regression of wheel/drag/
   promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
   hint/help label should read "expand" while folded.
+- 2026-09-01: #34a done (codex; lifted cap, 8-PTY lifecycle, gate 119) — in
+  critic review.
+- 2026-09-01: #34a critic PASS → committed → pushed → PR (#34a), merge
+  before #34b. #34b still with claude.
+- 2026-09-01: #34b done (claude, `3a9175a`: scrolled window over preview
+  list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
+  follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
+  in critic review; branch base predates #36/#37, integration onto main after
+  review.
+- 2026-09-01: #34b review PASS but branch integration onto main CONFLICTED in
+  src/ui/testdata/help.txt (both #32 and #34b edits) — conflict resolution
+  routed to claude (same worker; left in conflicted state, not hand-fixed).
+  FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
+  should use the deck's count after the cap lift.
+- 2026-09-01: #34b integration done (claude; merge 307ca80, help.txt resolved
+  from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
+  close #34.
+- 2026-09-01: #38 merged (`001c64f`, gate 135) — #34 CLOSED (all projects at
+  once: cap lift + scrollable stack live). Release binary rebuilt +
+  reinstalled. Open tracker: only #33 (animations, parked).
+- 2026-09-01 (end of day): USER change — stack previews COLLAPSED BY DEFAULT,
+  expand via marker click (inverts #27/#32). Issue #39 opened; dispatched to
+  claude (coord/35-collapsed-default): default folded strips, markers show ▸
+  from frame one, ^g c = toggle-all/expand-all, deliberate snapshot
+  re-blessing per fixture (honesty enforced by the critic).
+- 2026-09-01 (end-of-day, saved for tonight): #39 (stack previews collapsed
+  by default) remains OPEN, ready-for-agent, fully specced on GitHub. claude
+  exhausted its session tokens mid-task (~91% then cut) — its partial work in
+  ~/.worktrees/termdeck/35-collapsed-default (M src/ui/state.rs only, no
+  commit) is intentionally NOT saved (user decision); do not touch it. Resume
+  tonight: claude session resets 20:10 (Europe/Malta) — reroute/redo #39 from
+  a clean fresh branch off main (the existing coord/35-collapsed-default
+  branch is stale with partial state; prefer a new branch), or ask the user.
+  Task brief lives at /tmp/shipwright/termdeck/35-collapsed-default/task.md.
+- 2026-09-02 (POST-REBOOT RESTORE): environment restored — tmux session
+  personal with coordinator/critic/codex/claude windows; relay restarted
+  detached (inbox live, self-test delivered); critic booted fresh (ready,
+  idle, boot ping landed); codex standby; #39 re-dispatched to claude on a
+  FRESH branch coord/39-collapsed-default (stale 35-collapsed-default left
+  untouched per user). /tmp was wiped by the reboot — task briefs recreated
+  from issue bodies/COORDINATION records.
+- 2026-09-02: WORKFLOW (user-driven): reuse LONG-LIVED worker sessions per
+  LANE (preserve context) — fresh sessions only on quota exhaustion or
+  sandbox-scoped worktrees (codex). Patched into the coordinator skill
+  (Phase 4, "reuse, don't relaunch"). Consequence: claude/critic keep one
+  session each; codex engine slices serialize in one worktree where possible.
+- 2026-09-02: USER — give codex permissions too (parity with claude): codex
+  now runs danger-full-access (safety = worker contract + critic + user
+  approval; supersedes the earlier no-full-access stance for worker parity).
+  Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
+  reusable across worktrees; tmux pings + crates.io work directly. No
+  sandbox exception remains in the reuse policy.
+- 2026-09-02: #39 done (claude, `d80183a`: previews start folded, ^g c
+  expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
+  critic review.
+- 2026-09-02: #39 critic PASS → pushed → PR opened. Awaiting user approval.
+- 2026-09-02: #41 S1 (mouse-first: draggable stack-width divider, keyboard
+  parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
+  off main). Brief: visible divider + drag => live split (bounds decision),
+  keyboard nudge bindings as equivalence, no regression of wheel/drag/
+  promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
+  hint/help label should read "expand" while folded.
+- 2026-09-02: correction for #41 S1's 3 non-blocking findings routed to
+  claude (same session, coord/41-mouse-ratio): drop dup resizing, wheel
+  releases the divider (doc+code aligned), cross-check test for
+  master-ratio constants. Working.
+
+Rotated history: `.coordinator/journal/` (latest archive: 2026-09, 56 events).
+The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
+  (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
+  #34b (scrollable stack list, UI) next — awaiting user choice (design-first
+  vs direct) but queued to claude.
+  user — no design mockups): coord/34b-scrollable-stack. Paging gesture to be
+  defined carefully vs #25 wheel; hit-testing by list offset; scroll
+  indicators; N>4 via synthetic fixtures until #34a merges. Both lanes
+  working (#34a codex, #34b claude).
+  critic review.
+  before #34b. #34b still with claude.
+  list; ^g pgup/pgdn + wheel-over-chrome paging; gutter + "N more"; hit-test
+  follows window; gate 129; screens 01-05 byte-identical, help.txt moved) —
+  in critic review; branch base predates #36/#37, integration onto main after
+  review.
+  src/ui/testdata/help.txt (both #32 and #34b edits) — conflict resolution
+  routed to claude (same worker; left in conflicted state, not hand-fixed).
+  FOLLOW-UP noted (claude's own idea): the "^g 1-4" hint labels hardcode 4 —
+  should use the deck's count after the cap lift.
+  from merged code, gate 135) — pushed → PR opened. Awaiting user approval to
+  close #34.
+  once: cap lift + scrollable stack live). Release binary rebuilt +
+  reinstalled. Open tracker: only #33 (animations, parked).
+  expand via marker click (inverts #27/#32). Issue #39 opened; dispatched to
+  claude (coord/35-collapsed-default): default folded strips, markers show ▸
+  from frame one, ^g c = toggle-all/expand-all, deliberate snapshot
+  re-blessing per fixture (honesty enforced by the critic).
+  by default) remains OPEN, ready-for-agent, fully specced on GitHub. claude
+  exhausted its session tokens mid-task (~91% then cut) — its partial work in
+  ~/.worktrees/termdeck/35-collapsed-default (M src/ui/state.rs only, no
+  commit) is intentionally NOT saved (user decision); do not touch it. Resume
+  tonight: claude session resets 20:10 (Europe/Malta) — reroute/redo #39 from
+  a clean fresh branch off main (the existing coord/35-collapsed-default
+  branch is stale with partial state; prefer a new branch), or ask the user.
+  Task brief lives at /tmp/shipwright/termdeck/35-collapsed-default/task.md.
+  personal with coordinator/critic/codex/claude windows; relay restarted
+  detached (inbox live, self-test delivered); critic booted fresh (ready,
+  idle, boot ping landed); codex standby; #39 re-dispatched to claude on a
+  FRESH branch coord/39-collapsed-default (stale 35-collapsed-default left
+  untouched per user). /tmp was wiped by the reboot — task briefs recreated
+  from issue bodies/COORDINATION records.
+  LANE (preserve context) — fresh sessions only on quota exhaustion or
+  sandbox-scoped worktrees (codex). Patched into the coordinator skill
+  (Phase 4, "reuse, don't relaunch"). Consequence: claude/critic keep one
+  session each; codex engine slices serialize in one worktree where possible.
+  now runs danger-full-access (safety = worker contract + critic + user
+  approval; supersedes the earlier no-full-access stance for worker parity).
+  Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
+  reusable across worktrees; tmux pings + crates.io work directly. No
+  sandbox exception remains in the reuse policy.
+  expand-all-first, 5 snapshots re-blessed stack-column-only, gate 138) — in
+  critic review.
+  parity) DISPATCHED to claude (SAME session — lane reuse; coord/41-mouse-ratio
+  off main). Brief: visible divider + drag => live split (bounds decision),
+  keyboard nudge bindings as equivalence, no regression of wheel/drag/
+  promote/markers, snapshot + tests. FOLLOW-UP noted (claude's own): collapse
+  hint/help label should read "expand" while folded.
 - 2026-09-01: #32 critic PASS → pushed → PR #36 R awaiting approval. #34a
   (lift 1-4 cap, config+engine) DISPATCHED to codex (coord/34a-lift-cap).
   #34b (scrollable stack list, UI) next — awaiting user choice (design-first
