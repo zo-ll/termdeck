@@ -93,3 +93,9 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   CODEX on a fresh clean branch (claude's uncommitted partial picker.rs
   discarded per precedent); claude window closed; usage monitor stopped.
   codex working (same session, absolute worktree path).
+- 2026-09-02: TMUX ACCIDENTALLY CLOSED — restored: coordinator/critic/codex
+  windows recreated in `personal`; relay survived (setsid) and reaches
+  personal:coordinator.0 again; /tmp survived (task assets, critic boot);
+  codex window resumed with --last (may be a fresh context — the uncommitted
+  M src/ui/picker.rs in the 49-range-toggle worktree is the real continuity;
+  continuation.md staged). USER checking resume manually before any nudge.
