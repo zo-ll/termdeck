@@ -59,7 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: #46 critic PASS → pushed coord/46-quit-modal → PR #47, awaiting user approval.
 - 2026-09-02: #42 PLANNING APPROVED — final spec on the issue (entry points:
   no-path folder browser / <folder> root+single-terminal / --config file;
   runtime add via '+' + ^g a from choice of roots; first selected = master;
@@ -79,6 +78,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #49 re-review PASS → pushed coord/49-picker → PR #54. 1 new non-blocking: overlapping roots duplicate filter matches (cwd ⊂ HOME) — recorded; offer optional tiny fix. A3 unblocks after merge.
 - 2026-09-02: #49 dedupe + rule-row re-review PASS (`e257242`, 186) — pushed, PR #54 ready for user merge approval; A3 next.
 - 2026-09-02: #54 merged (`857babe`, 186 tests); #49 closed; binary rebuilt (picker live).
+- 2026-09-02: USER: picker nav must be SIMPLE — Enter selects the path, right arrow descends (repos incl.), left arrow up. Correction-49c routed to claude (note §7 + impl + tests).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
