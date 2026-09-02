@@ -13,6 +13,7 @@ use crate::contracts::{Project, TerminalId};
 
 const MIN_MASTER_RATIO: f64 = 0.55;
 const MAX_MASTER_RATIO: f64 = 0.85;
+const DEFAULT_SCROLLBACK: usize = 10_000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
@@ -26,6 +27,26 @@ pub struct Workspace {
     pub projects: Vec<Project>,
     pub scrollback: usize,
     pub master_ratio: MasterRatio,
+}
+
+impl Workspace {
+    /// Builds the same runtime shape as configuration loading for a workspace
+    /// discovered from a folder.
+    pub fn discovered(root: PathBuf, projects: Vec<Project>) -> Self {
+        let name = root
+            .file_name()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(root.as_os_str())
+            .to_string_lossy()
+            .into_owned();
+        Self {
+            name,
+            root,
+            projects,
+            scrollback: default_scrollback(),
+            master_ratio: MasterRatio(default_master_ratio()),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -95,7 +116,7 @@ struct RawProject {
 }
 
 const fn default_scrollback() -> usize {
-    10_000
+    DEFAULT_SCROLLBACK
 }
 
 /// The top of the accepted range: a workspace that says nothing about the

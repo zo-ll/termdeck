@@ -3,11 +3,14 @@
 use std::{
     env,
     error::Error,
-    fmt,
+    fmt, fs,
     path::{Path, PathBuf},
 };
 
-use crate::config::{Config, Workspace, load};
+use crate::{
+    config::{Config, Workspace, load},
+    contracts::{Project, TerminalId},
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CliEnvironment {
@@ -27,6 +30,8 @@ impl CliEnvironment {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CliCommand {
     Launch { workspace: Option<String> },
+    Folder { root: PathBuf },
+    Picker,
     Check,
     List,
 }
@@ -35,7 +40,7 @@ pub enum CliCommand {
 /// layer provides the UI; this module never creates a placeholder interface.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CliIntent {
-    pub config_path: PathBuf,
+    pub config_path: Option<PathBuf>,
     pub command: CliCommand,
 }
 
@@ -84,18 +89,31 @@ pub fn parse_with_environment(
         }
     }
 
-    let config_path = match config_path {
-        Some(path) => path,
-        None => default_config_path(&environment)?,
-    };
     let command = match remaining.as_slice() {
-        [] => CliCommand::Launch { workspace: None },
+        [] if config_path.is_some() => CliCommand::Launch { workspace: None },
+        [] => CliCommand::Picker,
         [command] if command == "check" => CliCommand::Check,
         [command] if command == "list" => CliCommand::List,
-        [workspace] => CliCommand::Launch {
+        [workspace] if config_path.is_some() => CliCommand::Launch {
             workspace: Some(workspace.clone()),
         },
+        [path] if config_path.is_none() && Path::new(path).is_file() => {
+            config_path = Some(PathBuf::from(path));
+            CliCommand::Launch { workspace: None }
+        }
+        [path] if config_path.is_none() && Path::new(path).is_dir() => CliCommand::Folder {
+            root: PathBuf::from(path),
+        },
         _ => return Err(CliError::new(usage())),
+    };
+    let config_path = match &command {
+        CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
+            Some(match config_path {
+                Some(path) => path,
+                None => default_config_path(&environment)?,
+            })
+        }
+        CliCommand::Folder { .. } | CliCommand::Picker => None,
     };
     Ok(CliIntent {
         config_path,
@@ -120,13 +138,93 @@ fn default_config_path(environment: &CliEnvironment) -> Result<PathBuf, CliError
 }
 
 const fn usage() -> &'static str {
-    "usage: termdeck [--config PATH] [WORKSPACE|check|list]"
+    "usage: termdeck [FOLDER|CONFIG_FILE|--config PATH|check|list]"
 }
 
 pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>, Box<dyn Error>> {
     let intent = parse(arguments)?;
-    let config = load(&intent.config_path)?;
-    Ok(inspect(&intent, &config)?)
+    match intent.command {
+        CliCommand::Folder { .. } => Ok(None),
+        CliCommand::Picker => Err(CliError::new("folder picker pending A2").into()),
+        CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
+            let config_path = intent.config_path.as_deref().expect("config command");
+            let config = load(config_path)?;
+            Ok(inspect(&intent, &config)?)
+        }
+    }
+}
+
+/// Finds direct repositories and repositories in the conventional component
+/// folders. The returned projects can be passed directly to `Workspace`.
+pub fn discover(root: &Path) -> Result<Vec<Project>, CliError> {
+    let mut projects = Vec::new();
+    for (folder, prefix) in [("frontends", "fe"), ("backends", "be"), ("apps", "app")] {
+        let group = root.join(folder);
+        if group.is_dir() {
+            projects.extend(repositories(&group, prefix)?);
+        }
+    }
+    projects.extend(repositories(root, "")?);
+    Ok(projects)
+}
+
+/// Resolves a folder launch to the frozen runtime workspace shape. A folder
+/// without discovered child repositories is always one terminal of its own.
+pub fn discover_workspace(root: impl Into<PathBuf>) -> Result<Workspace, CliError> {
+    let root = root.into();
+    if !root.is_dir() {
+        return Err(CliError::new(format!(
+            "{}: not a directory",
+            root.display()
+        )));
+    }
+    let projects = if is_repository(&root) {
+        Vec::new()
+    } else {
+        discover(&root)?
+    };
+    let projects = if projects.is_empty() {
+        vec![project(&root, "")]
+    } else {
+        projects
+    };
+    Ok(Workspace::discovered(root, projects))
+}
+
+fn repositories(root: &Path, prefix: &str) -> Result<Vec<Project>, CliError> {
+    let mut entries = fs::read_dir(root)
+        .map_err(|error| CliError::new(format!("cannot read {}: {error}", root.display())))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| CliError::new(format!("cannot read {}: {error}", root.display())))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    Ok(entries
+        .into_iter()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir() && is_repository(path))
+        .map(|path| project(&path, prefix))
+        .collect())
+}
+
+fn is_repository(path: &Path) -> bool {
+    path.join(".git").is_dir() || path.join(".git").is_file()
+}
+
+fn project(path: &Path, prefix: &str) -> Project {
+    let name = path
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy();
+    let name = if prefix.is_empty() {
+        name.into_owned()
+    } else {
+        format!("{prefix}-{name}")
+    };
+    Project {
+        terminal: TerminalId::new(name),
+        path: path.to_path_buf(),
+        command: vec!["bash".to_owned(), "-l".to_owned()],
+    }
 }
 
 /// Returns the configured workspace that an interactive session will open.
@@ -165,14 +263,15 @@ pub fn select_workspace(
 
 /// Formats the non-interactive commands and validates a launch selection.
 pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, CliError> {
+    let config_path = intent.config_path.as_deref().expect("config command");
     match &intent.command {
         CliCommand::Launch { workspace } => {
-            select_workspace(config, &intent.config_path, workspace.as_deref())?;
+            select_workspace(config, config_path, workspace.as_deref())?;
             Ok(None)
         }
         CliCommand::Check => Ok(Some(format!(
             "{}: configuration valid ({} workspace{})",
-            intent.config_path.display(),
+            config_path.display(),
             config.workspaces.len(),
             if config.workspaces.len() == 1 {
                 ""
@@ -198,6 +297,7 @@ pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, Cl
                 .collect::<Vec<_>>()
                 .join("\n"),
         )),
+        CliCommand::Folder { .. } | CliCommand::Picker => unreachable!("not a config command"),
     }
 }
 
@@ -209,7 +309,9 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{CliCommand, CliEnvironment, parse_with_environment, run};
+    use super::{
+        CliCommand, CliEnvironment, discover, discover_workspace, parse_with_environment, run,
+    };
 
     fn environment() -> CliEnvironment {
         CliEnvironment {
@@ -236,6 +338,18 @@ mod tests {
         )
         .unwrap();
         config
+    }
+
+    fn test_root() -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("termdeck-discover-{}-{nanos}", std::process::id()))
+    }
+
+    fn repository(path: &Path) {
+        fs::create_dir_all(path.join(".git")).unwrap();
     }
 
     fn arguments(config: &Path, command: &str) -> [String; 3] {
@@ -270,24 +384,24 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(intent.config_path, PathBuf::from("chosen.yaml"));
+        assert_eq!(intent.config_path, Some(PathBuf::from("chosen.yaml")));
         assert_eq!(intent.command, CliCommand::Check);
     }
 
     #[test]
     fn xdg_path_wins_over_home() {
-        let intent = parse_with_environment(std::iter::empty(), environment()).unwrap();
+        let intent = parse_with_environment(["check".to_owned()], environment()).unwrap();
 
         assert_eq!(
             intent.config_path,
-            PathBuf::from("/xdg/termdeck/config.yaml")
+            Some(PathBuf::from("/xdg/termdeck/config.yaml"))
         );
     }
 
     #[test]
     fn home_path_is_used_without_xdg() {
         let intent = parse_with_environment(
-            std::iter::empty(),
+            ["check".to_owned()],
             CliEnvironment {
                 xdg_config_home: None,
                 home: Some(PathBuf::from("/home/test")),
@@ -297,13 +411,17 @@ mod tests {
 
         assert_eq!(
             intent.config_path,
-            PathBuf::from("/home/test/.config/termdeck/config.yaml")
+            Some(PathBuf::from("/home/test/.config/termdeck/config.yaml"))
         );
     }
 
     #[test]
-    fn workspace_selection_is_a_launch_intent() {
-        let intent = parse_with_environment(["idp".to_owned()], environment()).unwrap();
+    fn configured_workspace_selection_is_a_launch_intent() {
+        let intent = parse_with_environment(
+            ["--config", "termdeck.yaml", "idp"].map(str::to_owned),
+            environment(),
+        )
+        .unwrap();
 
         assert_eq!(
             intent.command,
@@ -346,5 +464,84 @@ mod tests {
                 .contains("workspace 'unknown' is not configured")
         );
         fs::remove_dir_all(config.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_folder_and_a_file_resolve_to_different_entry_points() {
+        let root = test_root();
+        fs::create_dir_all(&root).unwrap();
+        let config = root.join("termdeck.yaml");
+        fs::write(&config, "version: 1").unwrap();
+
+        let folder = parse_with_environment([root.display().to_string()], environment()).unwrap();
+        assert_eq!(folder.config_path, None);
+        assert_eq!(folder.command, CliCommand::Folder { root: root.clone() });
+
+        let file = parse_with_environment([config.display().to_string()], environment()).unwrap();
+        assert_eq!(file.config_path, Some(config));
+        assert_eq!(file.command, CliCommand::Launch { workspace: None });
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn no_path_is_the_picker_entry_point() {
+        let intent = parse_with_environment(std::iter::empty(), environment()).unwrap();
+
+        assert_eq!(intent.config_path, None);
+        assert_eq!(intent.command, CliCommand::Picker);
+    }
+
+    #[test]
+    fn a_non_repository_folder_becomes_one_terminal() {
+        let root = test_root();
+        fs::create_dir_all(&root).unwrap();
+
+        let workspace = discover_workspace(root.clone()).unwrap();
+
+        assert_eq!(workspace.projects.len(), 1);
+        assert_eq!(workspace.projects[0].path, root);
+        assert_eq!(workspace.projects[0].command, ["bash", "-l"]);
+        fs::remove_dir_all(workspace.root).unwrap();
+    }
+
+    #[test]
+    fn a_repository_folder_stays_one_terminal_even_with_child_repositories() {
+        let root = test_root();
+        repository(&root);
+        repository(&root.join("child"));
+
+        let workspace = discover_workspace(root.clone()).unwrap();
+
+        assert_eq!(workspace.projects.len(), 1);
+        assert_eq!(workspace.projects[0].path, root);
+        fs::remove_dir_all(workspace.root).unwrap();
+    }
+
+    #[test]
+    fn discovery_classifies_conventional_repositories() {
+        let root = test_root();
+        repository(&root.join("frontends/shop"));
+        repository(&root.join("frontends/admin"));
+        repository(&root.join("backends/api"));
+        repository(&root.join("apps/mobile"));
+        repository(&root.join("worker"));
+        fs::create_dir_all(root.join("notes")).unwrap();
+
+        let projects = discover(&root).unwrap();
+        let names = projects
+            .iter()
+            .map(|project| project.terminal.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            ["fe-admin", "fe-shop", "be-api", "app-mobile", "worker"]
+        );
+        assert!(
+            projects
+                .iter()
+                .all(|project| project.command == ["bash", "-l"])
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }
