@@ -279,6 +279,22 @@ mod tests {
         config
     }
 
+    /// The interface offers the split as a live gesture (#41), within its own
+    /// copy of this range — the architecture boundary keeps `src/config` out
+    /// of `src/ui`, so the two constants are duplicated rather than shared.
+    /// Nothing else notices if one side moves, so this does: a drag or a
+    /// nudge must never reach a split this file would reject, and the default
+    /// a deck starts at must be the default this file hands it.
+    #[test]
+    fn the_interfaces_split_range_is_the_one_this_file_validates() {
+        assert_eq!(super::MIN_MASTER_RATIO, crate::ui::MIN_MASTER_RATIO);
+        assert_eq!(super::MAX_MASTER_RATIO, crate::ui::MAX_MASTER_RATIO);
+        assert_eq!(
+            super::default_master_ratio(),
+            crate::ui::DEFAULT_MASTER_RATIO
+        );
+    }
+
     #[test]
     fn resolves_paths_and_omits_missing_optional_projects() {
         let root = test_root();

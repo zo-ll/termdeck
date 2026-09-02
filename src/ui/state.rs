@@ -10,6 +10,24 @@ use crate::contracts::{ActionCommand, Elapsed, Project, Timestamp};
 /// "holds ... for ~1.5s, then settles".
 const DEMOTION_WINDOW: Elapsed = Elapsed { millis: 1_500 };
 
+/// The narrowest and widest share of the width the master pane may take.
+///
+/// This is deliberately the same range `defaults.master_ratio` accepts in the
+/// configuration, so a split reached by dragging or nudging is always a value
+/// the configuration file would also accept and the validator needs no
+/// widening. The configuration owns its own copy, because the architecture
+/// boundary keeps `src/config` out of the interface; the two copies are held
+/// equal by `config::tests::the_interfaces_split_range_is_the_one_this_file_validates`,
+/// which fails if either side moves.
+pub const MIN_MASTER_RATIO: f64 = 0.55;
+pub const MAX_MASTER_RATIO: f64 = 0.85;
+/// One press of `^g -` / `^g =`. Six steps span the range end to end, and the
+/// grid it lands on is the configuration's own two decimals.
+pub const MASTER_RATIO_STEP: f64 = 0.05;
+/// The split a deck starts at until the configuration says otherwise, and the
+/// configuration's own default.
+pub const DEFAULT_MASTER_RATIO: f64 = 0.70;
+
 /// An overlay that takes focus from the deck. Only one can be open, and it
 /// captures every key until it closes: focus stays singular, so the modal
 /// takes the accent border and the master gives its own up.
@@ -36,7 +54,14 @@ pub enum Modal {
 /// column draws. The list can hold more previews than the column has rows, so
 /// the column is a window onto it; the renderer clamps this to whatever the
 /// current geometry can reach, and nothing here needs to know the geometry.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// `master_ratio` is the share of the width the master pane takes. The
+/// configuration seeds it and the divider moves it — by drag or by `^g -` /
+/// `^g =`, which are the same adjustment reached two ways. It lives here
+/// rather than in the renderer because it is state a gesture changes, and it
+/// lives only here: the session holds it for as long as it runs and writes
+/// nothing back to the configuration file.
+#[derive(Clone, Debug, PartialEq)]
 pub struct DeckState {
     order: Vec<usize>,
     collapsed: Vec<bool>,
@@ -46,6 +71,8 @@ pub struct DeckState {
     demotion: Option<(usize, Timestamp)>,
     drag: Option<(usize, Option<usize>)>,
     stack_offset: usize,
+    master_ratio: f64,
+    resizing: bool,
 }
 
 impl DeckState {
@@ -72,7 +99,60 @@ impl DeckState {
             demotion: None,
             drag: None,
             stack_offset: 0,
+            master_ratio: DEFAULT_MASTER_RATIO,
+            resizing: false,
         }
+    }
+
+    /// Seeds the split from the configuration. Out-of-range values are
+    /// clamped rather than refused: the configuration has its own validator,
+    /// and the interface will not draw a split it cannot also reach.
+    #[must_use]
+    pub fn with_master_ratio(mut self, ratio: f64) -> Self {
+        self.set_master_ratio(ratio);
+        self
+    }
+
+    /// The share of the width the master pane takes.
+    pub fn master_ratio(&self) -> f64 {
+        self.master_ratio
+    }
+
+    /// Moves the split, clamped to [`MIN_MASTER_RATIO`]..=[`MAX_MASTER_RATIO`].
+    /// Returns whether it moved. This is what the divider drag calls, once per
+    /// pointer move.
+    pub fn set_master_ratio(&mut self, ratio: f64) -> bool {
+        let ratio = if ratio.is_finite() {
+            ratio.clamp(MIN_MASTER_RATIO, MAX_MASTER_RATIO)
+        } else {
+            return false;
+        };
+        let moved = (ratio - self.master_ratio).abs() > f64::EPSILON;
+        self.master_ratio = ratio;
+        moved
+    }
+
+    /// Steps the split by whole [`MASTER_RATIO_STEP`]s: the keyboard half of
+    /// the divider, and the same adjustment the drag makes.
+    ///
+    /// The step lands on the grid rather than adding to whatever the drag
+    /// left behind, so the keys always reach the same six splits however the
+    /// pointer got there.
+    pub fn nudge_master_ratio(&mut self, steps: i32) -> bool {
+        let grid = ((self.master_ratio / MASTER_RATIO_STEP).round() + f64::from(steps))
+            * MASTER_RATIO_STEP;
+        self.set_master_ratio((grid * 100.0).round() / 100.0)
+    }
+
+    /// Whether the divider is being dragged, so it can say so while it moves.
+    pub fn resizing(&self) -> bool {
+        self.resizing
+    }
+
+    /// Holds and releases the divider. The pointer press and release bracket
+    /// the drag; the ratio itself is set by the moves in between.
+    pub fn set_resizing(&mut self, resizing: bool) {
+        self.resizing = resizing;
     }
 
     /// Configured position of the terminal holding the master pane.
@@ -562,6 +642,90 @@ mod tests {
             3,
             "the refused toggles left the stack as it started"
         );
+    }
+
+    /// #41: the split is state a gesture moves, and both gestures land it in
+    /// the same place. The keys step the grid; the drag sets a value outright.
+    #[test]
+    fn the_split_steps_by_whole_notches_and_stops_at_the_range_ends() {
+        let mut state = DeckState::new(4);
+        assert_eq!(state.master_ratio(), 0.70, "the configuration's default");
+
+        assert!(state.nudge_master_ratio(1));
+        assert_eq!(state.master_ratio(), 0.75);
+        assert!(state.nudge_master_ratio(-2));
+        assert_eq!(state.master_ratio(), 0.65);
+
+        // Three more steps reach the end of the range and stop there.
+        for _ in 0..3 {
+            state.nudge_master_ratio(-1);
+        }
+        assert_eq!(state.master_ratio(), super::MIN_MASTER_RATIO);
+        assert!(
+            !state.nudge_master_ratio(-1),
+            "the end of the range reports no movement"
+        );
+        assert_eq!(state.master_ratio(), super::MIN_MASTER_RATIO);
+
+        for _ in 0..99 {
+            state.nudge_master_ratio(1);
+        }
+        assert_eq!(state.master_ratio(), super::MAX_MASTER_RATIO);
+    }
+
+    /// A drag lands wherever the pointer is, so the next keypress snaps back
+    /// to the grid rather than carrying the remainder along for ever.
+    #[test]
+    fn a_dragged_split_is_clamped_and_the_keys_return_it_to_the_grid() {
+        let mut state = DeckState::new(4);
+
+        assert!(state.set_master_ratio(0.6944));
+        assert_eq!(state.master_ratio(), 0.6944);
+        assert!(state.nudge_master_ratio(1));
+        assert_eq!(state.master_ratio(), 0.75, "0.6944 rounds to 0.70, then up");
+
+        // The range is the configuration's, so neither gesture can leave it.
+        assert!(state.set_master_ratio(0.99));
+        assert_eq!(state.master_ratio(), super::MAX_MASTER_RATIO);
+        assert!(state.set_master_ratio(0.10));
+        assert_eq!(state.master_ratio(), super::MIN_MASTER_RATIO);
+        assert!(!state.set_master_ratio(f64::NAN), "a bad value is refused");
+        assert_eq!(state.master_ratio(), super::MIN_MASTER_RATIO);
+    }
+
+    /// The configuration seeds the split, within the same range.
+    #[test]
+    fn the_configured_split_seeds_the_deck() {
+        assert_eq!(
+            DeckState::new(4).with_master_ratio(0.60).master_ratio(),
+            0.60
+        );
+        assert_eq!(
+            DeckState::new(4).with_master_ratio(0.95).master_ratio(),
+            super::MAX_MASTER_RATIO,
+            "clamped, because the interface will not draw what it cannot reach"
+        );
+    }
+
+    /// Holding the divider is a mode of its own: it says so while it lasts,
+    /// and it leaves the rest of the deck alone.
+    #[test]
+    fn holding_the_divider_states_itself_and_disturbs_nothing_else() {
+        let mut state = DeckState::new(4);
+        assert!(!state.resizing());
+
+        state.set_resizing(true);
+        assert!(state.resizing());
+        state.set_master_ratio(0.60);
+
+        assert_eq!(state.active(), Some(0));
+        assert_eq!(state.stack(), [1, 2, 3]);
+        assert_eq!(state.collapsed_count(), 3);
+        assert!(!state.zoomed());
+
+        state.set_resizing(false);
+        assert!(!state.resizing());
+        assert_eq!(state.master_ratio(), 0.60, "the split it left behind");
     }
 
     #[test]

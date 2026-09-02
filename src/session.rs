@@ -45,7 +45,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut engine = NativeEngine::spawn(&workspace.projects, size)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
-    let mut deck = DeckState::new(workspace.projects.len());
+    // The configuration seeds the split; the divider owns it from there.
+    let mut deck =
+        DeckState::new(workspace.projects.len()).with_master_ratio(workspace.master_ratio.get());
     let mut input = Input::new(size.rows.saturating_sub(4));
     let mut keys = KeyReader::default();
     let mut last_click = None;
@@ -79,6 +81,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    deck.set_resizing(false);
                     let was_scrollback = deck.scrollback();
                     let reaction = input.press(key, &mut deck, &workspace.projects, now());
                     if was_scrollback
@@ -125,7 +128,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     projects: &workspace.projects,
                                     state: &deck,
                                     home: None,
-                                    master_ratio: workspace.master_ratio.get(),
+                                    master_ratio: deck.master_ratio(),
                                     now: now(),
                                 }
                                 .stack_window(
@@ -148,6 +151,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    deck.set_resizing(false);
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
                         let (terminal, list) = {
@@ -156,7 +160,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 projects: &workspace.projects,
                                 state: &deck,
                                 home: None,
-                                master_ratio: workspace.master_ratio.get(),
+                                master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
                             let pointed = pane.position_at(area, pointer);
@@ -186,17 +190,19 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 InputEvent::Mouse { pointer, action } => {
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
-                        let (marker, position) = {
+                        let (marker, divider, split, position) = {
                             let pane = Deck {
                                 workspace: &workspace.name,
                                 projects: &workspace.projects,
                                 state: &deck,
                                 home: None,
-                                master_ratio: workspace.master_ratio.get(),
+                                master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
                             (
                                 pane.marker_at(area, pointer),
+                                pane.divider_at(area, pointer),
+                                pane.ratio_at(area, pointer.x),
                                 match action {
                                     MouseAction::Down => pane.swap_position_at(area, pointer),
                                     MouseAction::Move | MouseAction::Up => {
@@ -205,6 +211,22 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 },
                             )
                         };
+                        // The divider is in the gutter, which belongs to no
+                        // pane, so holding it can never be a pane drag. Once
+                        // held it keeps the pointer until release, wherever
+                        // the pointer travels.
+                        if divider && action == MouseAction::Down || deck.resizing() {
+                            deck.cancel_drag();
+                            last_click = None;
+                            marker_press = None;
+                            deck.set_resizing(action != MouseAction::Up);
+                            if action != MouseAction::Down
+                                && let Some(split) = split
+                            {
+                                deck.set_master_ratio(split);
+                            }
+                            continue;
+                        }
                         // The disclosure marker owns its two cells: pressing
                         // there starts no drag and arms no promotion, and the
                         // release folds or unfolds that preview.
@@ -240,6 +262,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    deck.set_resizing(false);
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()
                         && !deck.scrollback()
@@ -262,7 +285,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     home: std::env::var_os("HOME")
                         .as_deref()
                         .map(std::path::Path::new),
-                    master_ratio: workspace.master_ratio.get(),
+                    master_ratio: deck.master_ratio(),
                     now: now(),
                 }
                 .render(&engine, frame);

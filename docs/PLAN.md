@@ -43,7 +43,10 @@ It must not expose Ratatui, Alacritty, or PTY types.
 - Below a usable preview width, use master-only mode with a compact terminal
   status line.
 - Support one or more configured terminals. The first starts as master.
-- `master_ratio` defaults to `0.70` and accepts `0.55..=0.85`.
+- `master_ratio` defaults to `0.70` and accepts `0.55..=0.85`. It seeds the
+  split; the divider between the master and the stack moves it for the session,
+  by drag or by `Ctrl+g -` / `Ctrl+g =`, within the same range. Nothing is
+  written back to the configuration file (#41).
 
 Bindings:
 
@@ -51,6 +54,7 @@ Bindings:
 Ctrl+g j/k or arrows   Select and promote terminal
 Ctrl+g 1..4            Promote by configured position
 Ctrl+g z               Toggle zoom
+Ctrl+g -  Ctrl+g =     Narrow / widen the master (the divider, by keyboard)
 Ctrl+g [               Enter scrollback mode
 Ctrl+g r               Respawn active terminal
 Ctrl+g ?               Help

@@ -27,7 +27,7 @@ use ratatui::{
 };
 
 pub use input::{Input, Key, Reaction};
-pub use state::{DeckState, Modal};
+pub use state::{DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal};
 
 use crate::contracts::{
     CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, TerminalEngine, TerminalFrame,
@@ -91,8 +91,9 @@ const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 /// Cells in the activity meter.
 const METER_CELLS: u64 = 6;
 /// Help overlay size: the supplement's 60 columns by 21 rows, one row taller
-/// for the collapse binding and one more for the stack-paging keys.
-const HELP_SIZE: (u16, u16) = (60, 23);
+/// for the collapse binding, one more for the stack-paging keys and one more
+/// for the split divider's keys.
+const HELP_SIZE: (u16, u16) = (60, 24);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// Column the help overlay's descriptions start at.
@@ -275,6 +276,9 @@ impl Deck<'_> {
                     },
                     preview,
                 ));
+                if adjustable(body) {
+                    self.divider(frame.buffer_mut(), body, master.x + master.width);
+                }
                 panes
             }
             Layout::Zoom => {
@@ -456,6 +460,47 @@ impl Deck<'_> {
                 )
                 .iter()
                 .any(|slot| slot.rect.contains(pointer))
+    }
+
+    /// The column the split divider is drawn in, while the split can move.
+    ///
+    /// It is the gutter column beside the master, so the divider takes no
+    /// columns from either pane and leaves the column beside the stack to the
+    /// scroll track (#34b). Below [`WIDE_COLUMNS`] the export fixes the stack
+    /// width, so there is nothing to move and there is no divider.
+    fn divider_of(&self, area: Rect) -> Option<(Rect, u16)> {
+        if area.width < GUTTER + 4 || area.height < 4 {
+            return None;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let Layout::Stacked { stack, .. } = self.layout(body) else {
+            return None;
+        };
+        adjustable(body).then(|| (body, body.x + body.width - GUTTER - stack))
+    }
+
+    /// Whether `pointer` is on the divider, and so starts a resize rather than
+    /// a pane drag. The divider sits in the gutter, which belongs to no pane,
+    /// so the two gestures never contend for the same cell.
+    pub fn divider_at(&self, area: Rect, pointer: Position) -> bool {
+        self.divider_of(area)
+            .is_some_and(|(body, column)| pointer.x == column && body.contains(pointer))
+    }
+
+    /// The split that puts the divider under `column`: the inverse of the
+    /// layout, so dragging to a column and releasing leaves the divider under
+    /// the pointer.
+    ///
+    /// The master keeps every column left of the divider, the gutter takes
+    /// the next two and the stack takes the rest, so the master's share is
+    /// `column + GUTTER`. The caller clamps it — [`DeckState`] owns the range.
+    pub fn ratio_at(&self, area: Rect, column: u16) -> Option<f64> {
+        let (body, _) = self.divider_of(area)?;
+        let master = column.saturating_sub(body.x).min(body.width);
+        Some(f64::from(master + GUTTER) / f64::from(body.width))
     }
 
     /// A draggable pane must have a visible master-and-stack counterpart.
@@ -675,6 +720,33 @@ impl Deck<'_> {
             area.width - 1,
         );
         drawn
+    }
+
+    /// The draggable divider between the master and the stack.
+    ///
+    /// A `│` in the separator colour for its whole height, with a three-cell
+    /// grip at the middle in the hint colour: the affordance says both where
+    /// the split is and that it can be taken hold of. While it is held the
+    /// whole divider takes the accent, so the drag states itself the way a
+    /// pane drag does.
+    fn divider(&self, buffer: &mut Buffer, body: Rect, column: u16) {
+        let middle = body.y + body.height / 2;
+        let grip = middle.saturating_sub(1)..=middle + 1;
+        for row in body.y..body.y + body.height {
+            let Some(cell) = buffer.cell_mut((column, row)) else {
+                continue;
+            };
+            let held = grip.contains(&row);
+            cell.set_symbol(if held { "┃" } else { "│" }).set_style(
+                Style::new()
+                    .fg(match (self.state.resizing(), held) {
+                        (true, _) => ACCENT,
+                        (false, true) => HINT,
+                        (false, false) => SEPARATOR,
+                    })
+                    .bg(CANVAS),
+            );
+        }
     }
 
     /// A one-column track in the gutter beside the stack, drawn only while the
@@ -1729,7 +1801,7 @@ fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-const HELP: [(&str, &str); 15] = [
+const HELP: [(&str, &str); 16] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
@@ -1738,6 +1810,7 @@ const HELP: [(&str, &str); 15] = [
     ("^g z", "toggle zoom"),
     ("^g c", "collapse / expand previews"),
     ("^g pgup/pgdn", "page the preview stack"),
+    ("^g -  ^g =", "narrow / widen the master"),
     ("^g [", "enter scrollback mode"),
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
@@ -1766,6 +1839,13 @@ const KEY_HINTS: [(&str, &str); 6] = [
     ("^g q", "quit"),
 ];
 
+/// Whether the split can move at this width. Below [`WIDE_COLUMNS`] the export
+/// fixes the stack at [`COMPACT_STACK`], so the ratio has nothing to say and
+/// the divider is neither drawn nor draggable.
+fn adjustable(body: Rect) -> bool {
+    body.width >= WIDE_COLUMNS
+}
+
 /// At or above [`WIDE_COLUMNS`] the stack takes the ceiling of the non-master
 /// share so the master never overruns: at 144 columns with the default 0.70
 /// this is the design's 44. Below that the export fixes it instead.
@@ -1773,7 +1853,12 @@ fn stack_width(width: u16, master_ratio: f64) -> u16 {
     if width < WIDE_COLUMNS {
         return COMPACT_STACK;
     }
-    let stack = (f64::from(width) * (1.0 - master_ratio)).ceil() as u16;
+    // The ceiling, but not fooled by a share that is a hair above a whole
+    // column: the divider hands back the exact ratio for the column the
+    // pointer is on, and without this the last bit of that division would
+    // sometimes round the split one column past where it was dropped.
+    let share = f64::from(width) * (1.0 - master_ratio) - 1e-9;
+    let stack = share.ceil().max(0.0) as u16;
     stack.clamp(1, width.saturating_sub(GUTTER + 1))
 }
 
@@ -1973,7 +2058,7 @@ mod tests {
 
     use super::{
         ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, HINT, IDLE_BORDER,
-        STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
+        SEPARATOR, STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
     };
     use crate::{
         contracts::{ActionCommand, Project, TerminalEngine, TerminalId, TerminalStatus},
@@ -1992,7 +2077,7 @@ mod tests {
             projects: &projects,
             state,
             home: Some(fixture::home()),
-            master_ratio: 0.70,
+            master_ratio: state.master_ratio(),
             now: fixture::NOW,
         };
         let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
@@ -2013,12 +2098,13 @@ mod tests {
     #[test]
     fn pane_hit_testing_follows_the_rendered_layout() {
         let projects = fixture::projects();
+        let state = &expanded(4);
         let deck = Deck {
             workspace: "idp",
             projects: &projects,
-            state: &expanded(4),
+            state,
             home: Some(fixture::home()),
-            master_ratio: 0.70,
+            master_ratio: state.master_ratio(),
             now: fixture::NOW,
         };
         let area = Rect::new(0, 0, 144, 42);
@@ -2301,7 +2387,7 @@ mod tests {
             projects: &projects,
             state: &state,
             home: Some(fixture::home()),
-            master_ratio: 0.70,
+            master_ratio: state.master_ratio(),
             now: fixture::NOW,
         };
         let area = Rect::new(0, 0, 144, 42);
@@ -2320,7 +2406,7 @@ mod tests {
             projects,
             state,
             home: Some(fixture::home()),
-            master_ratio: 0.70,
+            master_ratio: state.master_ratio(),
             now: fixture::NOW,
         }
     }
@@ -2442,6 +2528,183 @@ mod tests {
             deck_for(&projects, &folded).marker_at(Rect::new(0, 0, 84, 24), Position::new(3, 0)),
             None
         );
+    }
+
+    /// The split at a given ratio, as the column the divider is drawn in.
+    fn split(ratio: f64) -> DeckState {
+        DeckState::new(4).with_master_ratio(ratio)
+    }
+
+    /// The column the divider's grip is drawn in, found by the grip rather
+    /// than by the line so a pane border is never mistaken for it. (The
+    /// scroll track's thumb is the same glyph, but the reference deck's list
+    /// always fits, so it never draws one.)
+    fn divider_column(buffer: &Buffer) -> Option<u16> {
+        (0..buffer.area().width).find(|column| {
+            let cell = &buffer[(*column, 20u16)];
+            cell.symbol() == "┃" && matches!(cell.fg, HINT | ACCENT)
+        })
+    }
+
+    /// Issue #41: the split has to be visible before it can be draggable. The
+    /// divider takes the gutter column beside the master, so it costs neither
+    /// pane a column, and it carries a grip at its middle.
+    #[test]
+    fn the_divider_is_drawn_in_the_gutter_with_a_grip_to_take_hold_of() {
+        let (buffer, _) = reference();
+
+        // The master's own border still ends at 97 and the stack's begins at
+        // 100: the divider took the gutter, not a column of either pane.
+        assert_eq!(buffer[(97u16, 0u16)].symbol(), "┐");
+        assert_eq!(buffer[(100u16, 0u16)].symbol(), " ", "the folded stack");
+        for row in [0u16, 10, 39] {
+            assert_eq!(buffer[(98u16, row)].symbol(), "│", "row {row}");
+            assert_eq!(buffer[(98u16, row)].fg, SEPARATOR);
+        }
+        // Three cells at the middle of the body say it can be taken hold of.
+        for row in 19..=21u16 {
+            assert_eq!(buffer[(98u16, row)].symbol(), "┃", "row {row}");
+            assert_eq!(buffer[(98u16, row)].fg, HINT);
+        }
+        // It stops at the body: the blank row and the status row are not it.
+        assert_ne!(buffer[(98u16, 40u16)].symbol(), "│");
+    }
+
+    /// The gutter belongs to no pane, so holding the divider can never be a
+    /// pane drag, a promotion or a marker click.
+    #[test]
+    fn the_divider_column_is_the_divider_and_nothing_else() {
+        let projects = fixture::projects();
+        let state = DeckState::new(4);
+        let view = deck_for(&projects, &state);
+
+        assert!(view.divider_at(SCREEN, Position::new(98, 20)));
+        assert!(view.divider_at(SCREEN, Position::new(98, 0)));
+        assert_eq!(view.position_at(SCREEN, Position::new(98, 20)), None);
+        assert_eq!(view.swap_position_at(SCREEN, Position::new(98, 20)), None);
+        assert_eq!(view.marker_at(SCREEN, Position::new(98, 0)), None);
+        // Its neighbours are not it: the master's last column and the scroll
+        // track's column both answer for themselves.
+        assert!(!view.divider_at(SCREEN, Position::new(97, 20)));
+        assert!(!view.divider_at(SCREEN, Position::new(99, 20)));
+        assert_eq!(view.position_at(SCREEN, Position::new(97, 20)), Some(0));
+        // The wheel over the gutter still pages the list (#34b), because the
+        // wheel and the drag are different gestures on the same chrome.
+        assert!(view.stack_scroll_at(SCREEN, Position::new(98, 20)));
+        // Below the body it is chrome, not the divider.
+        assert!(!view.divider_at(SCREEN, Position::new(98, 41)));
+    }
+
+    /// Dragging leaves the divider under the pointer: the ratio a column maps
+    /// to is the ratio that draws the divider back in that column.
+    #[test]
+    fn dragging_the_divider_puts_the_split_under_the_pointer() {
+        let projects = fixture::projects();
+        let mut state = DeckState::new(4);
+
+        // Every column the range reaches, because the ratio a column maps to
+        // is a division whose last bit must not move the split a column on.
+        for column in 77..=120u16 {
+            let ratio = deck_for(&projects, &state)
+                .ratio_at(SCREEN, column)
+                .expect("the split can move at this width");
+            state.set_master_ratio(ratio);
+
+            let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+            assert_eq!(divider_column(&buffer), Some(column), "dragged to {column}");
+            // The master ends one column short of the divider, the stack one
+            // column past the track: the panes follow the divider exactly.
+            assert_eq!(buffer[(column - 1, 0u16)].symbol(), "┐");
+        }
+    }
+
+    /// The range is the configuration's own, so a drag past either end stops
+    /// at the split the configuration would have accepted.
+    #[test]
+    fn a_drag_past_the_ends_of_the_range_stops_at_them() {
+        let projects = fixture::projects();
+        let mut state = DeckState::new(4);
+
+        let narrow = deck_for(&projects, &state).ratio_at(SCREEN, 20).unwrap();
+        state.set_master_ratio(narrow);
+        assert_eq!(state.master_ratio(), super::state::MIN_MASTER_RATIO);
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        assert_eq!(divider_column(&buffer), Some(77), "0.55 of 144");
+
+        let wide = deck_for(&projects, &state).ratio_at(SCREEN, 140).unwrap();
+        state.set_master_ratio(wide);
+        assert_eq!(state.master_ratio(), super::state::MAX_MASTER_RATIO);
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        assert_eq!(divider_column(&buffer), Some(120), "0.85 of 144");
+    }
+
+    /// Keyboard parity (#41): `^g -` / `^g =` reach the same splits the
+    /// pointer does, and the screen cannot tell which one moved it.
+    #[test]
+    fn a_nudged_split_and_a_dragged_split_are_the_same_screen() {
+        let projects = fixture::projects();
+        let mut nudged = DeckState::new(4);
+        nudged.nudge_master_ratio(-1);
+        assert_eq!(nudged.master_ratio(), 0.65);
+
+        let mut dragged = DeckState::new(4);
+        let ratio = deck_for(&projects, &dragged).ratio_at(SCREEN, 91).unwrap();
+        dragged.set_master_ratio(ratio);
+
+        let (by_key, _) = render(&fixture::frontend_active(), &nudged, (144, 42));
+        let (by_pointer, _) = render(&fixture::frontend_active(), &dragged, (144, 42));
+        assert_eq!(divider_column(&by_key), Some(91));
+        assert_eq!(text(&by_key), text(&by_pointer));
+    }
+
+    /// While the divider is held it takes the accent, the way a dragged pane
+    /// does: the gesture states itself for as long as it lasts.
+    #[test]
+    fn the_divider_takes_the_accent_while_it_is_held() {
+        let mut state = DeckState::new(4);
+        state.set_resizing(true);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        assert_eq!(buffer[(98u16, 0u16)].fg, ACCENT);
+        assert_eq!(buffer[(98u16, 20u16)].fg, ACCENT);
+        assert_eq!(buffer[(98u16, 20u16)].symbol(), "┃");
+        // Releasing it hands the divider back to its resting colours.
+        state.set_resizing(false);
+        let (released, _) = render(&fixture::frontend_active(), &state, (144, 42));
+        assert_eq!(released[(98u16, 0u16)].fg, SEPARATOR);
+    }
+
+    /// A split that cannot move has no divider to offer: zoom hides the
+    /// stack, the narrow fallback drops it, and below `WIDE_COLUMNS` the
+    /// export fixes the stack width outright.
+    #[test]
+    fn a_stack_that_cannot_be_resized_offers_no_divider() {
+        let projects = fixture::projects();
+        let zoom = zoomed();
+        assert!(!deck_for(&projects, &zoom).divider_at(SCREEN, Position::new(98, 20)));
+
+        let state = DeckState::new(4);
+        let narrow = Rect::new(0, 0, 84, 22);
+        assert!(!deck_for(&projects, &state).divider_at(narrow, Position::new(50, 10)));
+
+        // 110 columns still stacks, but at the export's fixed 34-column
+        // stack: there is no ratio to move, so there is no divider.
+        let fixed = Rect::new(0, 0, 110, 42);
+        assert_eq!(deck_for(&projects, &state).ratio_at(fixed, 74), None);
+        assert!(!deck_for(&projects, &state).divider_at(fixed, Position::new(74, 10)));
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (110, 42));
+        assert_eq!(divider_column(&buffer), None, "no divider to mislead with");
+    }
+
+    #[test]
+    fn split_dragged_matches_the_divider_affordance() {
+        let mut state = split(0.55);
+        state.set_resizing(true);
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        assert_snapshot("split-dragged", &buffer);
     }
 
     #[test]
@@ -2780,9 +3043,10 @@ mod tests {
 
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-        // 60x23 centred on the canvas: columns 42..101, rows 9..31.
+        // 60x24 centred on the canvas: columns 42..101, rows 9..32. The
+        // overlay grew a row for the split divider's keys (#41).
         assert_eq!(buffer[(42u16, 9u16)].symbol(), "┌");
-        assert_eq!(buffer[(101u16, 31u16)].symbol(), "┘");
+        assert_eq!(buffer[(101u16, 32u16)].symbol(), "┘");
         assert_eq!(buffer[(42u16, 9u16)].fg, ACCENT);
         // Focus is singular: the master border is no longer the accent, and
         // the underlay recedes by foreground alone.
