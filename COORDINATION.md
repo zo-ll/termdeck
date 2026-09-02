@@ -549,3 +549,9 @@ scope.
   sandbox-scoped worktrees (codex). Patched into the coordinator skill
   (Phase 4, "reuse, don't relaunch"). Consequence: claude/critic keep one
   session each; codex engine slices serialize in one worktree where possible.
+- 2026-09-02: USER — give codex permissions too (parity with claude): codex
+  now runs danger-full-access (safety = worker contract + critic + user
+  approval; supersedes the earlier no-full-access stance for worker parity).
+  Codex upgraded to 0.152.1 (auto during relaunch) — running flat, sessions
+  reusable across worktrees; tmux pings + crates.io work directly. No
+  sandbox exception remains in the reuse policy.
