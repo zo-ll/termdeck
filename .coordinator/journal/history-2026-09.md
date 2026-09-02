@@ -560,3 +560,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: #49 A2 done (claude `67358d3` after coordinator rebase onto main — its local A1 merge dropped; gate 180) — in critic review.
 - 2026-09-02: #49 A2 critic BLOCK (read_dir errors flatten to false-empty; empty-folder branch unreachable). Correction to claude (error-vs-empty surfacing + tests; plus non-blockings: elsewhere stub, dead Listing fields, secondary-button minus parity).
 - 2026-09-02: #49 correction done (claude `4ad98fc`: error-vs-empty surfaced, 3 tests, elsewhere partition, dead fields removed, secondary-minus SGR parity; 185 tests) — re-review handed to critic.
+- 2026-09-02: #49 re-review PASS → pushed coord/49-picker → PR #54. 1 new non-blocking: overlapping roots duplicate filter matches (cwd ⊂ HOME) — recorded; offer optional tiny fix. A3 unblocks after merge.
