@@ -133,3 +133,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   specs are sent only when the current task is WITH THE CRITIC. Patched into
   the coordinator skill. (Applied going forward; the #67 amendment already
   in-flight runs as the current task.)
+- 2026-09-03: HARD RULE (user) for the coordinator: never submit anything
+  to a worker while it is working; only give work when the worker is idle.
+  Verify idle (prompt, no working/queued state) before every dispatch.
+  Current: codex STOPPED at prompt, idle; #66 (dirty tree, red gate) and #67
+  (not started) both pending the user's direction.
