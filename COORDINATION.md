@@ -270,3 +270,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   second muse worker (claude lane). Claude window closed (overload).
 - 2026-09-03: #76 done (muse 7ab023f: empty stack hides column/divider,
   master full width, runtime-add restores; 247 tests) — critic review.
+- 2026-09-03: #74 done (muse 89950ae: wheel into alt-screen apps; 252 tests)
+  — critic review; branch predates #76, integration after.
