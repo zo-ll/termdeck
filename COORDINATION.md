@@ -218,3 +218,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 3. User is TESTING the decluttered binary (238 tests, main a048d76).
 4. Worker protocol in effect: fresh session per task; only give work to
    IDLE workers; single-write finish protocol (inbox ping + marker).
+- 2026-09-03: REASSIGNED — backend-impact scan of the declutter goes to
+  CLAUDE (its own session.rs removal; coord/declutter-scan), not codex.
+  codex post-reset keeps only the NB cleanup batch.
+  NEXT ACTION stays: dispatch NB cleanup to codex at ~14:56 (fresh session).
