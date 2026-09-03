@@ -449,6 +449,59 @@ impl Deck<'_> {
         }
     }
 
+    /// The terminal cell under `pointer`: the configured position plus the
+    /// 0-based column and row from the viewport's top-left, past the border
+    /// and the title inset. `None` outside a pane's drawn rectangle or over
+    /// a folded preview, which has no viewport.
+    ///
+    /// Wheel forwarding into alternate-screen apps (#74) clamps these
+    /// against the frame size; the app mostly scrolls wherever the tick
+    /// lands, so title- and footer-row imprecision is harmless.
+    pub fn pane_cell(&self, area: Rect, pointer: Position) -> Option<(usize, u16, u16)> {
+        let position = self.position_at(area, pointer)?;
+        if area.width < GUTTER + 4 || area.height < 4 || self.state.collapsed(position) {
+            return None;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let rect = match self.layout(body) {
+            Layout::Zoom => body,
+            Layout::Narrow => Rect {
+                y: body.y + 2,
+                height: body.height.saturating_sub(2),
+                ..body
+            },
+            Layout::Stacked { stack, preview } => {
+                let master = Rect {
+                    width: body.width - GUTTER - stack,
+                    ..body
+                };
+                if master.contains(pointer) {
+                    master
+                } else {
+                    self.stack_layout(
+                        Rect {
+                            x: master.x + master.width + GUTTER,
+                            width: stack,
+                            ..body
+                        },
+                        preview,
+                    )
+                    .into_iter()
+                    .find(|slot| slot.rect.contains(pointer))
+                    .map(|slot| slot.rect)?
+                }
+            }
+        };
+        Some((
+            position,
+            pointer.x.saturating_sub(rect.x + 1 + PADDING),
+            pointer.y.saturating_sub(rect.y + 1),
+        ))
+    }
+
     /// The configured position whose disclosure marker sits under `pointer`.
     ///
     /// The marker owns two cells at the head of a stack pane's title: the
@@ -2271,6 +2324,61 @@ mod tests {
             deck.swap_position_at(Rect::new(0, 0, 84, 22), Position::new(10, 10)),
             None,
             "a hidden stack has no swap target"
+        );
+    }
+
+    /// #74: the cell math wheel forwarding stands on — zoomed, stacked and
+    /// folded panes, plus the chrome that is no pane at all.
+    #[test]
+    fn pane_cell_measures_from_the_viewport_origin() {
+        let projects = fixture::projects();
+        let area = Rect::new(0, 0, 144, 42);
+        fn deck<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
+            Deck {
+                workspace: "idp",
+                projects,
+                state,
+                master_ratio: state.master_ratio(),
+                now: fixture::NOW,
+            }
+        }
+
+        // Zoomed: the body is the pane, so the origin is border plus inset.
+        let mut zoomed = reference_deck(4);
+        zoomed.apply(&ActionCommand::ToggleZoom, &projects, fixture::NOW);
+        assert_eq!(
+            deck(&projects, &zoomed).pane_cell(area, Position::new(10, 10)),
+            Some((0, 7, 9)),
+            "column past border and title inset, row past the border"
+        );
+
+        // Stacked: the master agrees with hit testing, the gutter and the
+        // hint row are nothing.
+        let state = expanded(4);
+        let pane = deck(&projects, &state);
+        assert!(matches!(
+            pane.pane_cell(area, Position::new(10, 10)),
+            Some((0, _, _))
+        ));
+        assert_eq!(pane.pane_cell(area, Position::new(99, 10)), None);
+        assert_eq!(pane.pane_cell(area, Position::new(10, 40)), None);
+
+        // Folded strips keep hit testing but own no cells to forward into.
+        let folded = DeckState::new(4);
+        let pane = deck(&projects, &folded);
+        let strip = (0..40)
+            .flat_map(|y| (100..144).map(move |x| Position::new(x, y)))
+            .find(|pointer| {
+                pane.position_at(area, *pointer).is_some()
+                    && pane.pane_cell(area, *pointer).is_none()
+            });
+        assert!(
+            strip.is_some(),
+            "a folded strip is hit-tested but owns no cells"
+        );
+        assert!(
+            matches!(pane.pane_cell(area, Position::new(10, 10)), Some((0, _, _))),
+            "the master still does"
         );
     }
 

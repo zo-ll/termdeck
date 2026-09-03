@@ -52,6 +52,14 @@ impl NativeTerminal {
         self.frame.terminal == *terminal
     }
 
+    /// The viewport the renderer shows: history offset plus which screen
+    /// the app owns and whether it wants the wheel as mouse reports (#74).
+    fn refresh_viewport(&mut self) {
+        self.metadata.scrollback = self.adapter.scrollback_position();
+        self.metadata.alt_screen = self.adapter.alt_screen();
+        self.metadata.mouse_reporting = self.adapter.mouse_reporting();
+    }
+
     fn refresh_timing(&mut self) {
         if let Some(process) = &mut self.metadata.process {
             process.uptime = elapsed(self.started);
@@ -90,7 +98,7 @@ impl NativeTerminal {
                 // deliberate history offset remains untouched. Metadata still
                 // refreshes below even when the visible cells do not change.
                 self.frame = self.adapter.feed(&bytes);
-                self.metadata.scrollback = self.adapter.scrollback_position();
+                self.refresh_viewport();
                 self.metadata.bytes_written = self
                     .metadata
                     .bytes_written
@@ -312,7 +320,7 @@ impl TerminalEngine for NativeEngine {
                     return item.status_changed(TerminalStatus::Failed { message });
                 }
                 item.frame = item.adapter.resize(size);
-                item.metadata.scrollback = item.adapter.scrollback_position();
+                item.refresh_viewport();
                 vec![
                     EngineEvent::MetadataChanged {
                         terminal,
@@ -326,7 +334,7 @@ impl TerminalEngine for NativeEngine {
                     return Vec::new();
                 };
                 item.frame = item.adapter.scroll(command);
-                item.metadata.scrollback = item.adapter.scrollback_position();
+                item.refresh_viewport();
                 vec![
                     EngineEvent::MetadataChanged {
                         terminal,
@@ -617,6 +625,74 @@ mod tests {
 
     /// The #9 review note was real: resizing can change Alacritty's visible
     /// history, so its metadata must be emitted with the replacement frame.
+    /// #74: the viewport metadata follows the app — the session routes the
+    /// wheel on these two flags, so they must refresh with every viewport
+    /// change, without a PTY involved.
+    #[test]
+    fn viewport_metadata_tracks_the_alternate_screen_and_app_mouse() {
+        let terminal = TerminalId::new("recording");
+        let project = Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: Vec::new(),
+        };
+        let mut adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(80, 24));
+        adapter.feed(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h");
+        let frame = adapter.frame();
+        let mut engine = NativeEngine {
+            terminals: vec![NativeTerminal {
+                project,
+                transport: None,
+                adapter,
+                frame,
+                status: TerminalStatus::Running,
+                metadata: TerminalMetadata::default(),
+                started: Instant::now(),
+                last_output: None,
+            }],
+        };
+        engine.dispatch(EngineCommand::Scroll {
+            terminal: terminal.clone(),
+            command: ScrollCommand::Up(1),
+        });
+
+        let metadata = engine.metadata(&terminal).unwrap();
+        assert!(metadata.alt_screen, "the app owns the grid");
+        assert!(metadata.mouse_reporting, "the app enabled the mouse");
+    }
+
+    /// #74 end to end: a live app entering its alternate screen surfaces
+    /// through PTY output into the metadata the wheel route reads.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_live_app_reaching_its_alternate_screen_surfaces_in_metadata() {
+        let terminal = TerminalId::new("app");
+        let projects = [project(
+            terminal.clone(),
+            "printf '\x1b[?1049hAPP-SCREEN'; sleep 30",
+        )];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < deadline {
+            engine.drain_events();
+            if engine
+                .metadata(&terminal)
+                .is_some_and(|metadata| metadata.alt_screen)
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert!(
+            engine
+                .metadata(&terminal)
+                .is_some_and(|metadata| metadata.alt_screen),
+            "the app's alternate screen never surfaced"
+        );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
     #[test]
     fn resize_refreshes_scrollback_metadata_with_the_frame() {
         let terminal = TerminalId::new("recording");

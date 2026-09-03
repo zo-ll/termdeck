@@ -68,4 +68,11 @@ pub struct TerminalMetadata {
     pub restarted_at: Option<Timestamp>,
     pub process: Option<ProcessInfo>,
     pub scrollback: ScrollbackPosition,
+    /// Whether the terminal shows its alternate screen: a full-screen app
+    /// (vim, less, claude) owns the grid, so termdeck scrollback is inert
+    /// there and the wheel belongs to the app (#74).
+    pub alt_screen: bool,
+    /// Whether the app enabled mouse reporting: with it the app wants the
+    /// wheel as SGR mouse reports, without it as cursor keys (#74).
+    pub mouse_reporting: bool,
 }
