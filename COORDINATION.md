@@ -222,3 +222,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   CLAUDE (its own session.rs removal; coord/declutter-scan), not codex.
   codex post-reset keeps only the NB cleanup batch.
   NEXT ACTION stays: dispatch NB cleanup to codex at ~14:56 (fresh session).
+- 2026-09-03: declutter backend scan (claude) APPROVED + one fix 35ac12f
+  (trailing '·' at 33-35 char names, gated pair; 239 tests) — critic
+  review queued.
