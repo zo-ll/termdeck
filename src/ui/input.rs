@@ -18,6 +18,8 @@ use crate::contracts::{
 
 use super::state::{DeckState, Modal};
 
+const NUMBER_TIMEOUT: u64 = 600;
+
 /// One key press. Modifiers other than control are carried by the character
 /// itself, so `shift+g` arrives as `Char('G')`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -96,6 +98,7 @@ pub enum Reaction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Input {
     prefix: bool,
+    number: Option<(usize, Timestamp)>,
     page: u16,
 }
 
@@ -105,6 +108,7 @@ impl Input {
     pub fn new(page: u16) -> Self {
         Self {
             prefix: false,
+            number: None,
             page,
         }
     }
@@ -122,6 +126,9 @@ impl Input {
         projects: &[Project],
         now: Timestamp,
     ) -> Option<Reaction> {
+        if self.number.is_some() {
+            return self.capture_number(key, deck, projects, now);
+        }
         if std::mem::take(&mut self.prefix) {
             return self.command(key, deck, projects, now);
         }
@@ -156,6 +163,19 @@ impl Input {
         }
     }
 
+    /// Commits an ambiguous number once no next digit arrives in its capture
+    /// window. The session calls this from its existing input poll.
+    pub fn expire(&mut self, deck: &mut DeckState, projects: &[Project], now: Timestamp) -> bool {
+        let Some((_, started)) = self.number else {
+            return false;
+        };
+        if now.unix_millis.saturating_sub(started.unix_millis) < NUMBER_TIMEOUT {
+            return false;
+        }
+        self.commit_number(deck, projects, now);
+        true
+    }
+
     /// The second key of the prefix. An unbound one ends the prefix without
     /// reaching the shell, so a mistyped command never becomes stray input.
     fn command(
@@ -174,9 +194,17 @@ impl Input {
             }
             Key::Char('j') | Key::Down => ActionCommand::SelectNext,
             Key::Char('k') | Key::Up => ActionCommand::SelectPrevious,
-            // The `1..4` keys select the zero-based configured positions.
             Key::Char(digit @ '1'..='9') => {
-                ActionCommand::SelectPosition(digit as usize - '1' as usize)
+                self.number = Some((digit as usize - '0' as usize, now));
+                if self.can_extend(projects.len()) {
+                    return None;
+                }
+                self.commit_number(deck, projects, now);
+                return None;
+            }
+            Key::Char('0') => {
+                deck.set_notice("terminal 0 unavailable".to_owned());
+                return None;
             }
             Key::Char('z') => ActionCommand::ToggleZoom,
             // The stack is a window onto a list that can be longer than the
@@ -221,6 +249,54 @@ impl Input {
         }
     }
 
+    /// Captures a possible following digit. Escape abandons the number; a
+    /// different key commits it and remains consumed by the prefix gesture.
+    fn capture_number(
+        &mut self,
+        key: Key,
+        deck: &mut DeckState,
+        projects: &[Project],
+        now: Timestamp,
+    ) -> Option<Reaction> {
+        match key {
+            Key::Escape => self.number = None,
+            Key::Char(digit @ '0'..='9') => {
+                let (number, _) = self.number.expect("digit capture exists");
+                self.number = Some((
+                    number
+                        .saturating_mul(10)
+                        .saturating_add(digit as usize - '0' as usize),
+                    now,
+                ));
+                if !self.can_extend(projects.len()) {
+                    self.commit_number(deck, projects, now);
+                }
+            }
+            _ => self.commit_number(deck, projects, now),
+        }
+        None
+    }
+
+    /// A first digit waits only when it can still prefix an in-range terminal
+    /// number. Thus `^g 2` on a 16-pane deck is instant, while `^g 1` leaves
+    /// room for `^g 1 6`.
+    fn can_extend(&self, count: usize) -> bool {
+        self.number
+            .is_some_and(|(number, _)| number.saturating_mul(10) <= count)
+    }
+
+    fn commit_number(&mut self, deck: &mut DeckState, projects: &[Project], now: Timestamp) {
+        let Some((number, _)) = self.number.take() else {
+            return;
+        };
+        if (1..=projects.len()).contains(&number) {
+            deck.clear_notice();
+            deck.apply(&ActionCommand::SelectPosition(number - 1), projects, now);
+        } else {
+            deck.set_notice(format!("terminal {number} unavailable"));
+        }
+    }
+
     /// Scrollback captures the navigation keys and swallows the rest: nothing
     /// reaches the hidden live shell until `esc` returns to it.
     fn scroll(
@@ -253,7 +329,7 @@ impl Input {
 mod tests {
     use super::{Input, Key, Reaction};
     use crate::{
-        contracts::{InputCommand, ScrollCommand, Timestamp, UserCommand},
+        contracts::{InputCommand, Project, ScrollCommand, Timestamp, UserCommand},
         ui::{DeckState, Modal, fixture},
     };
 
@@ -293,6 +369,16 @@ mod tests {
         ))))
     }
 
+    fn numbered_deck(count: usize) -> (Input, DeckState, Vec<Project>) {
+        let mut projects = fixture::projects();
+        let project = projects.remove(0);
+        (
+            Input::new(PAGE),
+            DeckState::new(count),
+            vec![project; count],
+        )
+    }
+
     #[test]
     fn unprefixed_keys_reach_the_active_terminal() {
         let mut session = Session::new();
@@ -322,13 +408,87 @@ mod tests {
     }
 
     #[test]
-    fn the_number_keys_promote_the_configured_position() {
+    fn a_single_number_promotes_its_terminal() {
         let mut session = Session::new();
 
         session.command(Key::Char('3'));
 
         assert_eq!(session.deck.active(), Some(2));
         assert_eq!(session.deck.stack(), [1, 0, 3]);
+    }
+
+    #[test]
+    fn number_capture_promotes_single_and_multi_digit_terminals() {
+        let (mut input, mut deck, projects) = numbered_deck(16);
+
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('2'), &mut deck, &projects, NOW);
+        assert_eq!(deck.active(), Some(1), "an unambiguous digit is instant");
+
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('1'), &mut deck, &projects, NOW);
+        assert_eq!(deck.active(), Some(1), "one waits because 16 is possible");
+        input.press(Key::Char('6'), &mut deck, &projects, NOW);
+        assert_eq!(deck.active(), Some(15), "^g 1 6 promotes terminal 16");
+    }
+
+    #[test]
+    fn an_ambiguous_number_commits_after_six_hundred_millis() {
+        let (mut input, mut deck, projects) = numbered_deck(16);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('2'), &mut deck, &projects, NOW);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('1'), &mut deck, &projects, NOW);
+
+        assert!(!input.expire(&mut deck, &projects, Timestamp { unix_millis: 599 }));
+        assert_eq!(deck.active(), Some(1));
+        assert!(input.expire(&mut deck, &projects, Timestamp { unix_millis: 600 }));
+        assert_eq!(deck.active(), Some(0));
+    }
+
+    #[test]
+    fn an_out_of_range_number_is_ignored_with_a_status_hint() {
+        let (mut input, mut deck, projects) = numbered_deck(16);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('2'), &mut deck, &projects, NOW);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('1'), &mut deck, &projects, NOW);
+        input.press(Key::Char('9'), &mut deck, &projects, NOW);
+
+        assert_eq!(deck.active(), Some(1), "terminal 19 is ignored");
+        assert_eq!(deck.notice(), Some("terminal 19 unavailable"));
+    }
+
+    #[test]
+    fn a_non_digit_commits_the_number_collected_so_far() {
+        let (mut input, mut deck, projects) = numbered_deck(16);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('2'), &mut deck, &projects, NOW);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('1'), &mut deck, &projects, NOW);
+
+        assert_eq!(input.press(Key::Char('x'), &mut deck, &projects, NOW), None);
+        assert_eq!(deck.active(), Some(0));
+        assert_eq!(
+            input.press(Key::Char('x'), &mut deck, &projects, NOW),
+            sent(b"x")
+        );
+    }
+
+    #[test]
+    fn escape_aborts_a_pending_terminal_number() {
+        let (mut input, mut deck, projects) = numbered_deck(16);
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('2'), &mut deck, &projects, NOW);
+        assert_eq!(deck.active(), Some(1));
+
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('1'), &mut deck, &projects, NOW);
+        assert_eq!(input.press(Key::Escape, &mut deck, &projects, NOW), None);
+
+        assert!(!input.expire(&mut deck, &projects, Timestamp { unix_millis: 600 }));
+        assert_eq!(deck.active(), Some(1), "Esc must not commit terminal 1");
+        assert_eq!(deck.notice(), None);
     }
 
     #[test]

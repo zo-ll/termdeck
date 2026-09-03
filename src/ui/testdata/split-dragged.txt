@@ -39,4 +39,4 @@
 │                                                                        …  ││                                                                  
 └───────────────────────────────────────────────────────────────────────────┘│  3 collapsed · ^g c expand all                                   
                                                                                                                                                 
-   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                ^g j/k  ^g 1-4  ^g c  ^g z  ^g ?  ^g q  
+   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                  ^g j/k  ^g N  ^g c  ^g z  ^g ?  ^g q  

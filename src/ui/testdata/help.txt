@@ -11,7 +11,7 @@
 │    ➜  press h + enter to show help      │  NAVIGATE                                                │                                          
 │                                         │  ^g j  ^g k       promote next / previous                │                                          
 │  12:03:58 [vite] page reload src/main.ts│  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
-│  12:04:12 [vite] hmr update /src/routes/│  ^g 1 … ^g 4      promote by configured position         │                                          
+│  12:04:12 [vite] hmr update /src/routes/│  ^g N             promote terminal number                │                                          
 │  12:04:12 [vite] hmr update /src/styles/│                                                          │                                          
 │  12:04:29 [vite] hmr update /src/routes/│  VIEW                                                    │                                          
 │  12:04:41 [vite] optimized dependencies │  ^g z             toggle zoom                            │                                          
