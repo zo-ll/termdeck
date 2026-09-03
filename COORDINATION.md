@@ -148,3 +148,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   coord/64-nbs) BEFORE #67 per user: inert snap couplet, terminal_size test
   gaps, WIDTH-only chrome (short-wide window hides prompt), double FrameReady
   nit, tail-redraw contract comment.
+- 2026-09-03: #66 critic BLOCK (escape-abort test weakened — passes both
+  ways; needs non-active pending-number scenario). Correction-66 staged;
+  deliver to codex ONLY when its 64-nbs turn completes (hard rule: no
+  submit while working).
