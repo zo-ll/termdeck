@@ -86,7 +86,14 @@ impl NativeTerminal {
     fn handle_pty_event(&mut self, event: PtyEvent, events: &mut Vec<EngineEvent>) {
         match event {
             PtyEvent::Output { terminal, bytes } if self.owns(&terminal) => {
+                // Follow output only from the live tail. A user who has
+                // wheeled into history keeps that deliberately chosen view.
+                let follow_live_output = self.metadata.scrollback.lines_below == 0;
                 self.frame = self.adapter.feed(&bytes);
+                if follow_live_output {
+                    self.frame = self.adapter.scroll(crate::contracts::ScrollCommand::Bottom);
+                }
+                self.metadata.scrollback = self.adapter.scrollback_position();
                 self.metadata.bytes_written = self
                     .metadata
                     .bytes_written
@@ -378,12 +385,15 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use crate::contracts::{
-        CellContent, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
-        TerminalEngine, TerminalId, TerminalStatus,
+    use crate::{
+        contracts::{
+            CellContent, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
+            TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
+        },
+        engine::PtyEvent,
     };
 
-    use super::{NativeEngine, SHUTDOWN_GRACE};
+    use super::{NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -592,6 +602,49 @@ mod tests {
                 .as_deref(),
             Some("native engine requires at least one terminal")
         );
+    }
+
+    #[test]
+    fn output_follows_the_live_tail_but_not_intentional_history() {
+        let terminal = TerminalId::new("recording");
+        let adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(8, 2));
+        let frame = adapter.frame();
+        let mut item = NativeTerminal {
+            project: Project {
+                terminal: terminal.clone(),
+                path: PathBuf::from("/"),
+                command: vec!["sh".to_owned()],
+            },
+            transport: None,
+            adapter,
+            frame,
+            status: TerminalStatus::Running,
+            metadata: TerminalMetadata::default(),
+            started: Instant::now(),
+            last_output: None,
+        };
+        let mut events = Vec::new();
+
+        item.handle_pty_event(
+            PtyEvent::Output {
+                terminal: terminal.clone(),
+                bytes: b"0\r\n1\r\n2\r\n3\r\n".to_vec(),
+            },
+            &mut events,
+        );
+        assert_eq!(item.metadata.scrollback.lines_below, 0);
+
+        item.frame = item.adapter.scroll(ScrollCommand::Up(1));
+        item.metadata.scrollback = item.adapter.scrollback_position();
+        assert!(item.metadata.scrollback.lines_below > 0);
+        item.handle_pty_event(
+            PtyEvent::Output {
+                terminal,
+                bytes: b"new output\r\n".to_vec(),
+            },
+            &mut events,
+        );
+        assert!(item.metadata.scrollback.lines_below > 0);
     }
 
     #[cfg(target_os = "linux")]

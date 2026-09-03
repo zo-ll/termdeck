@@ -217,7 +217,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let _signals = SignalGuard::install()?;
     let outer = OuterTerminal::enter()?;
     let mut size = screen_size()?;
-    let mut engine = NativeEngine::spawn(&workspace.projects, size)
+    let mut engine = NativeEngine::spawn(&workspace.projects, terminal_size(size))
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     // The workspace opened this list; `^g a` can lengthen it, so the session
@@ -245,7 +245,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             for project in &projects {
                 engine.dispatch(EngineCommand::Resize {
                     terminal: project.terminal.clone(),
-                    size: current_size,
+                    size: terminal_size(current_size),
                 });
             }
             input.set_page(current_size.rows.saturating_sub(4));
@@ -604,6 +604,14 @@ fn dispatch_live_input(
         command: ScrollCommand::Bottom,
     });
     engine.dispatch(EngineCommand::Input { terminal, bytes });
+}
+
+/// The deck reserves a blank row and a status row, and the master pane adds a
+/// border above and below its terminal cells. The narrow pane strip takes two
+/// further rows before the master.
+fn terminal_size(size: ScreenSize) -> ScreenSize {
+    let chrome = if size.columns < 100 { 6 } else { 4 };
+    ScreenSize::new(size.columns, size.rows.saturating_sub(chrome).max(1))
 }
 
 fn screen_size() -> io::Result<ScreenSize> {
@@ -1112,12 +1120,12 @@ fn colour(colour: Color, foreground: bool) -> String {
 mod tests {
     use super::{
         InputEvent, KeyReader, MouseAction, chosen, dispatch_live_input, mouse_action,
-        open_terminals,
+        open_terminals, terminal_size,
     };
     use crate::{
         contracts::{
-            ActionCommand, Project, ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId,
-            TerminalMetadata, Timestamp,
+            ActionCommand, Project, ScreenSize, ScrollCommand, ScrollbackPosition, TerminalEngine,
+            TerminalId, TerminalMetadata, Timestamp,
         },
         engine::FakeEngine,
         ui::{DeckState, Key, SheetState},
@@ -1414,6 +1422,18 @@ mod tests {
             0
         );
         assert_eq!(engine.input(), &[(terminal, b"echo live\r".to_vec())]);
+    }
+
+    #[test]
+    fn pty_size_excludes_the_decks_chrome() {
+        assert_eq!(
+            terminal_size(ScreenSize::new(100, 30)),
+            ScreenSize::new(100, 26)
+        );
+        assert_eq!(
+            terminal_size(ScreenSize::new(99, 30)),
+            ScreenSize::new(99, 24)
+        );
     }
 
     #[test]
