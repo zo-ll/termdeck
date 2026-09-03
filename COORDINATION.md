@@ -144,3 +144,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   many status rows). #67 scheduled AFTER #66 merges (user sequence).
 - 2026-09-03: #66 done fresh (codex `914aa80`, 234 tests; hint fixtures
   re-blessed) — critic review.
+- 2026-09-03: #64's 5 non-blocking findings dispatched to codex (idle;
+  coord/64-nbs) BEFORE #67 per user: inert snap couplet, terminal_size test
+  gaps, WIDTH-only chrome (short-wide window hides prompt), double FrameReady
+  nit, tail-redraw contract comment.
