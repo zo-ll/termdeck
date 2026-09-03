@@ -175,3 +175,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: #67-sheet done (codex ec62ae2: unrestricted sheet + folder
   targets, reuses PickerState) — critic review; branch base is old — main
   integration after review (conflicts possible vs 64-nbs/#66).
+- 2026-09-03: NB-cleanup batch dispatched to codex (idle): A1 DEFAULT_SCROLLBACK
+  + expect() invariants; 64 feed-while-scrolled pin gap; #13 footer rule-row
+  helper; #9 resize-scrollback NB (resolve or retire). coord/nb-cleanup.
