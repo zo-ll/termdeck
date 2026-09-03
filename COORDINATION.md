@@ -121,3 +121,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: USER — Ctrl+g N promotes by terminal NUMBER (not 1-4 only;
   deck has 16). Dispatched to codex (coord/66-promote-n): digit-sequence
   capture (~600ms), clamp, hint, tests.
+- 2026-09-03: USER — ^g a sheet must allow RE-OPENING an already-open path
+  (locked-row Enter = add another instance; the [.] refusal is revised) +
+  picker-like sheet navigation (→/←). Dispatched to codex
+  (coord/67-sheet-reopen).
