@@ -1894,7 +1894,7 @@ const HELP: [(&str, &str); 17] = [
     ("^g c", "collapse / expand previews"),
     ("^g pgup/pgdn", "page the preview stack"),
     ("^g -  ^g =", "narrow / widen the master"),
-    ("^g a", "add a terminal"),
+    ("^g a", "open any folder / repo"),
     ("^g [", "enter scrollback mode"),
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
