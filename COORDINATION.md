@@ -178,3 +178,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: NB-cleanup batch dispatched to codex (idle): A1 DEFAULT_SCROLLBACK
   + expect() invariants; 64 feed-while-scrolled pin gap; #13 footer rule-row
   helper; #9 resize-scrollback NB (resolve or retire). coord/nb-cleanup.
+- 2026-09-03: WORKER-SESSION POLICY changed (user, after codex/claude both
+  died on limits): FRESH session per task by default; reuse only health-
+  checked (mid-series + context >=~50% + not near limit); coordinator holds
+  durable memory. Applied: nb-cleanup will use a FRESH codex session after
+  the 2:56 PM reset.
