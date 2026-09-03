@@ -258,3 +258,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   itself remains open, parked (user stopped it earlier).
 - 2026-09-03: #75 done (codex df00104: size terminals to visible panes; 243
   tests) — critic review queued.
+- 2026-09-03: #74 re-scoped (wheel into alt-screen apps, not tail-pinning)
+  and dispatched to codex (coord/74-app-scroll) after user retest.
