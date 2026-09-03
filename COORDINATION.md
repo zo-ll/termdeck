@@ -239,3 +239,9 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: AGENT-API issue opened (AI-first: termdeck notify/list/status/
   open/promote with --json, generic-user constraint, research/parked like
   #71). No dispatch yet.
+- 2026-09-03: RELAY IS NOW NOTIFY-ONLY (research-verified + applied by the
+  muse-spark-1.3 researcher, commit 5e7454d): zero keystroke injection —
+  inbox .ping files badge (✉ N) + ARRIVE log; the coordinator DRAINS
+  inbox/*.ping at turn start (read+rm) and surfaces messages in replies.
+  Root cause found: send-keys shared the PTY input queue (mid-draft gluing,
+  stray Enter, copy-mode swallow + view yank).
