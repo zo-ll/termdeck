@@ -33,8 +33,8 @@ pub use picker::{
 pub use state::{DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal};
 
 use crate::contracts::{
-    CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, TerminalEngine, TerminalFrame,
-    TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
+    CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, ScreenSize, TerminalEngine,
+    TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
 };
 
 /// Accepted palette. Every value comes from the design export's palette board.
@@ -318,6 +318,66 @@ impl Deck<'_> {
         self.position_at(area, pointer)
             .and_then(|position| self.projects.get(position))
             .map(|project| &project.terminal)
+    }
+
+    /// Visible terminal-cell dimensions by configured project position.
+    ///
+    /// A hidden folded preview has no viewport, so it retains its last size
+    /// until promotion or expansion gives it one again.
+    pub fn terminal_sizes(&self, area: Rect) -> Vec<Option<ScreenSize>> {
+        let mut sizes = vec![None; self.projects.len()];
+        if area.width < GUTTER + 4 || area.height < 4 {
+            return sizes;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let mut set = |position: usize, pane: Rect| {
+            if position < sizes.len() {
+                sizes[position] = Some(inner_size(pane));
+            }
+        };
+        let active = self.state.active();
+        match self.layout(body) {
+            Layout::Stacked { stack, preview } => {
+                let master = Rect {
+                    width: body.width - GUTTER - stack,
+                    ..body
+                };
+                if let Some(position) = active {
+                    set(position, master);
+                }
+                let stack = Rect {
+                    x: master.x + master.width + GUTTER,
+                    width: stack,
+                    ..body
+                };
+                for slot in self.stack_layout(stack, preview) {
+                    if !slot.collapsed {
+                        set(slot.position, slot.rect);
+                    }
+                }
+            }
+            Layout::Zoom => {
+                if let Some(position) = active {
+                    set(position, body);
+                }
+            }
+            Layout::Narrow => {
+                if let Some(position) = active {
+                    set(
+                        position,
+                        Rect {
+                            y: body.y + 2,
+                            height: body.height.saturating_sub(2),
+                            ..body
+                        },
+                    );
+                }
+            }
+        }
+        sizes
     }
 
     /// Returns the configured position in the pane under `pointer`.
@@ -2025,6 +2085,14 @@ fn clip(text: &str, budget: usize) -> String {
             .chain(std::iter::once('…'))
             .collect(),
     }
+}
+
+/// The application-visible cells inside a bordered, padded terminal pane.
+fn inner_size(pane: Rect) -> ScreenSize {
+    ScreenSize::new(
+        pane.width.saturating_sub(2 + 2 * PADDING).max(1),
+        pane.height.saturating_sub(2).max(1),
+    )
 }
 
 /// The top row shared by scrollback and exited pane footers.

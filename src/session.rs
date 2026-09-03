@@ -218,14 +218,14 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let _signals = SignalGuard::install()?;
     let outer = OuterTerminal::enter()?;
     let mut size = screen_size()?;
-    let mut engine = spawn_terminals(&workspace.projects, size)
-        .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
-    let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     // The workspace opened this list; `^g a` can lengthen it, so the session
     // owns it from here (#50 A3).
     let mut projects = workspace.projects.clone();
     // The configuration seeds the split; the divider owns it from there.
     let mut deck = DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get());
+    let mut engine = spawn_terminals(&projects, &deck, size)
+        .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
+    let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     let mut input = Input::new(size.rows.saturating_sub(4));
     let mut keys = KeyReader::default();
     let mut last_click = None;
@@ -243,7 +243,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         }
         let current_size = screen_size()?;
         if current_size != size {
-            resize_terminals(&mut engine, &projects, current_size);
+            resize_terminals(&mut engine, &projects, &deck, current_size);
             input.set_page(current_size.rows.saturating_sub(4));
             size = current_size;
             terminal.autoresize()?;
@@ -294,7 +294,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 match reaction {
                     Some(PickerReaction::Launch) => {
                         for project in chosen(open_sheet, &projects) {
-                            match add_terminal(&mut engine, project.clone(), size) {
+                            match add_terminal(&mut engine, project.clone(), &projects, &deck, size)
+                            {
                                 Ok(()) => {
                                     projects.push(project);
                                     deck.push_terminal();
@@ -539,6 +540,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+        dirty |= resize_terminals(&mut engine, &projects, &deck, size);
         if dirty {
             terminal.draw(|frame| {
                 Deck {
@@ -599,37 +601,81 @@ fn dispatch_scroll(engine: &mut dyn TerminalEngine, terminal: TerminalId, comman
     engine.dispatch(EngineCommand::Scroll { terminal, command });
 }
 
-fn spawn_terminals(projects: &[Project], size: ScreenSize) -> Result<NativeEngine, String> {
-    NativeEngine::spawn(projects, terminal_size(size))
+fn spawn_terminals(
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+) -> Result<NativeEngine, String> {
+    let sizes = terminal_sizes(projects, deck, size);
+    let fallback = sizes
+        .iter()
+        .flatten()
+        .copied()
+        .next()
+        .unwrap_or(ScreenSize::new(1, 1));
+    let sizes = sizes
+        .into_iter()
+        .map(|size| size.unwrap_or(fallback))
+        .collect::<Vec<_>>();
+    NativeEngine::spawn_sized(projects, &sizes)
 }
 
-fn resize_terminals(engine: &mut dyn TerminalEngine, projects: &[Project], size: ScreenSize) {
-    let size = terminal_size(size);
-    for project in projects {
+fn resize_terminals(
+    engine: &mut dyn TerminalEngine,
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+) -> bool {
+    let mut resized = false;
+    for (project, size) in projects.iter().zip(terminal_sizes(projects, deck, size)) {
+        let Some(size) = size else {
+            continue;
+        };
+        if engine
+            .frame(&project.terminal)
+            .is_some_and(|frame| frame.size == size)
+        {
+            continue;
+        }
         engine.dispatch(EngineCommand::Resize {
             terminal: project.terminal.clone(),
             size,
         });
+        resized = true;
     }
+    resized
 }
 
 fn add_terminal(
     engine: &mut NativeEngine,
     project: Project,
+    projects: &[Project],
+    deck: &DeckState,
     size: ScreenSize,
 ) -> Result<(), String> {
-    engine.add(project, terminal_size(size))
+    let size = terminal_sizes(projects, deck, size)
+        .into_iter()
+        .flatten()
+        .next()
+        .unwrap_or(ScreenSize::new(1, 1));
+    engine.add(project, size)
 }
 
-/// The deck reserves a blank row and a status row, and the master pane adds a
-/// border above and below its terminal cells. The narrow pane strip takes two
-/// further rows before the master. Its height threshold mirrors
-/// `Deck::layout`: a short wide screen is narrow too.
-fn terminal_size(size: ScreenSize) -> ScreenSize {
-    let narrow = size.columns < 100
-        || size.rows.saturating_sub(2) < if size.columns >= 120 { 12 + 2 } else { 9 + 2 };
-    let chrome = if narrow { 6 } else { 4 };
-    ScreenSize::new(size.columns, size.rows.saturating_sub(chrome).max(1))
+/// The renderer owns pane geometry, so PTYs always receive precisely the
+/// dimensions their applications can see.
+fn terminal_sizes(
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+) -> Vec<Option<ScreenSize>> {
+    Deck {
+        workspace: "",
+        projects,
+        state: deck,
+        master_ratio: deck.master_ratio(),
+        now: now(),
+    }
+    .terminal_sizes(ratatui::layout::Rect::new(0, 0, size.columns, size.rows))
 }
 
 fn screen_size() -> io::Result<ScreenSize> {
@@ -1138,7 +1184,7 @@ fn colour(colour: Color, foreground: bool) -> String {
 mod tests {
     use super::{
         InputEvent, KeyReader, MouseAction, add_terminal, chosen, dispatch_live_input,
-        mouse_action, open_terminals, resize_terminals, spawn_terminals, terminal_size,
+        mouse_action, open_terminals, resize_terminals, spawn_terminals, terminal_sizes,
     };
     use crate::{
         contracts::{
@@ -1470,17 +1516,23 @@ mod tests {
             terminal: TerminalId::new("added"),
             ..first.clone()
         };
-        let mut engine = spawn_terminals(std::slice::from_ref(&first), size).unwrap();
+        let deck = DeckState::new(1);
+        let expected = terminal_sizes(std::slice::from_ref(&first), &deck, size)[0].unwrap();
+        let mut engine = spawn_terminals(std::slice::from_ref(&first), &deck, size).unwrap();
 
-        add_terminal(&mut engine, added.clone(), size).unwrap();
+        add_terminal(
+            &mut engine,
+            added.clone(),
+            std::slice::from_ref(&first),
+            &deck,
+            size,
+        )
+        .unwrap();
 
-        assert_eq!(
-            engine.frame(&added.terminal).unwrap().size,
-            terminal_size(size)
-        );
+        assert_eq!(engine.frame(&added.terminal).unwrap().size, expected);
         assert_eq!(
             engine.frame(&first.terminal).unwrap().size,
-            terminal_size(size),
+            expected,
             "initial terminals use the same usable size"
         );
         engine.dispatch(EngineCommand::Shutdown);
@@ -1495,30 +1547,122 @@ mod tests {
             command: vec!["sh".to_owned()],
         }];
         let mut engine = FakeEngine::new([terminal.clone()]);
+        let deck = DeckState::new(1);
 
-        resize_terminals(&mut engine, &projects, ScreenSize::new(120, 13));
+        resize_terminals(&mut engine, &projects, &deck, ScreenSize::new(120, 13));
 
         assert_eq!(
             engine.frame(&terminal).unwrap().size,
-            ScreenSize::new(120, 7),
+            ScreenSize::new(114, 7),
             "the narrow pane strip leaves the prompt's two extra chrome rows"
         );
     }
 
     #[test]
-    fn pty_size_excludes_the_decks_chrome() {
+    fn pty_size_is_the_visible_pane_interior() {
+        let project = Project {
+            terminal: TerminalId::new("frontend"),
+            path: PathBuf::from("/"),
+            command: vec!["sh".to_owned()],
+        };
+        let deck = DeckState::new(1);
         assert_eq!(
-            terminal_size(ScreenSize::new(100, 30)),
-            ScreenSize::new(100, 26)
+            terminal_sizes(
+                std::slice::from_ref(&project),
+                &deck,
+                ScreenSize::new(100, 30)
+            ),
+            vec![Some(ScreenSize::new(58, 26))]
         );
         assert_eq!(
-            terminal_size(ScreenSize::new(99, 30)),
-            ScreenSize::new(99, 24)
+            terminal_sizes(
+                std::slice::from_ref(&project),
+                &deck,
+                ScreenSize::new(99, 30)
+            ),
+            vec![Some(ScreenSize::new(93, 24))]
         );
         assert_eq!(
-            terminal_size(ScreenSize::new(120, 13)),
-            ScreenSize::new(120, 7),
+            terminal_sizes(
+                std::slice::from_ref(&project),
+                &deck,
+                ScreenSize::new(120, 13)
+            ),
+            vec![Some(ScreenSize::new(114, 7))],
             "a wide window still falls back to narrow when too short"
+        );
+    }
+
+    #[test]
+    fn visible_panes_resize_after_layout_changes() {
+        let projects = [
+            Project {
+                terminal: TerminalId::new("first"),
+                path: PathBuf::from("/"),
+                command: vec!["sh".to_owned()],
+            },
+            Project {
+                terminal: TerminalId::new("second"),
+                path: PathBuf::from("/"),
+                command: vec!["sh".to_owned()],
+            },
+        ];
+        let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+        let mut deck = DeckState::new(projects.len());
+        let area = ScreenSize::new(144, 42);
+
+        assert!(resize_terminals(&mut engine, &projects, &deck, area));
+        let initial = terminal_sizes(&projects, &deck, area);
+        assert_eq!(
+            engine.frame(&projects[0].terminal).unwrap().size,
+            initial[0].unwrap()
+        );
+        assert_eq!(
+            engine.frame(&projects[1].terminal).unwrap().size,
+            ScreenSize::new(80, 24)
+        );
+
+        assert!(deck.toggle_collapse(1));
+        assert!(resize_terminals(&mut engine, &projects, &deck, area));
+        let expanded = terminal_sizes(&projects, &deck, area);
+        assert_eq!(
+            engine.frame(&projects[1].terminal).unwrap().size,
+            expanded[1].unwrap()
+        );
+
+        assert!(deck.set_master_ratio(0.55));
+        assert!(resize_terminals(&mut engine, &projects, &deck, area));
+        let dragged = terminal_sizes(&projects, &deck, area);
+        assert_eq!(
+            engine.frame(&projects[0].terminal).unwrap().size,
+            dragged[0].unwrap()
+        );
+        assert_eq!(
+            engine.frame(&projects[1].terminal).unwrap().size,
+            dragged[1].unwrap()
+        );
+
+        assert!(deck.promote(1, Timestamp::default()));
+        assert!(resize_terminals(&mut engine, &projects, &deck, area));
+        let promoted = terminal_sizes(&projects, &deck, area);
+        assert_eq!(
+            engine.frame(&projects[1].terminal).unwrap().size,
+            promoted[1].unwrap()
+        );
+
+        assert!(deck.apply(&ActionCommand::ToggleZoom, &projects, Timestamp::default()));
+        assert!(resize_terminals(&mut engine, &projects, &deck, area));
+        let zoomed = terminal_sizes(&projects, &deck, area);
+        assert_eq!(
+            engine.frame(&projects[1].terminal).unwrap().size,
+            zoomed[1].unwrap()
+        );
+
+        let resized = ScreenSize::new(120, 30);
+        assert!(resize_terminals(&mut engine, &projects, &deck, resized));
+        assert_eq!(
+            engine.frame(&projects[1].terminal).unwrap().size,
+            terminal_sizes(&projects, &deck, resized)[1].unwrap()
         );
     }
 
