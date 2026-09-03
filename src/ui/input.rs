@@ -479,11 +479,15 @@ mod tests {
     fn escape_aborts_a_pending_terminal_number() {
         let (mut input, mut deck, projects) = numbered_deck(16);
         input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
+        input.press(Key::Char('2'), &mut deck, &projects, NOW);
+        assert_eq!(deck.active(), Some(1));
+
+        input.press(Key::Ctrl('g'), &mut deck, &projects, NOW);
         input.press(Key::Char('1'), &mut deck, &projects, NOW);
-        input.press(Key::Escape, &mut deck, &projects, NOW);
+        assert_eq!(input.press(Key::Escape, &mut deck, &projects, NOW), None);
 
         assert!(!input.expire(&mut deck, &projects, Timestamp { unix_millis: 600 }));
-        assert_eq!(deck.active(), Some(0));
+        assert_eq!(deck.active(), Some(1), "Esc must not commit terminal 1");
         assert_eq!(deck.notice(), None);
     }
 
