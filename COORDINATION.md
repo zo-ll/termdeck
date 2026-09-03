@@ -59,7 +59,6 @@ scope.
 Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
 The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
 
-- 2026-09-02: #50 A3 (runtime add: + / ^g a chooser, dynamic spawn + re-layout, same-path instances) DISPATCHED to claude (coord/50-runtime-add).
 - 2026-09-02: #50 A3 done (claude `25fc0b0`: sheet ^g a/+ / enter/+ /o/esc, [.] lock relaxed, NativeEngine::add (only engine touch), push_terminal folded-append, -2/-3 vs running set; 214 tests) — critic full review + codex quick engine-seam check in parallel.
 - 2026-09-02: A3 MERGED via #58 (`9be6a0c`, 214 tests; codex engine approve; #50 closed; binary rebuilt — runtime add live). NB open: add-sheet mouse parity partial (+, -, filter, root-cycle, xN badge keyboard-only) — user decision pending. Next: A4 (integration) closes #42.
 - 2026-09-02: PARALLEL: claude → add-sheet mouse parity (coord/50-sheet-parity); codex → A4 integration/acceptance (coord/51-integration) — both working.
@@ -74,6 +73,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: DECLUTTER MERGED (PR #69 -> a048d76, 238 tests; binary rebuilt). Remaining: codex backend-impact scan (session.rs Deck::home sign-off + NB cleanup batch) after its ~2:56 PM reset.
 - 2026-09-03: declutter backend scan merged (PR #70 -> d63047d, 239; binary rebuilt). ONLY remaining: NB-cleanup batch to codex at ~14:56 reset (fresh session).
 - 2026-09-03: #75 merged (PR #76 -> 5a898eb, 243; #75 closed; binary rebuilt). #74 (scroll-stream) still open/parked — possibly resolved by the sizing fix; awaiting user decision to retry or close.
+- 2026-09-03: #74 + hotfix merged (7c2e469; main green 257; #74 closed). Alt-screen wheel forwarding live (#74), empty-stack (#76/#78), sizing (#75). Lesson: NEVER merge a red-gated branch (my sequence lapse caused the hotfix).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
