@@ -111,3 +111,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   (fresh boot incl. reinforced finish protocol), codex (terra HIGH/full
   access), claude (standby). Durable state (main 5e2efda 224 tests, journal,
   worktrees, issues) intact. User testing on the current binary.
+- 2026-09-03: DISPATCH LESSON — the double-Enter after prompt-target is ONLY
+  for claude (stubborn composer); for CODEX a single Enter submits, and a
+  second Enter re-submits the brief -> duplicate turn -> duplicate finish
+  ping (this caused the 64-live-tail twin pings). Use ONE Enter for codex.
