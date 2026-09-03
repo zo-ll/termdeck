@@ -571,3 +571,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: range-select critic PASS → pushed coord/49-range-select → PR #56. Follow-up queued (Shift+click twin + decoder/torn-guard tests).
 - 2026-09-02: #56 merged (`88bec35`, 195 tests); binary rebuilt (keyboard range live). Shift+click twin + decoder tests dispatched to claude (coord/49-shift-click).
 - 2026-09-02: shift+click twin done (claude `1bddfb2`: shared select_between, shift-on-release SGR bit 2, 4 decoder tests incl. torn-guard; note 7 pairs it; no fixture moved; 202 tests) — critic review.
+- 2026-09-02: Shift+click twin MERGED via #57 (`910c31d`, 203 tests) — binary rebuilt (full picker parity: Enter/arrows/o, shift+down/up + shift+click, mouse select incl folders, / filter, multi-instance). #42 remains: A3 (runtime add) + A4 (integration).
