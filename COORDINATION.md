@@ -125,3 +125,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   (locked-row Enter = add another instance; the [.] refusal is revised) +
   picker-like sheet navigation (→/←). Dispatched to codex
   (coord/67-sheet-reopen).
+- 2026-09-03: USER principle — file explorers must have NO restrictions:
+  the add-sheet allows any folder/repo (incl. already-open → new instance);
+  [.] lock removed; picker-like navigation. Amended 67-sheet-reopen brief
+  (interrupted the old-spec turn).
