@@ -152,3 +152,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   ways; needs non-active pending-number scenario). Correction-66 staged;
   deliver to codex ONLY when its 64-nbs turn completes (hard rule: no
   submit while working).
+- 2026-09-03: 64-nbs done (codex `996a379`: lean tail redraw + terminal
+  sizing; gate 228) → critic review (incl. contracts/engine.rs +2 and a
+  suspicious COORDINATION.md -8 in its diff). #66 escape-abort correction
+  delivered to codex (idle-verified).
