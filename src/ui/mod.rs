@@ -1198,7 +1198,7 @@ impl Deck<'_> {
         } else if exited {
             viewport.height = content.height.saturating_sub(2);
             self.exit_footer(buffer, content, &status, &metadata, background);
-        } else if !pane.master() && metadata.scrollback.lines_above > 0 {
+        } else if !pane.master() && metadata.scrollback.lines_below > 0 {
             viewport.height = content.height.saturating_sub(1);
             self.scroll_marker(buffer, content, &metadata, background);
         }
@@ -2138,7 +2138,10 @@ mod tests {
         SEPARATOR, STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
     };
     use crate::{
-        contracts::{ActionCommand, Project, TerminalEngine, TerminalId, TerminalStatus},
+        contracts::{
+            ActionCommand, Project, ScrollbackPosition, TerminalEngine, TerminalId,
+            TerminalMetadata, TerminalStatus,
+        },
         engine::FakeEngine,
     };
 
@@ -3139,12 +3142,35 @@ mod tests {
 
     #[test]
     fn a_preview_holding_history_says_how_far_back_it_is() {
-        let (buffer, _) = render(&fixture::backend_promoted(), &promote(1), (144, 42));
+        let mut engine = fixture::backend_promoted();
+        engine.set_metadata(
+            &TerminalId::new("frontend"),
+            TerminalMetadata {
+                scrollback: ScrollbackPosition {
+                    lines_above: 214,
+                    lines_below: 1,
+                },
+                ..TerminalMetadata::default()
+            },
+        );
+        let (buffer, _) = render(&engine, &promote(1), (144, 42));
 
         assert!(
             text(&buffer).contains("↑ 214 lines above · ^g ["),
             "{}",
             text(&buffer)
+        );
+    }
+
+    #[test]
+    fn a_live_preview_keeps_its_last_terminal_row() {
+        let (buffer, _) = render(&fixture::backend_promoted(), &promote(1), (144, 42));
+        let screen = text(&buffer);
+
+        assert!(!screen.contains("↑ 214 lines above · ^g ["), "{screen}");
+        assert!(
+            screen.contains("➜  press h + enter to show help"),
+            "{screen}"
         );
     }
 

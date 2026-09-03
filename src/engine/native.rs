@@ -87,6 +87,7 @@ impl NativeTerminal {
         match event {
             PtyEvent::Output { terminal, bytes } if self.owns(&terminal) => {
                 self.frame = self.adapter.feed(&bytes);
+                self.metadata.scrollback = self.adapter.scrollback_position();
                 self.metadata.bytes_written = self
                     .metadata
                     .bytes_written
