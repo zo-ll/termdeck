@@ -118,3 +118,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: #64 BLOCK (critic): snap inert (revert-pass), runtime-add raw
   size hides prompt, metadata refresh loses preview marker/row at tail.
   Correction-64 routed to codex (single-Enter deliver, no finish re-run).
+- 2026-09-03: USER — Ctrl+g N promotes by terminal NUMBER (not 1-4 only;
+  deck has 16). Dispatched to codex (coord/66-promote-n): digit-sequence
+  capture (~600ms), clamp, hint, tests.
