@@ -1239,11 +1239,16 @@ impl Deck<'_> {
             // so it takes what the budget holds and truncates right-first.
             let fixed: usize = spans.iter().map(|span| span.content.chars().count()).sum();
             let room = (budget as usize).saturating_sub(fixed + separator.chars().count());
-            spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
-            spans.push(Span::styled(
-                clip(&self.command(project, metadata, pane), room),
-                Style::new().fg(MUTED),
-            ));
+            // A separator with nothing after it states nothing, so the two go
+            // together — the rule the collapsed strip's tail already follows.
+            // Below two columns all the command could say is a bare `…`.
+            if room > 1 {
+                spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
+                spans.push(Span::styled(
+                    clip(&self.command(project, metadata, pane), room),
+                    Style::new().fg(MUTED),
+                ));
+            }
         }
         spans
     }
@@ -3183,6 +3188,49 @@ mod tests {
             "{}",
             text(&buffer)
         );
+    }
+
+    /// A master title whose name eats the budget drops the command and its
+    /// separator together. Leaving the separator behind printed `·` with
+    /// nothing after it, which states nothing.
+    #[test]
+    fn a_title_with_no_room_for_the_command_drops_its_separator_too() {
+        for len in 30..=45usize {
+            let projects = vec![Project {
+                terminal: TerminalId::new("a".repeat(len)),
+                path: std::path::PathBuf::from("/tmp/x"),
+                command: vec!["pnpm".into(), "dev".into()],
+            }];
+            let backend = ratatui::backend::TestBackend::new(100, 30);
+            let mut term = ratatui::Terminal::new(backend).unwrap();
+            term.draw(|frame| {
+                Deck {
+                    workspace: "w",
+                    projects: &projects,
+                    state: &DeckState::new(1),
+                    master_ratio: super::DEFAULT_MASTER_RATIO,
+                    now: fixture::NOW,
+                }
+                .render(&fixture::frontend_active(), frame);
+            })
+            .unwrap();
+            let title: String = (0..100u16)
+                .map(|x| term.backend().buffer()[(x, 0u16)].symbol())
+                .collect();
+            // The glyph may still be clipped by the frame at the widest
+            // names; what must never appear is the command's own separator
+            // sitting after the glyph with nothing following it.
+            let head = title.split('[').next().unwrap_or("").trim_end();
+            // Only titles that still fit their glyph are this test's business.
+            // Past that the frame's own `set_line` clamp cuts the title, which
+            // it did before this pass too and is not what is pinned here.
+            if head.contains('○') {
+                assert!(
+                    !head.trim_end().ends_with('·'),
+                    "name of {len} leaves a dangling separator: {head}"
+                );
+            }
+        }
     }
 
     fn opened(action: ActionCommand) -> DeckState {
