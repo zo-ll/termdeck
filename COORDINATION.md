@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: DONE — all 14 issues closed; full repo delivered
+Status: ACTIVE — tracker on GitHub (issues #33
 
 ## Goal
 
