@@ -287,3 +287,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: #82 CI done (8f30398+20b0d87; gate green, --all-features;
   triggers every push/PR) — critic review; merge on user go (do-not-dispatch
   honored: not yet merged).
+- 2026-09-03: PARKED also #81 + #82 (user) — both worktrees/branches removed
+  locally (remote branches kept same as others). ONLY #33/#71/#72 parked
+  remain. All workers stopped; main green 257.
