@@ -33,6 +33,8 @@ pub enum EngineCommand {
 /// State changes emitted by a terminal engine.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EngineEvent {
+    /// A redraw signal. At the live tail it may carry cells identical to the
+    /// previous frame, so consumers must not infer a content change from it.
     FrameReady(TerminalFrame),
     StatusChanged {
         terminal: TerminalId,
