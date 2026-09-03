@@ -129,3 +129,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   the add-sheet allows any folder/repo (incl. already-open → new instance);
   [.] lock removed; picker-like navigation. Amended 67-sheet-reopen brief
   (interrupted the old-spec turn).
+- 2026-09-03: PROCESS RULE (user): never steer a running worker — new/changed
+  specs are sent only when the current task is WITH THE CRITIC. Patched into
+  the coordinator skill. (Applied going forward; the #67 amendment already
+  in-flight runs as the current task.)
