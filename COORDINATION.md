@@ -233,3 +233,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   termdeck user WITHOUT the coordinator skills — design = `termdeck notify`
   (documented) + implicit BEL/OSC-777 decode so any agent works; design-
   first-vs-direct still open.
+- 2026-09-03: Notification feature PARKED for research (user unsure) — issue
+  opened on GH (generic-user spec: termdeck notify + BEL/OSC-777 decode;
+  design questions listed). No dispatch until the user decides.
