@@ -106,3 +106,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   (no input route exists) — re-scope to a state-level parity pin routed to
   codex (correction). Critic finish-protocol slipped (no ping/marker) —
   reminder re-sent. Target: re-review then merge #63.
+- 2026-09-03: REBOOT/RESTORE — environment was reset again (tmux + /tmp
+  wiped). Restored: coordinator (this), relay (from skill script), critic
+  (fresh boot incl. reinforced finish protocol), codex (terra HIGH/full
+  access), claude (standby). Durable state (main 5e2efda 224 tests, journal,
+  worktrees, issues) intact. User testing on the current binary.
