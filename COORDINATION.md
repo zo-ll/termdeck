@@ -252,3 +252,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: USER STOPPED codex — #74 (scroll-stream) interrupted; no
   work done (was ~7s in). Issue #74 remains OPEN, undispatchded; revisit
   when the user decides.
+- 2026-09-03: #75 dispatched to codex (coord/75-app-width): PTY size must
+  equal the VISIBLE master area (chrome excluded) so full-screen apps aren't
+  width-cut; folds in #74's scroll report (likely same sizing root); #74
+  itself remains open, parked (user stopped it earlier).
