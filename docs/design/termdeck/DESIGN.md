@@ -62,13 +62,53 @@ canvas without coordinator approval.
 
 ## Pane information
 
-Every pane title shows terminal name, shortened working directory, and status.
-The master may show the complete title. Previews truncate long paths from the
-left while preserving the repository name.
+Every pane title shows the terminal number, its name, and its status. The
+master adds the command it is running, and zoom adds the pid and uptime behind
+it. The command is the only elastic field and truncates right-first.
 
 Statuses must distinguish starting, running, recent activity, and exited with
 an exit code. Activity should use a quiet color or glyph change rather than
-continuous animation.
+continuous animation. A live state is carried by the glyph alone; only an exit
+is also named in words.
+
+### Declutter pass (2026-09-03)
+
+The canvas was edited to take repeated and inferable chrome out of the session
+frame. This is authoritative and supersedes the export's own specification
+panel wherever the two disagree — the panel was not edited with the screens and
+still describes the pre-pass chrome in three places, noted below.
+
+Removed:
+
+- The working directory from every pane title, master and preview, wide and
+  narrow. The number and the name identify the terminal; the path was the field
+  that shrank to `…/name` on anything but a full-width master anyway. The
+  export's `TITLE FORMAT` panel still shows `· {cwd} ·`.
+- The `running` / `starting` word after the status glyph. The glyph says it.
+- The `MASTER` tag in the master's right-hand slot. Four cues already state
+  focus: the teal border, the `>` caret, full-contrast foreground, and the
+  status-bar pointer. `ZOOM` stays, because nothing else states zoom. The
+  export's `TITLE FORMAT` panel still says the slot carries `MASTER / ZOOM`.
+- The stack footer's `ctrl+g N promote · j/k cycle` and its
+  `promoted {name} · ^g 1 back` demotion line. The demoted pane's own 1.5s
+  highlight reports the swap, and the keys live in the help overlay. The footer
+  keeps the two censuses it earns: hidden previews, then folds.
+- The `{n} stacked` census in the status bar, which the `{n} terminals` count
+  beside it already implies. The exit summary that followed it stays.
+- `^g N select` and `^g [ scroll` from the status bar's key row. Both stay
+  bound, stay in the help overlay, and stay in the narrow collapsed row; the
+  pane numbers and the scrollback marker already point at them.
+
+Consequence for the responsive ladder: at four keys the bare key row is
+narrower than the collapsed `^g j/k · N · z · [ · ? · q` form, so that form
+is now reached only by the narrow layout, which is where the export shows it.
+
+The runtime-add sheet (screen 08) was not edited in the pass, and its mockup
+still *depicts* a background session whose master title carries a `cwd`. That
+is stale mockup decoration, not a second title format: the sheet is composited
+over a live render of the ordinary deck (`Deck::render`, then `Sheet::render`
+on top, `src/session.rs`), so what actually sits behind the sheet is the
+decluttered title. No pane in the running program draws a working directory.
 
 ## Required reference states
 

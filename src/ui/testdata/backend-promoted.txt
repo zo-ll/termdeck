@@ -1,4 +1,4 @@
-┌─ > 2 backend  ·  ~/idp/backend  ·  ● running  ·  uv run api ───────────────── [##····] MASTER ─┐│ ┌─ ▾ 1 frontend · …/fronte… · ●  [####··] ─┐
+┌─ > 2 backend  ·  ●  ·  uv run api ────────────────────────────────────────────────── [##····] ─┐│ ┌─ ▾ 1 frontend · ● ──────────── [####··] ─┐
 │    INFO  Server running on                                                                     ││ │  $ pnpm dev                              │
 │          [http://127.0.0.1:8000]                                                               ││ │                                          │
 │                                                                                                ││ │  > idp-frontend@0.4.2 dev                │
@@ -37,6 +37,6 @@
 │                                                                                                ││                                             
 │                                                                                                ││   ▸ 4 worker · ○ · idle 6m                  
 │                                                                                                ││                                             
-└────────────────────────────────────────────────────────────────────────────────────────────────┘│  promoted backend · ^g 1 back               
+└────────────────────────────────────────────────────────────────────────────────────────────────┘│  2 collapsed · ^g c expand all              
                                                                                                                                                 
-   idp   4 terminals   > 2 backend  ·  + add  ·  1 open  ·  2 collapsed                                   ^g j/k  ^g N  ^g c  ^g z  ^g ?  ^g q  
+   idp   4 terminals   > 2 backend  ·  + add  ·  1 open  ·  2 collapsed          ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  

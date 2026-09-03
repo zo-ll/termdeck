@@ -364,7 +364,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     workspace: &workspace.name,
                                     projects: &projects,
                                     state: &deck,
-                                    home: None,
                                     master_ratio: deck.master_ratio(),
                                     now: now(),
                                 }
@@ -397,7 +396,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 workspace: &workspace.name,
                                 projects: &projects,
                                 state: &deck,
-                                home: None,
                                 master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
@@ -445,7 +443,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 workspace: &workspace.name,
                                 projects: &projects,
                                 state: &deck,
-                                home: None,
                                 master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
@@ -468,7 +465,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 workspace: &workspace.name,
                                 projects: &projects,
                                 state: &deck,
-                                home: None,
                                 master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
@@ -549,9 +545,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     workspace: &workspace.name,
                     projects: &projects,
                     state: &deck,
-                    home: std::env::var_os("HOME")
-                        .as_deref()
-                        .map(std::path::Path::new),
                     master_ratio: deck.master_ratio(),
                     now: now(),
                 }
