@@ -188,3 +188,9 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   near limit); coordinator holds durable memory. Applied: nb-cleanup will
   use a FRESH codex session after the 2:56 PM reset (the old limited session
   is discarded).
+- 2026-09-03: Claude's UI-DECLUTTER implemented as d25c97f on the STALE
+  coord/50-runtime-add branch (needs re-root onto current main for review).
+  Claude FLAGGED cross-ownership: touched src/session.rs (codex lane) to drop
+  Deck::home/abbreviate + HOME lookup — pending the backend-impact scan.
+  No ping due to missing finish protocol (fresh session) — protocol delivered
+  to claude now; it must not push.
