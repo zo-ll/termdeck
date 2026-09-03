@@ -138,3 +138,24 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   Verify idle (prompt, no working/queued state) before every dispatch.
   Current: codex STOPPED at prompt, idle; #66 (dirty tree, red gate) and #67
   (not started) both pending the user's direction.
+- 2026-09-03: #66 REDO (from scratch, fresh branch; partial discarded) —
+  dispatched to codex (idle-verified per the hard rule): Ctrl+g N digits
+  (~600ms), clamping, DELIBERATE fixture re-bless (hint '1-4'->'N' affects
+  many status rows). #67 scheduled AFTER #66 merges (user sequence).
+- 2026-09-03: #66 done fresh (codex `914aa80`, 234 tests; hint fixtures
+  re-blessed) — critic review.
+- 2026-09-03: #64's 5 non-blocking findings dispatched to codex (idle;
+  coord/64-nbs) BEFORE #67 per user: inert snap couplet, terminal_size test
+  gaps, WIDTH-only chrome (short-wide window hides prompt), double FrameReady
+  nit, tail-redraw contract comment.
+- 2026-09-03: #66 critic BLOCK (escape-abort test weakened — passes both
+  ways; needs non-active pending-number scenario). Correction-66 staged;
+  deliver to codex ONLY when its 64-nbs turn completes (hard rule: no
+  submit while working).
+- 2026-09-03: 64-nbs done (codex `996a379`: lean tail redraw + terminal
+  sizing; gate 228) → critic review (incl. contracts/engine.rs +2 and a
+  suspicious COORDINATION.md -8 in its diff). #66 escape-abort correction
+  delivered to codex (idle-verified).
+- 2026-09-03: 64-nbs MERGED (PR #66 -> 03066d7, 228; residual NB
+  feed-while-scrolled pin gap recorded). #66 promote-n re-review queued.
+  #67 after #66 merges.
