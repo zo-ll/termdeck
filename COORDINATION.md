@@ -207,3 +207,14 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   scan (codex) still after reset.
 - 2026-09-03: coord/declutter integrated (022c691, 238 tests; session.rs
   -7 dead-field removal carried; NB#1 fixed) — critic re-review queued.
+## NEXT ACTIONS (resume here if coordinator context resets)
+1. codex RESET ~14:56 — dispatch TWO fresh-session tasks (fresh-per-task
+   policy): (a) backend-impact scan of the declutter incl. session.rs
+   Deck::home/abbreviate removal sign-off (coord/backend-scan); (b) the NB
+   cleanup batch (coord/nb-cleanup: A1 DEFAULT_SCROLLBACK + expect(),
+   feed-while-scrolled pin, #13 footer helper, declutter DESIGN.md residual
+   NBs, #9 resize-scrollback resolve/retire).
+2. Then merge those (critic pass each, coordinator pushes/merges).
+3. User is TESTING the decluttered binary (238 tests, main a048d76).
+4. Worker protocol in effect: fresh session per task; only give work to
+   IDLE workers; single-write finish protocol (inbox ping + marker).
