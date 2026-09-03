@@ -228,3 +228,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: NB-cleanup dispatched to a FRESH codex session (coord/nb-cleanup
   reset onto main a68abf5; brief incl. the declutter 40+-name clamp NB).
   Reset confirmed by user.
+- 2026-09-03 15:07: NB-cleanup done (codex d9bd013, 242 tests; ping logged
+  DELIVER) — critic review. NOTIFICATION feature (user): assume a GENERIC
+  termdeck user WITHOUT the coordinator skills — design = `termdeck notify`
+  (documented) + implicit BEL/OSC-777 decode so any agent works; design-
+  first-vs-direct still open.
