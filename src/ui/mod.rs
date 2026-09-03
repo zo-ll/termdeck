@@ -969,7 +969,7 @@ impl Deck<'_> {
             ],
             _ => vec![
                 Span::styled("ctrl+g ", Style::new().fg(HINT)),
-                Span::styled("1-4", Style::new().fg(PREVIEW_FG)),
+                Span::styled("N", Style::new().fg(PREVIEW_FG)),
                 Span::styled(" promote · ", Style::new().fg(HINT)),
                 Span::styled("j/k", Style::new().fg(PREVIEW_FG)),
                 Span::styled(" cycle", Style::new().fg(HINT)),
@@ -1487,7 +1487,7 @@ impl Deck<'_> {
                 .add_modifier(Modifier::BOLD),
         );
 
-        let left = if layout == Layout::Narrow {
+        let mut left = if layout == Layout::Narrow {
             // The compact line trades the terminal census for the reason the
             // stack is missing.
             Line::from(vec![
@@ -1554,6 +1554,13 @@ impl Deck<'_> {
             }
             Line::from(spans)
         };
+        if let Some(notice) = self.state.notice() {
+            left.spans.push(Span::styled("  ·  ", hint));
+            left.spans.push(Span::styled(
+                notice.to_owned(),
+                Style::new().fg(WARNING).bg(STATUS_BG),
+            ));
+        }
         let taken = left.width() as u16;
         buffer.set_line(area.x + PADDING, area.y, &left, area.width);
 
@@ -1645,7 +1652,7 @@ impl Deck<'_> {
         let collapsed = Line::from(vec![
             Span::styled("^g", Style::new().fg(PREVIEW_FG).bg(STATUS_BG)),
             Span::styled(
-                " j/k · 1-4 · z · [ · ? · q",
+                " j/k · N · z · [ · ? · q",
                 Style::new().fg(HINT).bg(STATUS_BG),
             ),
         ]);
@@ -1881,7 +1888,7 @@ const HELP: [(&str, &str); 17] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
-    ("^g 1 … ^g 4", "promote by configured position"),
+    ("^g N", "promote terminal number"),
     ("VIEW", ""),
     ("^g z", "toggle zoom"),
     ("^g c", "collapse / expand previews"),
@@ -1909,7 +1916,7 @@ const SCROLLBACK_HINTS: [(&str, &str); 5] = [
 
 const KEY_HINTS: [(&str, &str); 6] = [
     ("^g j/k", "switch"),
-    ("^g 1-4", "select"),
+    ("^g N", "select"),
     ("^g z", "zoom"),
     ("^g [", "scroll"),
     ("^g ?", "help"),
@@ -2368,7 +2375,7 @@ mod tests {
                 .map(|x| buffer[(x, 39u16)].symbol())
                 .collect::<String>();
             let expected = if folds == 0 {
-                "ctrl+g 1-4 promote · j/k cycle".to_owned()
+                "ctrl+g N promote · j/k cycle".to_owned()
             } else {
                 format!("{folds} collapsed · ^g c expand all")
             };
@@ -3188,17 +3195,31 @@ mod tests {
         let keys_only = render(&fixture::frontend_active(), &state, (128, 42)).0;
         let collapsed = render(&fixture::frontend_active(), &state, (100, 42)).0;
 
-        assert!(text(&labelled).contains("^g j/k switch  ^g 1-4 select"));
+        assert!(text(&labelled).contains("^g j/k switch  ^g N select"));
         let keys = text(&keys_only);
         assert!(
-            keys.contains("^g j/k  ^g 1-4  ^g z  ^g [  ^g ?  ^g q"),
+            keys.contains("^g j/k  ^g N  ^g z  ^g [  ^g ?  ^g q"),
             "{keys}"
         );
         assert!(!keys.contains("switch"), "{keys}");
         assert!(
-            text(&collapsed).contains("^g j/k · 1-4 · z · [ · ? · q"),
+            text(&collapsed).contains("^g j/k · N · z · [ · ? · q"),
             "{}",
             text(&collapsed)
+        );
+    }
+
+    #[test]
+    fn a_rejected_terminal_number_is_visible_in_the_status_row() {
+        let mut state = expanded(4);
+        state.set_notice("terminal 19 unavailable".to_owned());
+
+        let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+        assert!(
+            text(&buffer).contains("terminal 19 unavailable"),
+            "{}",
+            text(&buffer)
         );
     }
 
@@ -3352,7 +3373,7 @@ mod tests {
             "{screen}"
         );
         assert!(screen.contains("stack hidden"), "{screen}");
-        assert!(screen.contains("^g j/k · 1-4 · z · [ · ? · q"), "{screen}");
+        assert!(screen.contains("^g j/k · N · z · [ · ? · q"), "{screen}");
         // The active chip and the warning both carry their accepted colours.
         assert_eq!(buffer[(1u16, 0u16)].bg, ACCENT);
         assert_eq!(buffer[(14u16, 0u16)].bg, CHIP_BG);

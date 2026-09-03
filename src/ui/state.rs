@@ -79,6 +79,7 @@ pub struct DeckState {
     stack_offset: usize,
     master_ratio: f64,
     resizing: bool,
+    notice: Option<String>,
 }
 
 impl DeckState {
@@ -107,6 +108,7 @@ impl DeckState {
             stack_offset: 0,
             master_ratio: DEFAULT_MASTER_RATIO,
             resizing: false,
+            notice: None,
         }
     }
 
@@ -159,6 +161,19 @@ impl DeckState {
     /// the drag; the ratio itself is set by the moves in between.
     pub fn set_resizing(&mut self, resizing: bool) {
         self.resizing = resizing;
+    }
+
+    /// A short status message for a rejected outer-interface command.
+    pub fn set_notice(&mut self, notice: String) {
+        self.notice = Some(notice);
+    }
+
+    pub fn clear_notice(&mut self) {
+        self.notice = None;
+    }
+
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
     }
 
     /// Appends a terminal to the deck and returns the position it took.
@@ -318,9 +333,8 @@ impl DeckState {
 
     /// Applies one outer-interface action. Returns whether anything changed.
     ///
-    /// `SelectPosition` carries a zero-based configured position: the `1..4`
-    /// keys select `0..3`. `RespawnActive` needs the engine, so it is not this
-    /// type's concern and is ignored.
+    /// `SelectPosition` carries a zero-based configured position. The input
+    /// layer turns the user's one-based terminal number into this value.
     pub fn apply(&mut self, action: &ActionCommand, projects: &[Project], now: Timestamp) -> bool {
         match action {
             ActionCommand::SelectNext => self.step(1, now),

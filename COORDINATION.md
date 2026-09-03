@@ -121,3 +121,57 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: USER — Ctrl+g N promotes by terminal NUMBER (not 1-4 only;
   deck has 16). Dispatched to codex (coord/66-promote-n): digit-sequence
   capture (~600ms), clamp, hint, tests.
+- 2026-09-03: USER — ^g a sheet must allow RE-OPENING an already-open path
+  (locked-row Enter = add another instance; the [.] refusal is revised) +
+  picker-like sheet navigation (→/←). Dispatched to codex
+  (coord/67-sheet-reopen).
+- 2026-09-03: USER principle — file explorers must have NO restrictions:
+  the add-sheet allows any folder/repo (incl. already-open → new instance);
+  [.] lock removed; picker-like navigation. Amended 67-sheet-reopen brief
+  (interrupted the old-spec turn).
+- 2026-09-03: PROCESS RULE (user): never steer a running worker — new/changed
+  specs are sent only when the current task is WITH THE CRITIC. Patched into
+  the coordinator skill. (Applied going forward; the #67 amendment already
+  in-flight runs as the current task.)
+- 2026-09-03: HARD RULE (user) for the coordinator: never submit anything
+  to a worker while it is working; only give work when the worker is idle.
+  Verify idle (prompt, no working/queued state) before every dispatch.
+  Current: codex STOPPED at prompt, idle; #66 (dirty tree, red gate) and #67
+  (not started) both pending the user's direction.
+- 2026-09-03: #66 REDO (from scratch, fresh branch; partial discarded) —
+  dispatched to codex (idle-verified per the hard rule): Ctrl+g N digits
+  (~600ms), clamping, DELIBERATE fixture re-bless (hint '1-4'->'N' affects
+  many status rows). #67 scheduled AFTER #66 merges (user sequence).
+- 2026-09-03: #66 done fresh (codex `914aa80`, 234 tests; hint fixtures
+  re-blessed) — critic review.
+- 2026-09-03: #64's 5 non-blocking findings dispatched to codex (idle;
+  coord/64-nbs) BEFORE #67 per user: inert snap couplet, terminal_size test
+  gaps, WIDTH-only chrome (short-wide window hides prompt), double FrameReady
+  nit, tail-redraw contract comment.
+- 2026-09-03: #66 critic BLOCK (escape-abort test weakened — passes both
+  ways; needs non-active pending-number scenario). Correction-66 staged;
+  deliver to codex ONLY when its 64-nbs turn completes (hard rule: no
+  submit while working).
+- 2026-09-03: 64-nbs done (codex `996a379`: lean tail redraw + terminal
+  sizing; gate 228) → critic review (incl. contracts/engine.rs +2 and a
+  suspicious COORDINATION.md -8 in its diff). #66 escape-abort correction
+  delivered to codex (idle-verified).
+- 2026-09-03: 64-nbs MERGED (PR #66 -> 03066d7, 228; residual NB
+  feed-while-scrolled pin gap recorded). #66 promote-n re-review queued.
+  #67 after #66 merges.
+- 2026-09-03: #66 (promote-n) needs main-integration — merge of origin/main
+  conflicted in session.rs (vs 64-nbs); integration routed to codex (idle).
+  Plan: resolve+gate+merge commit -> I merge PR #67 -> then #67 (sheet) to
+  codex.
+- 2026-09-03: #66 merged (PR #67 -> 0fd1800, 234; binary rebuilt — Ctrl+g N
+  live). #67-sheet (unrestricted + nav) dispatched to codex (idle-verified;
+  note: codex <25% of 5h limit). Claude: UI-declutter DESIGN task via the
+  claude_design MCP — nudged to submit; running separately.
+- PENDING (user): AFTER claude's UI-declutter design lands, CHECK whether the
+  removals/simplifications in the design affect BACKEND code (session.rs /
+  engine / contracts / input) — a UI declutter can orphan or contradict
+  backend seams. Route the scan to codex (engine lane) before/with any
+  implementation of the declutter.
+- 2026-09-03: #67-sheet done (codex ec62ae2: unrestricted sheet + folder
+  targets, reuses PickerState) — critic review; branch base is old — main
+  integration after review (conflicts possible vs 64-nbs/#66).

@@ -1,7 +1,6 @@
 //! The interactive composition root: terminal mode, event loop, UI, and PTYs.
 
 use std::{
-    collections::BTreeSet,
     error::Error,
     io::{self, Read, Write},
     panic,
@@ -23,8 +22,8 @@ use ratatui::{
 use crate::{
     config::Workspace,
     contracts::{
-        EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
-        Timestamp, UserCommand,
+        EngineCommand, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId, Timestamp,
+        UserCommand,
     },
     engine::NativeEngine,
     ui::{
@@ -219,16 +218,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let _signals = SignalGuard::install()?;
     let outer = OuterTerminal::enter()?;
     let mut size = screen_size()?;
-    let mut engine = NativeEngine::spawn(&workspace.projects, terminal_size(size))
+    let mut engine = spawn_terminals(&workspace.projects, size)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     // The workspace opened this list; `^g a` can lengthen it, so the session
     // owns it from here (#50 A3).
     let mut projects = workspace.projects.clone();
-    let mut live_tails = projects
-        .iter()
-        .map(|project| project.terminal.clone())
-        .collect::<BTreeSet<_>>();
     // The configuration seeds the split; the divider owns it from there.
     let mut deck = DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get());
     let mut input = Input::new(size.rows.saturating_sub(4));
@@ -248,24 +243,14 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         }
         let current_size = screen_size()?;
         if current_size != size {
-            for project in &projects {
-                engine.dispatch(EngineCommand::Resize {
-                    terminal: project.terminal.clone(),
-                    size: terminal_size(current_size),
-                });
-            }
+            resize_terminals(&mut engine, &projects, current_size);
             input.set_page(current_size.rows.saturating_sub(4));
             size = current_size;
             terminal.autoresize()?;
             dirty = true;
         }
-        let events = engine.drain_events();
-        for event in &events {
-            if let EngineEvent::FrameReady(frame) = event {
-                follow_live_output(&mut engine, &live_tails, &frame.terminal);
-            }
-        }
-        dirty |= !events.is_empty();
+        dirty |= !engine.drain_events().is_empty();
+        dirty |= input.expire(&mut deck, &projects, now());
 
         for event in keys.read(POLL_INTERVAL)? {
             dirty = true;
@@ -311,7 +296,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         for project in chosen(open_sheet, &projects) {
                             match add_terminal(&mut engine, project.clone(), size) {
                                 Ok(()) => {
-                                    live_tails.insert(project.terminal.clone());
                                     projects.push(project);
                                     deck.push_terminal();
                                 }
@@ -342,7 +326,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     {
                         dispatch_scroll(
                             &mut engine,
-                            &mut live_tails,
                             projects[active].terminal.clone(),
                             ScrollCommand::Bottom,
                         );
@@ -358,7 +341,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 };
                                 dispatch_live_input(
                                     &mut engine,
-                                    &mut live_tails,
                                     projects[active].terminal.clone(),
                                     bytes,
                                 );
@@ -369,7 +351,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             if let Some(active) = deck.active() {
                                 dispatch_scroll(
                                     &mut engine,
-                                    &mut live_tails,
                                     projects[active].terminal.clone(),
                                     command,
                                 );
@@ -434,7 +415,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             (terminal, list)
                         };
                         if let Some(terminal) = terminal {
-                            dispatch_scroll(&mut engine, &mut live_tails, terminal, command);
+                            dispatch_scroll(&mut engine, terminal, command);
                         } else if let Some(window) = list {
                             let items = match command {
                                 ScrollCommand::Up(_) => -1,
@@ -555,7 +536,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     {
                         dispatch_live_input(
                             &mut engine,
-                            &mut live_tails,
                             projects[active].terminal.clone(),
                             text.into_bytes(),
                         );
@@ -615,50 +595,28 @@ fn now() -> Timestamp {
 /// scrolling deliberately has no modal state, unlike keyboard scrollback.
 fn dispatch_live_input(
     engine: &mut dyn TerminalEngine,
-    live_tails: &mut BTreeSet<TerminalId>,
     terminal: crate::contracts::TerminalId,
     bytes: Vec<u8>,
 ) {
-    dispatch_scroll(engine, live_tails, terminal.clone(), ScrollCommand::Bottom);
+    dispatch_scroll(engine, terminal.clone(), ScrollCommand::Bottom);
     engine.dispatch(EngineCommand::Input { terminal, bytes });
 }
 
-/// Output follows only terminals that were left at their live tail. The
-/// returned frame is the observable redraw which seats the prompt at bottom.
-fn follow_live_output(
-    engine: &mut dyn TerminalEngine,
-    live_tails: &BTreeSet<TerminalId>,
-    terminal: &TerminalId,
-) -> Vec<EngineEvent> {
-    if live_tails.contains(terminal) {
-        engine.dispatch(EngineCommand::Scroll {
-            terminal: terminal.clone(),
-            command: ScrollCommand::Bottom,
-        })
-    } else {
-        Vec::new()
-    }
+fn dispatch_scroll(engine: &mut dyn TerminalEngine, terminal: TerminalId, command: ScrollCommand) {
+    engine.dispatch(EngineCommand::Scroll { terminal, command });
 }
 
-/// Records whether a wheel or keyboard movement leaves this terminal at the
-/// live tail, so asynchronous output can follow only that state.
-fn dispatch_scroll(
-    engine: &mut dyn TerminalEngine,
-    live_tails: &mut BTreeSet<TerminalId>,
-    terminal: TerminalId,
-    command: ScrollCommand,
-) {
-    engine.dispatch(EngineCommand::Scroll {
-        terminal: terminal.clone(),
-        command,
-    });
-    if engine
-        .metadata(&terminal)
-        .is_some_and(|metadata| metadata.scrollback.lines_below == 0)
-    {
-        live_tails.insert(terminal);
-    } else {
-        live_tails.remove(&terminal);
+fn spawn_terminals(projects: &[Project], size: ScreenSize) -> Result<NativeEngine, String> {
+    NativeEngine::spawn(projects, terminal_size(size))
+}
+
+fn resize_terminals(engine: &mut dyn TerminalEngine, projects: &[Project], size: ScreenSize) {
+    let size = terminal_size(size);
+    for project in projects {
+        engine.dispatch(EngineCommand::Resize {
+            terminal: project.terminal.clone(),
+            size,
+        });
     }
 }
 
@@ -672,9 +630,12 @@ fn add_terminal(
 
 /// The deck reserves a blank row and a status row, and the master pane adds a
 /// border above and below its terminal cells. The narrow pane strip takes two
-/// further rows before the master.
+/// further rows before the master. Its height threshold mirrors
+/// `Deck::layout`: a short wide screen is narrow too.
 fn terminal_size(size: ScreenSize) -> ScreenSize {
-    let chrome = if size.columns < 100 { 6 } else { 4 };
+    let narrow = size.columns < 100
+        || size.rows.saturating_sub(2) < if size.columns >= 120 { 12 + 2 } else { 9 + 2 };
+    let chrome = if narrow { 6 } else { 4 };
     ScreenSize::new(size.columns, size.rows.saturating_sub(chrome).max(1))
 }
 
@@ -1184,18 +1145,18 @@ fn colour(colour: Color, foreground: bool) -> String {
 mod tests {
     use super::{
         InputEvent, KeyReader, MouseAction, add_terminal, chosen, dispatch_live_input,
-        follow_live_output, mouse_action, open_terminals, terminal_size,
+        mouse_action, open_terminals, resize_terminals, spawn_terminals, terminal_size,
     };
     use crate::{
         contracts::{
-            ActionCommand, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
-            ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
+            ActionCommand, EngineCommand, Project, ScreenSize, ScrollCommand, ScrollbackPosition,
+            TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
         },
-        engine::{FakeEngine, NativeEngine},
+        engine::FakeEngine,
         ui::{DeckState, Key, SheetState},
     };
     use ratatui::layout::Position;
-    use std::{collections::BTreeSet, path::PathBuf};
+    use std::path::PathBuf;
 
     #[test]
     fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
@@ -1494,56 +1455,13 @@ mod tests {
             },
         );
 
-        let mut live_tails = BTreeSet::new();
-        dispatch_live_input(
-            &mut engine,
-            &mut live_tails,
-            terminal.clone(),
-            b"echo live\r".to_vec(),
-        );
+        dispatch_live_input(&mut engine, terminal.clone(), b"echo live\r".to_vec());
 
         assert_eq!(
             engine.metadata(&terminal).unwrap().scrollback.lines_below,
             0
         );
         assert_eq!(engine.input(), &[(terminal, b"echo live\r".to_vec())]);
-    }
-
-    #[test]
-    fn output_frame_returns_only_a_live_terminal_to_bottom() {
-        let terminal = TerminalId::new("frontend");
-        let mut engine = FakeEngine::new([terminal.clone()]);
-        engine.set_metadata(
-            &terminal,
-            TerminalMetadata {
-                scrollback: ScrollbackPosition {
-                    lines_above: 2_179,
-                    lines_below: 3,
-                },
-                ..TerminalMetadata::default()
-            },
-        );
-        let live_tails = BTreeSet::from([terminal.clone()]);
-
-        assert!(follow_live_output(&mut engine, &BTreeSet::new(), &terminal).is_empty());
-        assert_eq!(
-            engine.metadata(&terminal).unwrap().scrollback.lines_below,
-            3
-        );
-
-        let redraw = follow_live_output(&mut engine, &live_tails, &terminal);
-
-        assert!(matches!(
-            redraw.as_slice(),
-            [
-                EngineEvent::MetadataChanged { .. },
-                EngineEvent::FrameReady(_),
-            ]
-        ));
-        assert_eq!(
-            engine.metadata(&terminal).unwrap().scrollback.lines_below,
-            0
-        );
     }
 
     #[cfg(target_os = "linux")]
@@ -1559,7 +1477,7 @@ mod tests {
             terminal: TerminalId::new("added"),
             ..first.clone()
         };
-        let mut engine = NativeEngine::spawn(&[first], terminal_size(size)).unwrap();
+        let mut engine = spawn_terminals(std::slice::from_ref(&first), size).unwrap();
 
         add_terminal(&mut engine, added.clone(), size).unwrap();
 
@@ -1567,7 +1485,31 @@ mod tests {
             engine.frame(&added.terminal).unwrap().size,
             terminal_size(size)
         );
+        assert_eq!(
+            engine.frame(&first.terminal).unwrap().size,
+            terminal_size(size),
+            "initial terminals use the same usable size"
+        );
         engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    #[test]
+    fn resize_uses_narrow_chrome_for_a_short_wide_window() {
+        let terminal = TerminalId::new("frontend");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec!["sh".to_owned()],
+        }];
+        let mut engine = FakeEngine::new([terminal.clone()]);
+
+        resize_terminals(&mut engine, &projects, ScreenSize::new(120, 13));
+
+        assert_eq!(
+            engine.frame(&terminal).unwrap().size,
+            ScreenSize::new(120, 7),
+            "the narrow pane strip leaves the prompt's two extra chrome rows"
+        );
     }
 
     #[test]
@@ -1579,6 +1521,11 @@ mod tests {
         assert_eq!(
             terminal_size(ScreenSize::new(99, 30)),
             ScreenSize::new(99, 24)
+        );
+        assert_eq!(
+            terminal_size(ScreenSize::new(120, 13)),
+            ScreenSize::new(120, 7),
+            "a wide window still falls back to narrow when too short"
         );
     }
 
