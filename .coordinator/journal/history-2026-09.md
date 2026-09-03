@@ -567,3 +567,4 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-02: NAV-AMENDMENT MERGED via PR #55 (coordinator mis-flow corrected: #54 had merged the original picker; nav-simple + key-row commits rebased onto main and shipped as their own PR — critic passed both). Binary rebuilt with the SIMPLE picker: Enter=select, →=descend (into repos too), ←=back, o=launch.
 - 2026-09-02: picker shift+down/up range-select + mouse folder selection dispatched to claude (coord/49-range-select).
 - 2026-09-02: range-select done (claude `5f82232`: shift+down/up additive incl folders; ESC[1;2A/B decoding + torn-sequence guard; folder click verified already working + 2 pins; 195 tests) — in critic review.
+- 2026-09-02: USER — Shift+click = the range-select MOUSE TWIN (from highlighted row down to clicked row). Queued as a small follow-up after the keyboard-only range PR lands (followup-shift-click.md staged).
