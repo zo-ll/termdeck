@@ -290,3 +290,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: PARKED also #81 + #82 (user) — both worktrees/branches removed
   locally (remote branches kept same as others). ONLY #33/#71/#72 parked
   remain. All workers stopped; main green 257.
+- 2026-09-03: #81/#82 fully DELETED (worktrees, local AND remote branches) —
+  user will work on them tomorrow. All other coord/* remote branches kept.
