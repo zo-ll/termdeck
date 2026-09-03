@@ -268,3 +268,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: Providers struggling (OpenAI codex 404; Anthropic 529). Muse-
   spark (opencode-go) took over: #74 engine-lane muse worker + #76 now on a
   second muse worker (claude lane). Claude window closed (overload).
+- 2026-09-03: #76 done (muse 7ab023f: empty stack hides column/divider,
+  master full width, runtime-add restores; 247 tests) — critic review.
