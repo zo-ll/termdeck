@@ -156,3 +156,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   sizing; gate 228) → critic review (incl. contracts/engine.rs +2 and a
   suspicious COORDINATION.md -8 in its diff). #66 escape-abort correction
   delivered to codex (idle-verified).
+- 2026-09-03: 64-nbs MERGED (PR #66 -> 03066d7, 228; residual NB
+  feed-while-scrolled pin gap recorded). #66 promote-n re-review queued.
+  #67 after #66 merges.
