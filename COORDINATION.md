@@ -284,3 +284,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   healthy — #81/#82 NOT dispatched (user halt; both OPEN).
 - NEXT (user's call): #81 split god-files, #82 CI, #74 leftover retest in
   app, plus parked #33/#71/#72.
+- 2026-09-03: #82 CI done (8f30398+20b0d87; gate green, --all-features;
+  triggers every push/PR) — critic review; merge on user go (do-not-dispatch
+  honored: not yet merged).
