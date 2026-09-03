@@ -260,3 +260,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   tests) — critic review queued.
 - 2026-09-03: #74 re-scoped (wheel into alt-screen apps, not tail-pinning)
   and dispatched to codex (coord/74-app-scroll) after user retest.
+- 2026-09-03: codex BACKEND DOWN (persistent 404 on
+  chatgpt.com/backend-api/codex/responses — server/account side; probe
+  failed too). #74 (alt-screen wheel) blocked until it recovers (or reassign).
+  Claude pane stuck in queued-messages state -> relaunched FRESH for #76
+  (hide stack when empty).
