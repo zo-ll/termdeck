@@ -167,3 +167,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   live). #67-sheet (unrestricted + nav) dispatched to codex (idle-verified;
   note: codex <25% of 5h limit). Claude: UI-declutter DESIGN task via the
   claude_design MCP — nudged to submit; running separately.
+- PENDING (user): AFTER claude's UI-declutter design lands, CHECK whether the
+  removals/simplifications in the design affect BACKEND code (session.rs /
+  engine / contracts / input) — a UI declutter can orphan or contradict
+  backend seams. Route the scan to codex (engine lane) before/with any
+  implementation of the declutter.
