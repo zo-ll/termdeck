@@ -142,3 +142,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   dispatched to codex (idle-verified per the hard rule): Ctrl+g N digits
   (~600ms), clamping, DELIBERATE fixture re-bless (hint '1-4'->'N' affects
   many status rows). #67 scheduled AFTER #66 merges (user sequence).
+- 2026-09-03: #66 done fresh (codex `914aa80`, 234 tests; hint fixtures
+  re-blessed) — critic review.
