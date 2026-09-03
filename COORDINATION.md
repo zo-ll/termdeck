@@ -183,3 +183,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   checked (mid-series + context >=~50% + not near limit); coordinator holds
   durable memory. Applied: nb-cleanup will use a FRESH codex session after
   the 2:56 PM reset.
+- 2026-09-03: WORKER-SESSION POLICY changed (user): FRESH session per task
+  by default; reuse only health-checked (mid-series + context >=~50% + not
+  near limit); coordinator holds durable memory. Applied: nb-cleanup will
+  use a FRESH codex session after the 2:56 PM reset (the old limited session
+  is discarded).
