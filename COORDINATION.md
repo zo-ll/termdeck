@@ -159,3 +159,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: 64-nbs MERGED (PR #66 -> 03066d7, 228; residual NB
   feed-while-scrolled pin gap recorded). #66 promote-n re-review queued.
   #67 after #66 merges.
+- 2026-09-03: #66 (promote-n) needs main-integration — merge of origin/main
+  conflicted in session.rs (vs 64-nbs); integration routed to codex (idle).
+  Plan: resolve+gate+merge commit -> I merge PR #67 -> then #67 (sheet) to
+  codex.
