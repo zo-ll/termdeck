@@ -225,3 +225,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: declutter backend scan (claude) APPROVED + one fix 35ac12f
   (trailing '·' at 33-35 char names, gated pair; 239 tests) — critic
   review queued.
+- 2026-09-03: NB-cleanup dispatched to a FRESH codex session (coord/nb-cleanup
+  reset onto main a68abf5; brief incl. the declutter 40+-name clamp NB).
+  Reset confirmed by user.
