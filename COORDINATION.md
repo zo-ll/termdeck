@@ -163,3 +163,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   conflicted in session.rs (vs 64-nbs); integration routed to codex (idle).
   Plan: resolve+gate+merge commit -> I merge PR #67 -> then #67 (sheet) to
   codex.
+- 2026-09-03: #66 merged (PR #67 -> 0fd1800, 234; binary rebuilt — Ctrl+g N
+  live). #67-sheet (unrestricted + nav) dispatched to codex (idle-verified;
+  note: codex <25% of 5h limit). Claude: UI-declutter DESIGN task via the
+  claude_design MCP — nudged to submit; running separately.
