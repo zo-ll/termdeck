@@ -256,3 +256,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   equal the VISIBLE master area (chrome excluded) so full-screen apps aren't
   width-cut; folds in #74's scroll report (likely same sizing root); #74
   itself remains open, parked (user stopped it earlier).
+- 2026-09-03: #75 done (codex df00104: size terminals to visible panes; 243
+  tests) — critic review queued.
