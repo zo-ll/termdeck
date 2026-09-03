@@ -172,3 +172,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   engine / contracts / input) — a UI declutter can orphan or contradict
   backend seams. Route the scan to codex (engine lane) before/with any
   implementation of the declutter.
+- 2026-09-03: #67-sheet done (codex ec62ae2: unrestricted sheet + folder
+  targets, reuses PickerState) — critic review; branch base is old — main
+  integration after review (conflicts possible vs 64-nbs/#66).
