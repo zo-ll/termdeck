@@ -30,7 +30,7 @@ fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
             }
         }
         termdeck::cli::CliCommand::Launch { workspace } => {
-            let config_path = intent.config_path.as_deref().expect("config command");
+            let config_path = intent.required_config_path()?;
             let config = termdeck::config::load(config_path)?;
             let workspace =
                 termdeck::cli::select_workspace(&config, config_path, workspace.as_deref())?;
@@ -38,7 +38,7 @@ fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
             Ok(None)
         }
         termdeck::cli::CliCommand::Check | termdeck::cli::CliCommand::List => {
-            let config_path = intent.config_path.as_deref().expect("config command");
+            let config_path = intent.required_config_path()?;
             let config = termdeck::config::load(config_path)?;
             termdeck::cli::inspect(&intent, &config).map_err(Into::into)
         }

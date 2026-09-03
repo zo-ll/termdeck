@@ -9,11 +9,10 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::contracts::{Project, TerminalId};
+use crate::contracts::{DEFAULT_SCROLLBACK, Project, TerminalId};
 
 const MIN_MASTER_RATIO: f64 = 0.55;
 const MAX_MASTER_RATIO: f64 = 0.85;
-const DEFAULT_SCROLLBACK: usize = 10_000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {

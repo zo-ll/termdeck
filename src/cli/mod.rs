@@ -44,6 +44,16 @@ pub struct CliIntent {
     pub command: CliCommand,
 }
 
+impl CliIntent {
+    /// Commands that inspect configured workspaces require this path. Parsing
+    /// normally supplies it; keep malformed programmatic intents recoverable.
+    pub fn required_config_path(&self) -> Result<&Path, CliError> {
+        self.config_path
+            .as_deref()
+            .ok_or_else(|| CliError::new("configuration command has no config path"))
+    }
+}
+
 #[derive(Debug)]
 pub struct CliError(String);
 
@@ -137,13 +147,13 @@ const fn usage() -> &'static str {
 
 pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>, Box<dyn Error>> {
     let intent = parse(arguments)?;
-    match intent.command {
+    match &intent.command {
         CliCommand::Folder { .. } => Ok(None),
         // The binary owns the interactive picker, so this helper does not
         // attempt to open one.
         CliCommand::Picker => Ok(None),
         CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
-            let config_path = intent.config_path.as_deref().expect("config command");
+            let config_path = intent.required_config_path()?;
             let config = load(config_path)?;
             Ok(inspect(&intent, &config)?)
         }
@@ -279,12 +289,12 @@ pub fn select_workspace(
                 config_path.display()
             ))
         }),
-        None if config.workspaces.len() == 1 => Ok(config
+        None if config.workspaces.len() == 1 => config
             .workspaces
             .values()
             .next()
             .cloned()
-            .expect("one workspace")),
+            .ok_or_else(|| CliError::new("configuration has no workspace")),
         None => Err(CliError::new(format!(
             "{}: choose a workspace ({})",
             config_path.display(),
@@ -300,7 +310,7 @@ pub fn select_workspace(
 
 /// Formats the non-interactive commands and validates a launch selection.
 pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, CliError> {
-    let config_path = intent.config_path.as_deref().expect("config command");
+    let config_path = intent.required_config_path()?;
     match &intent.command {
         CliCommand::Launch { workspace } => {
             select_workspace(config, config_path, workspace.as_deref())?;
@@ -334,7 +344,9 @@ pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, Cl
                 .collect::<Vec<_>>()
                 .join("\n"),
         )),
-        CliCommand::Folder { .. } | CliCommand::Picker => unreachable!("not a config command"),
+        CliCommand::Folder { .. } | CliCommand::Picker => Err(CliError::new(
+            "folder and picker commands do not inspect configuration",
+        )),
     }
 }
 
@@ -347,7 +359,8 @@ mod tests {
     };
 
     use super::{
-        CliCommand, CliEnvironment, discover, discover_workspace, parse_with_environment, run,
+        CliCommand, CliEnvironment, CliIntent, discover, discover_workspace,
+        parse_with_environment, run,
     };
 
     fn environment() -> CliEnvironment {
@@ -423,6 +436,19 @@ mod tests {
 
         assert_eq!(intent.config_path, Some(PathBuf::from("chosen.yaml")));
         assert_eq!(intent.command, CliCommand::Check);
+    }
+
+    #[test]
+    fn a_programmatic_config_command_without_a_path_is_actionable() {
+        let intent = CliIntent {
+            config_path: None,
+            command: CliCommand::Check,
+        };
+
+        assert_eq!(
+            intent.required_config_path().unwrap_err().to_string(),
+            "configuration command has no config path"
+        );
     }
 
     #[test]

@@ -302,7 +302,14 @@ impl TerminalEngine for NativeEngine {
                     return item.status_changed(TerminalStatus::Failed { message });
                 }
                 item.frame = item.adapter.resize(size);
-                vec![EngineEvent::FrameReady(item.frame.clone())]
+                item.metadata.scrollback = item.adapter.scrollback_position();
+                vec![
+                    EngineEvent::MetadataChanged {
+                        terminal,
+                        metadata: item.metadata.clone(),
+                    },
+                    EngineEvent::FrameReady(item.frame.clone()),
+                ]
             }
             EngineCommand::Scroll { terminal, command } => {
                 let Some(item) = self.terminal_mut(&terminal) else {
@@ -384,10 +391,10 @@ mod tests {
 
     use crate::contracts::{
         CellContent, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
-        TerminalEngine, TerminalId, TerminalStatus,
+        TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
     };
 
-    use super::{NativeEngine, SHUTDOWN_GRACE};
+    use super::{NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -596,6 +603,51 @@ mod tests {
                 .as_deref(),
             Some("native engine requires at least one terminal")
         );
+    }
+
+    /// The #9 review note was real: resizing can change Alacritty's visible
+    /// history, so its metadata must be emitted with the replacement frame.
+    #[test]
+    fn resize_refreshes_scrollback_metadata_with_the_frame() {
+        let terminal = TerminalId::new("recording");
+        let project = Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: Vec::new(),
+        };
+        let mut adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(4, 2));
+        let frame = adapter.feed(b"0\r\n1\r\n2\r\n3\r\n");
+        let mut engine = NativeEngine {
+            terminals: vec![NativeTerminal {
+                project,
+                transport: None,
+                adapter,
+                frame,
+                status: TerminalStatus::Running,
+                metadata: TerminalMetadata::default(),
+                started: Instant::now(),
+                last_output: None,
+            }],
+        };
+        engine.dispatch(EngineCommand::Scroll {
+            terminal: terminal.clone(),
+            command: ScrollCommand::Up(1),
+        });
+
+        let events = engine.dispatch(EngineCommand::Resize {
+            terminal: terminal.clone(),
+            size: ScreenSize::new(4, 1),
+        });
+        let expected = engine.terminals[0].adapter.scrollback_position();
+        assert!(matches!(
+            events.as_slice(),
+            [
+                EngineEvent::MetadataChanged { terminal: event_terminal, metadata },
+                EngineEvent::FrameReady(frame),
+            ] if event_terminal == &terminal && metadata.scrollback == expected
+                && frame.size == ScreenSize::new(4, 1)
+        ));
+        assert_eq!(engine.metadata(&terminal).unwrap().scrollback, expected);
     }
 
     #[cfg(target_os = "linux")]
