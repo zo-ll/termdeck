@@ -163,8 +163,17 @@ pub struct NativeEngine {
 impl NativeEngine {
     /// Starts one or more configured terminals at the requested cell dimensions.
     pub fn spawn(projects: &[Project], size: ScreenSize) -> Result<Self, String> {
+        let sizes = vec![size; projects.len()];
+        Self::spawn_sized(projects, &sizes)
+    }
+
+    /// Starts configured terminals at their rendered viewport dimensions.
+    pub fn spawn_sized(projects: &[Project], sizes: &[ScreenSize]) -> Result<Self, String> {
         if projects.is_empty() {
             return Err("native engine requires at least one terminal".to_owned());
+        }
+        if projects.len() != sizes.len() {
+            return Err("native engine requires one size per terminal".to_owned());
         }
         let mut ids = BTreeSet::new();
         if projects
@@ -177,7 +186,8 @@ impl NativeEngine {
         let terminals = projects
             .iter()
             .cloned()
-            .map(|project| NativeTerminal::spawn(project, size))
+            .zip(sizes.iter().copied())
+            .map(|(project, size)| NativeTerminal::spawn(project, size))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self { terminals })
     }
