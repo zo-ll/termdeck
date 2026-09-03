@@ -1203,14 +1203,27 @@ impl Deck<'_> {
         if !master {
             spans.push(Span::styled("▾ ", Style::new().fg(HINT)));
         }
+        let prefix = if master {
+            format!("> {number} ")
+        } else {
+            format!("{number} ")
+        };
+        let leading = usize::from(!master) * 2;
+        let status_width = separator.chars().count()
+            + glyph.chars().count()
+            + status_label(status).map_or(0, |label| label.chars().count() + 1);
+        let name = clip(
+            &name,
+            (budget as usize).saturating_sub(leading + prefix.chars().count() + status_width),
+        );
         if master {
             spans.push(Span::styled(
-                format!("> {number} {name}"),
+                format!("{prefix}{name}"),
                 Style::new().fg(ACCENT),
             ));
         } else {
             spans.push(Span::styled(
-                format!("{number} {name}"),
+                format!("{prefix}{name}"),
                 Style::new().fg(if pane.base() == Pane::Demoted {
                     DEMOTED_FG
                 } else {
@@ -1218,7 +1231,9 @@ impl Deck<'_> {
                 }),
             ));
         }
-        spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
+        if !name.is_empty() {
+            spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
+        }
 
         spans.push(Span::styled(
             glyph,
@@ -1331,15 +1346,7 @@ impl Deck<'_> {
         if content.height < 2 {
             return;
         }
-        buffer.set_line(
-            content.x,
-            content.y + content.height - 2,
-            &Line::styled(
-                "─".repeat(content.width as usize),
-                Style::new().fg(SEPARATOR).bg(background),
-            ),
-            content.width,
-        );
+        footer_rule(buffer, content, background, SEPARATOR);
         let hint = Style::new().fg(HINT).bg(background);
         let key = Style::new().fg(PREVIEW_FG).bg(background);
         let mut spans = Vec::new();
@@ -1392,13 +1399,7 @@ impl Deck<'_> {
         if content.height < 2 {
             return;
         }
-        let rule = "─".repeat(content.width as usize);
-        buffer.set_line(
-            content.x,
-            content.y + content.height - 2,
-            &Line::styled(rule, Style::new().fg(ERROR).bg(background)),
-            content.width,
-        );
+        footer_rule(buffer, content, background, ERROR);
         let reason = match status {
             TerminalStatus::Exited { code: Some(code) } => format!("exited · code {code}"),
             TerminalStatus::Exited { code: None } => "exited".to_owned(),
@@ -2024,6 +2025,19 @@ fn clip(text: &str, budget: usize) -> String {
             .chain(std::iter::once('…'))
             .collect(),
     }
+}
+
+/// The top row shared by scrollback and exited pane footers.
+fn footer_rule(buffer: &mut Buffer, content: Rect, background: Color, colour: Color) {
+    buffer.set_line(
+        content.x,
+        content.y + content.height - 2,
+        &Line::styled(
+            "─".repeat(content.width as usize),
+            Style::new().fg(colour).bg(background),
+        ),
+        content.width,
+    );
 }
 
 /// Copies engine-owned cells into the buffer, clipping to the viewport.
@@ -3217,19 +3231,14 @@ mod tests {
             let title: String = (0..100u16)
                 .map(|x| term.backend().buffer()[(x, 0u16)].symbol())
                 .collect();
-            // The glyph may still be clipped by the frame at the widest
-            // names; what must never appear is the command's own separator
-            // sitting after the glyph with nothing following it.
+            // Names are elastic before structural title chrome: the glyph
+            // and its separator remain whole rather than being cut mid-row.
             let head = title.split('[').next().unwrap_or("").trim_end();
-            // Only titles that still fit their glyph are this test's business.
-            // Past that the frame's own `set_line` clamp cuts the title, which
-            // it did before this pass too and is not what is pinned here.
-            if head.contains('○') {
-                assert!(
-                    !head.trim_end().ends_with('·'),
-                    "name of {len} leaves a dangling separator: {head}"
-                );
-            }
+            assert!(head.contains('○'), "name of {len} cuts the glyph: {head}");
+            assert!(
+                !head.ends_with('·'),
+                "name of {len} leaves a dangling separator: {head}"
+            );
         }
     }
 

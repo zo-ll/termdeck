@@ -6,11 +6,9 @@ use alacritty_terminal::{
 };
 
 use crate::contracts::{
-    CellContent, CellStyle, CellWidth, Cursor, Rgb, ScreenCell, ScreenSize, ScrollCommand,
-    ScrollbackPosition, TerminalFrame, TerminalId,
+    CellContent, CellStyle, CellWidth, Cursor, DEFAULT_SCROLLBACK, Rgb, ScreenCell, ScreenSize,
+    ScrollCommand, ScrollbackPosition, TerminalFrame, TerminalId,
 };
-
-const SCROLLBACK_LINES: usize = 10_000;
 
 /// Current-thread adapter from recorded VT output to an owned frame.
 pub struct VtFrameAdapter {
@@ -27,7 +25,7 @@ impl VtFrameAdapter {
             terminal,
             term: Term::new(
                 Config {
-                    scrolling_history: SCROLLBACK_LINES,
+                    scrolling_history: DEFAULT_SCROLLBACK,
                     ..Config::default()
                 },
                 &dimensions,
@@ -346,5 +344,45 @@ mod tests {
         assert_eq!(adapter.scrollback_position().lines_below, 0);
         adapter.scroll(ScrollCommand::Up(1));
         assert_eq!(adapter.scrollback_position().lines_below, 1);
+    }
+
+    /// Output advances a live viewport, but never steals a deliberately
+    /// detached one. Both are properties of Alacritty's display offset.
+    #[test]
+    fn output_follows_the_tail_without_pinning_a_scrolled_viewport() {
+        let mut live = adapter(ScreenSize::new(8, 2));
+        live.feed(b"one\r\ntwo\r\nthree\r\n");
+        assert_eq!(live.scrollback_position().lines_below, 0);
+        let frame = live.feed(b"LIVE\r\n");
+        assert!(
+            frame_text(&frame).contains("LIVE"),
+            "live tail did not advance"
+        );
+        assert_eq!(live.scrollback_position().lines_below, 0);
+
+        let mut scrolled = adapter(ScreenSize::new(8, 2));
+        scrolled.feed(b"one\r\ntwo\r\nthree\r\nfour\r\n");
+        scrolled.scroll(ScrollCommand::Up(1));
+        assert!(
+            scrolled.scrollback_position().lines_below > 0,
+            "fixture must detach the viewport"
+        );
+        scrolled.feed(b"PINNED\r\n");
+        assert!(
+            scrolled.scrollback_position().lines_below > 0,
+            "new output must not pin a detached viewport to the tail"
+        );
+    }
+
+    fn frame_text(frame: &crate::contracts::TerminalFrame) -> String {
+        frame
+            .cells
+            .iter()
+            .map(|cell| match &cell.content {
+                CellContent::Glyph { text, .. } => text.as_str(),
+                CellContent::Empty => " ",
+                CellContent::Continuation => "",
+            })
+            .collect()
     }
 }

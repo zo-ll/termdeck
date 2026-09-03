@@ -1,5 +1,8 @@
 //! Types shared by the terminal engine and the user interface.
 
+/// The default number of retained terminal history lines.
+pub const DEFAULT_SCROLLBACK: usize = 10_000;
+
 mod command;
 mod engine;
 mod project;
