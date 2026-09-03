@@ -221,8 +221,16 @@ impl StackWindow {
 /// The chosen screen arrangement for one render.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Layout {
-    Stacked { stack: u16, preview: u16 },
+    Stacked {
+        stack: u16,
+        preview: u16,
+    },
     Zoom,
+    /// No stacked previews: the master takes the full body, with no
+    /// divider, gutter, or stack chrome. Geometrically zoom's twin, but
+    /// semantically distinct — the status row and key hints read it as an
+    /// ordinary deck (census, `+ add`, full keys), never as a zoom.
+    Single,
     Narrow,
 }
 
@@ -287,6 +295,15 @@ impl Deck<'_> {
             }
             Layout::Zoom => {
                 self.draw_active(engine, frame.buffer_mut(), body, Pane::Zoomed);
+                vec![body]
+            }
+            Layout::Single => {
+                self.draw_active(
+                    engine,
+                    frame.buffer_mut(),
+                    body,
+                    self.master_pane(Pane::Master),
+                );
                 vec![body]
             }
             Layout::Narrow => vec![self.narrow(engine, frame.buffer_mut(), body)],
@@ -359,7 +376,7 @@ impl Deck<'_> {
                     }
                 }
             }
-            Layout::Zoom => {
+            Layout::Zoom | Layout::Single => {
                 if let Some(position) = active {
                     set(position, body);
                 }
@@ -399,7 +416,7 @@ impl Deck<'_> {
                 .filter(|position| self.projects.get(*position).is_some())
         };
         match self.layout(body) {
-            Layout::Zoom if body.contains(pointer) => active(),
+            Layout::Zoom | Layout::Single if body.contains(pointer) => active(),
             Layout::Narrow => {
                 let master = Rect {
                     y: body.y + 2,
@@ -681,7 +698,9 @@ impl Deck<'_> {
     }
 
     /// Narrow fallback wins over zoom: below a usable preview width the stack
-    /// is already hidden, so zoom has nothing left to hide.
+    /// is already hidden, so zoom has nothing left to hide. An empty stack
+    /// wins over zoom the same way: with nothing stacked the master is full
+    /// either way, and the deck reads as an ordinary deck rather than a zoom.
     fn layout(&self, body: Rect) -> Layout {
         let preview = if body.width >= WIDE_COLUMNS {
             PREVIEW_HEIGHT
@@ -691,6 +710,9 @@ impl Deck<'_> {
         // The stack needs one whole preview plus the hint row below it.
         if body.width < NARROW_COLUMNS || body.height < preview + 2 {
             return Layout::Narrow;
+        }
+        if self.stack_items().is_empty() {
+            return Layout::Single;
         }
         if self.state.zoomed() {
             return Layout::Zoom;
@@ -3588,6 +3610,96 @@ mod tests {
         // 34 stack columns hold previews, which the export fixes below 120.
         assert!(text(&stacked).matches('┌').count() > 1);
         assert_eq!(stacked[(63u16, 0u16)].symbol(), "┐");
+    }
+
+    /// With zero stacked previews the stack column, its gutter and its
+    /// divider all go: the master takes the full body on the reference
+    /// canvas. The status row still reads as an ordinary deck — census,
+    /// `+ add`, full keys — never as a zoom.
+    #[test]
+    fn an_empty_stack_gives_the_master_the_full_width() {
+        let projects = synthetic(1);
+        let state = DeckState::new(1);
+        let buffer = render_long(&projects, &state, (144, 42));
+        let screen = text(&buffer);
+
+        // The master's border runs the full canvas width.
+        assert_eq!(buffer[(0u16, 0u16)].symbol(), "┌");
+        assert_eq!(buffer[(143u16, 0u16)].symbol(), "┐");
+        assert_eq!(buffer[(143u16, 39u16)].symbol(), "┘");
+        assert_eq!(divider_column(&buffer), None, "no divider without a stack");
+        assert!(!screen.contains('▸'), "no folded strips, {screen}");
+        assert!(!screen.contains('▾'), "no disclosure markers, {screen}");
+        assert!(screen.contains("1 terminal"), "{screen}");
+        assert!(screen.contains("all running"), "{screen}");
+        assert!(
+            !screen.contains("hidden:"),
+            "that census belongs to zoom, {screen}"
+        );
+        assert!(!screen.contains("ZOOM"), "{screen}");
+
+        // And there is nothing of the stack left to hit.
+        let deck = deck_for(&projects, &state);
+        assert_eq!(deck.position_at(SCREEN, Position::new(10, 10)), Some(0));
+        assert_eq!(deck.position_at(SCREEN, Position::new(130, 10)), Some(0));
+        assert!(!deck.divider_at(SCREEN, Position::new(100, 20)));
+        assert_eq!(deck.ratio_at(SCREEN, 100), None);
+        assert_eq!(deck.marker_at(SCREEN, Position::new(100, 0)), None);
+        assert_eq!(deck.stack_window(SCREEN), super::StackWindow::default());
+        assert!(!deck.stack_scroll_at(SCREEN, Position::new(100, 20)));
+        assert_eq!(deck.swap_position_at(SCREEN, Position::new(130, 10)), None);
+
+        // The visible PTY size is the full body, not a split share of it.
+        let sizes = deck.terminal_sizes(SCREEN);
+        assert_eq!(sizes.len(), 1);
+        let size = sizes[0].expect("the master keeps a viewport");
+        assert_eq!(size.columns, 144 - 2 - 2 * 2);
+        assert_eq!(size.rows, 40 - 2);
+    }
+
+    /// Adding a terminal at runtime brings the stack — and its divider —
+    /// back: the layout follows the live stack length, so nothing else has
+    /// to restore the split.
+    #[test]
+    fn runtime_add_brings_the_stack_and_its_divider_back() {
+        let projects = synthetic(2);
+        let mut state = DeckState::new(1);
+        assert_eq!(state.push_terminal(), 1);
+
+        let buffer = render_long(&projects, &state, (144, 42));
+
+        // A fresh deck starts at the top of the range: a 22-column stack and
+        // the divider in column 120. The new preview starts folded, so it
+        // answers on its title row.
+        assert_eq!(divider_column(&buffer), Some(120));
+        assert_eq!(buffer[(119u16, 0u16)].symbol(), "┐");
+        let deck = deck_for(&projects, &state);
+        assert_eq!(deck.position_at(SCREEN, Position::new(10, 10)), Some(0));
+        assert_eq!(deck.position_at(SCREEN, Position::new(130, 0)), Some(1));
+        assert!(deck.divider_at(SCREEN, Position::new(120, 20)));
+        assert!(deck.ratio_at(SCREEN, 120).is_some());
+    }
+
+    /// Zooming an empty deck changes nothing visible: the master is already
+    /// full, and unzooming cannot summon a stack that is not there.
+    #[test]
+    fn zoom_and_an_empty_stack_agree_on_the_master() {
+        let projects = synthetic(1);
+        let mut zoomed = DeckState::new(1);
+        zoomed.apply(&ActionCommand::ToggleZoom, &projects, fixture::NOW);
+
+        let plain = render_long(&projects, &DeckState::new(1), (144, 42));
+        let zoomed_buffer = render_long(&projects, &zoomed, (144, 42));
+        let screen = text(&zoomed_buffer);
+
+        assert_eq!(
+            screen,
+            text(&plain),
+            "the same master-full canvas either way"
+        );
+        assert!(!screen.contains("hidden:"), "{screen}");
+        assert!(!screen.contains("ZOOM"), "{screen}");
+        assert_eq!(divider_column(&zoomed_buffer), None);
     }
 
     /// A synthetic workspace of `count` terminals.

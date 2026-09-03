@@ -258,3 +258,17 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   itself remains open, parked (user stopped it earlier).
 - 2026-09-03: #75 done (codex df00104: size terminals to visible panes; 243
   tests) — critic review queued.
+- 2026-09-03: #74 re-scoped (wheel into alt-screen apps, not tail-pinning)
+  and dispatched to codex (coord/74-app-scroll) after user retest.
+- 2026-09-03: codex BACKEND DOWN (persistent 404 on
+  chatgpt.com/backend-api/codex/responses — server/account side; probe
+  failed too). #74 (alt-screen wheel) blocked until it recovers (or reassign).
+  Claude pane stuck in queued-messages state -> relaunched FRESH for #76
+  (hide stack when empty).
+- 2026-09-03: Providers struggling (OpenAI codex 404; Anthropic 529). Muse-
+  spark (opencode-go) took over: #74 engine-lane muse worker + #76 now on a
+  second muse worker (claude lane). Claude window closed (overload).
+- 2026-09-03: #76 done (muse 7ab023f: empty stack hides column/divider,
+  master full width, runtime-add restores; 247 tests) — critic review.
+- 2026-09-03: #74 done (muse 89950ae: wheel into alt-screen apps; 252 tests)
+  — critic review; branch predates #76, integration after.

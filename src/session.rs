@@ -1693,7 +1693,9 @@ mod tests {
                 &deck,
                 ScreenSize::new(100, 30)
             ),
-            vec![Some(ScreenSize::new(58, 26))]
+            // No stacked previews, so no stack column: the master is the
+            // full body, not a split share of it.
+            vec![Some(ScreenSize::new(94, 26))]
         );
         assert_eq!(
             terminal_sizes(
