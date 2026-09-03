@@ -272,3 +272,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   master full width, runtime-add restores; 247 tests) — critic review.
 - 2026-09-03: #74 done (muse 89950ae: wheel into alt-screen apps; 252 tests)
   — critic review; branch predates #76, integration after.
+- 2026-09-03: USER: do not dispatch — #81 (split god-files) and #82 (CI)
+  NOT dispatched (interrupted). Both remain OPEN, undispatched.
