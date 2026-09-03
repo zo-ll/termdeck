@@ -39,4 +39,4 @@
 │                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  promoted backend · ^g 1 back               
                                                                                                                                                 
-   idp   4 terminals   > 2 backend  ·  + add  ·  1 open  ·  2 collapsed                                 ^g j/k  ^g 1-4  ^g c  ^g z  ^g ?  ^g q  
+   idp   4 terminals   > 2 backend  ·  + add  ·  1 open  ·  2 collapsed                                   ^g j/k  ^g N  ^g c  ^g z  ^g ?  ^g q  

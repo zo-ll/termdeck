@@ -19,4 +19,4 @@
 │  12:04:41 [vite] optimized dependencies changed, reloading                    …  │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                                                                     
-   idp   84×22  stack hidden                          ^g j/k · 1-4 · z · [ · ? · q  
+   idp   84×22  stack hidden                            ^g j/k · N · z · [ · ? · q  

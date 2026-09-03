@@ -53,7 +53,7 @@ Bindings:
 
 ```text
 Ctrl+g j/k or arrows   Select and promote terminal
-Ctrl+g 1..4            Promote by configured position
+Ctrl+g N               Promote by terminal number
 Ctrl+g z               Toggle zoom
 Ctrl+g -  Ctrl+g =     Narrow / widen the master (the divider, by keyboard)
 Ctrl+g [               Enter scrollback mode

@@ -265,6 +265,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             }
         }
         dirty |= !events.is_empty();
+        dirty |= input.expire(&mut deck, &projects, now());
 
         for event in keys.read(POLL_INTERVAL)? {
             dirty = true;
