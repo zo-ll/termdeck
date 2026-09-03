@@ -115,3 +115,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   for claude (stubborn composer); for CODEX a single Enter submits, and a
   second Enter re-submits the brief -> duplicate turn -> duplicate finish
   ping (this caused the 64-live-tail twin pings). Use ONE Enter for codex.
+- 2026-09-03: #64 BLOCK (critic): snap inert (revert-pass), runtime-add raw
+  size hides prompt, metadata refresh loses preview marker/row at tail.
+  Correction-64 routed to codex (single-Enter deliver, no finish re-run).
