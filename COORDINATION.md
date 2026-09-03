@@ -138,3 +138,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   Verify idle (prompt, no working/queued state) before every dispatch.
   Current: codex STOPPED at prompt, idle; #66 (dirty tree, red gate) and #67
   (not started) both pending the user's direction.
+- 2026-09-03: #66 REDO (from scratch, fresh branch; partial discarded) —
+  dispatched to codex (idle-verified per the hard rule): Ctrl+g N digits
+  (~600ms), clamping, DELIBERATE fixture re-bless (hint '1-4'->'N' affects
+  many status rows). #67 scheduled AFTER #66 merges (user sequence).
