@@ -249,3 +249,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   scroll a streaming/long session — suspected #64 output-follow re-pinning
   (disengage on intentional scroll) + scrollback cap sanity. Researcher's
   relay ARRIVE tests noted (delivered as designed).
+- 2026-09-03: USER STOPPED codex — #74 (scroll-stream) interrupted; no
+  work done (was ~7s in). Issue #74 remains OPEN, undispatchded; revisit
+  when the user decides.
