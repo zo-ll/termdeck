@@ -236,3 +236,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
 - 2026-09-03: Notification feature PARKED for research (user unsure) — issue
   opened on GH (generic-user spec: termdeck notify + BEL/OSC-777 decode;
   design questions listed). No dispatch until the user decides.
+- 2026-09-03: AGENT-API issue opened (AI-first: termdeck notify/list/status/
+  open/promote with --json, generic-user constraint, research/parked like
+  #71). No dispatch yet.
