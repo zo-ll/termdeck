@@ -194,3 +194,8 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   Deck::home/abbreviate + HOME lookup — pending the backend-impact scan.
   No ping due to missing finish protocol (fresh session) — protocol delivered
   to claude now; it must not push.
+- 2026-09-03: USER: no user review of the declutter — sent to the CRITIC
+  (with a mandatory authority-refresh honesty check: claude edited the
+  reference/export itself). tmux-safety note: minimized window churn.
+  Backend-impact scan (codex) still pending post-reset for the session.rs
+  ownership part.
