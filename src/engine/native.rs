@@ -86,6 +86,9 @@ impl NativeTerminal {
     fn handle_pty_event(&mut self, event: PtyEvent, events: &mut Vec<EngineEvent>) {
         match event {
             PtyEvent::Output { terminal, bytes } if self.owns(&terminal) => {
+                // Feeding at Alacritty's tail follows output itself; a
+                // deliberate history offset remains untouched. Metadata still
+                // refreshes below even when the visible cells do not change.
                 self.frame = self.adapter.feed(&bytes);
                 self.metadata.scrollback = self.adapter.scrollback_position();
                 self.metadata.bytes_written = self
