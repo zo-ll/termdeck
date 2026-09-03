@@ -31,11 +31,12 @@ those marked points.
 ### The one requirement the export does not show
 
 A user requirement arrived after the export: **the same project path may be
-opened as two or more terminals** (`fe-a` and `fe-a-2` in the same directory).
-The export draws no such thing — its selection box holds one ordinal per row
-and its runtime sheet locks a repo that is already open. §3.1, the `[·]`
-relaxation in §6, and the `+` / `-` rows in §7 are therefore **Chosen**, not
-derived, and are marked as such where they appear.
+opened as two or more terminals** (`fe-a` and `fe-a-2` in the same directory),
+and the runtime sheet may open **any directory**. The export draws neither
+rule — its selection box holds one ordinal per row and its runtime sheet locks
+an already-open repo. The unrestricted rules in §6 and the `+` / `-` rows in
+§7 are therefore **Chosen**, not derived, and are marked as such where they
+appear.
 
 The seam below it is already real, which is why this is a surface question
 only. Verified against the build on this branch: a workspace with two
@@ -193,7 +194,6 @@ per-row checkbox focused on whether the path is selected.
 [ ]   unselected
 [x]   selected — its pane position is shown in the selection panel
 [+]   marked to append (runtime add only)
-[·]   already open, not selectable (runtime add only)
 ```
 
 Rules, all stated on the spec boards:
@@ -351,30 +351,30 @@ does not decide the schema.
 
 A **78-column sheet centred over the dimmed session** (the export dims the
 session to 34% and keeps it live). It is the picker's language with exactly
-three differences, per the spec board:
+three differences, per the user rule:
 
-1. Repos already open are listed but **locked** for ordinary selection: `[·]`,
-   meta `already open · pane 2`. **Chosen** (§0): the lock is what stops
-   `space` from re-adding a pane by accident, not a rule that a project may
-   only be open once — `+` on a locked row marks it `[+]` and appends *another
-   instance* of it, meta `another instance · appends as pane 5`. A repo open
-   more than once states every pane it holds: `already open · panes 1, 5`.
+1. **Every repository and folder is a terminal target**, including a path
+   already open. Plain files and `..` remain context or navigation, never
+   targets. An open path begins `[ ]`, meta `already open · pane 2`; `⏎`,
+   `space`, or `+` marks it `[+]` for another instance, meta `another instance
+   · pane 2`.
 2. Marks are `[+]`, because they **append** rather than order — the footer says
    `appends as pane 5`.
 3. **The master never changes**: `esc cancel · master unchanged` is printed on
    the sheet itself.
 
-`⇧⇥` cycles configured roots in place (the sheet has no room for a browse
-crumb), the sheet header reads `ROOT ~/work · 12 repos · 4 already open`, and
-the filter line works exactly as in §4. The launch line reads `o  Add N
-terminal(s)` — A3 inherits §7's revised map, so `⏎` marks a row there too and
-`o` is what commits the sheet.
+`→` descends into a folder or repository and `←` goes back, exactly as in the
+launch picker. `⇧⇥` cycles configured roots in place; one root is shown at a
+time, while marks survive the switch. The header reads `ROOT ~/work · 12
+targets · 4 already open`, and the filter line works exactly as in §4. The
+launch line reads `o  Add N terminal(s)` — `⏎` marks a row and `o` commits the
+sheet.
 
 **As built (A3).** Three things the export leaves open, decided here:
 
-- **Repositories only.** The sheet has no crumb, so it cannot browse; it lists
-  what the current root's search finds and leaves plain folders to the launch
-  picker, which can walk to them.
+- **Folders are terminals.** The sheet shows the current folder's listing and
+  navigates it like the launch picker, so any repository or plain folder can
+  be marked as a working directory.
 - **Marks survive a root switch.** `⇧⇥` changes what is listed, not what is
   going to be added — the sheet's selection is as workspace-wide as the
   picker's.
@@ -389,8 +389,8 @@ the epic's rule does not stop at the session's edge:
 
 | Keys | Action | Pointer |
 | --- | --- | --- |
-| `⏎` | mark the row (locked rows refuse both) | click the row |
-| `+` | another instance, locked or not | click the row's instance slot |
+| `⏎` | mark the row, including an open path | click the row |
+| `+` | another instance of the row | click the row's instance slot |
 | `-` | shed the most recent instance | secondary-click the same slot |
 | `⇧⇥` | next configured root | click `⇧⇥ switch root` in the header |
 | `/` | filter | click the query line |
@@ -407,7 +407,7 @@ row beneath it, the way the picker's marker cells do.
 should not be able to throw away a set of marks by accident.
 
 Adding commits through the same naming rule the picker uses, applied to the
-running session: a repository already open takes `-2`, then `-3`, skipping
+running session: a path already open takes `-2`, then `-3`, skipping
 any name a live terminal already holds. The new panes land at the end of the
 stack, folded like every other new preview (#39), and the master keeps the
 frame — which is what `esc cancel · master unchanged` promises.

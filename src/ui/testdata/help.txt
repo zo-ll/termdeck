@@ -18,7 +18,7 @@
 │                                         │  ^g c             collapse / expand previews             │                                          
 │    VITE v5.4.8  ready in 268 ms         │  ^g pgup/pgdn     page the preview stack                 │                                          
 │                                         │  ^g -  ^g =       narrow / widen the master              │                                          
-│  12:05:02 [vite] hmr update /src/compone│  ^g a             add a terminal                         │                                          
+│  12:05:02 [vite] hmr update /src/compone│  ^g a             open any folder / repo                 │                                          
 │  12:05:09 warning  src/components/PaneTi│  ^g [             enter scrollback mode                  │                                          
 │           'status' is declared but its v│                                                          │                                          
 │  12:05:17 [vite] hmr update /src/compone│  TERMINAL                                                │                                          

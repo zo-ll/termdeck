@@ -149,7 +149,8 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
     Ok(chosen)
 }
 
-/// What the session is already running, for the sheet's `[·]` locks.
+/// What the session is already running, so the sheet can identify another
+/// instance of an open path.
 fn open_terminals(projects: &[Project]) -> Vec<crate::ui::Open> {
     projects
         .iter()
@@ -272,7 +273,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             // way a modal does: the session behind it stays live but is not
             // being driven (#50 A3).
             if let Some(open_sheet) = sheet.as_mut() {
-                let rows = open_sheet.rows(&browser, &roots);
+                let rows = open_sheet.rows(&browser);
                 let open = open_terminals(&projects);
                 let reaction = match event {
                     InputEvent::Key(key) => {
@@ -576,7 +577,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 }
                 .render(&engine, frame);
                 if let Some(open_sheet) = sheet.as_ref() {
-                    let rows = open_sheet.rows(&browser, &roots);
+                    let rows = open_sheet.rows(&browser);
                     Sheet {
                         state: open_sheet,
                         rows: &rows,
@@ -1440,7 +1441,22 @@ mod tests {
         );
     }
 
-    /// The sheet's `[·]` locks read the running panes in order.
+    #[test]
+    fn a_committed_sheet_opens_a_plain_folder() {
+        let roots = [crate::ui::Entry::folder("code", "/code")];
+        let mut sheet = SheetState::new(&roots);
+        let folder = crate::ui::Entry::folder("archive", "/code/archive");
+        sheet.state_mut().add(&folder);
+
+        let added = chosen(&sheet, &[]);
+
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0].terminal, TerminalId::new("archive"));
+        assert_eq!(added[0].path, PathBuf::from("/code/archive"));
+    }
+
+    /// The sheet names the running panes in order beside paths they already
+    /// hold, without preventing another instance.
     #[test]
     fn the_open_terminals_are_listed_with_their_pane_numbers() {
         let running = [

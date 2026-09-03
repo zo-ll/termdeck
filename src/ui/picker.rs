@@ -437,15 +437,12 @@ impl PickerState {
         had
     }
 
-    /// `a` — every repository in this listing, once each. A bulk key never
-    /// multiplies what a deliberate one built, so an already-selected repo is
-    /// left at the count it has.
+    /// `a` — every selectable target in this listing, once each. A bulk key
+    /// never multiplies what a deliberate one built, so an already-selected
+    /// target is left at the count it has.
     pub fn select_all(&mut self, rows: &[Entry]) -> bool {
         let mut added = false;
-        for entry in rows
-            .iter()
-            .filter(|entry| entry.kind == EntryKind::Repository)
-        {
+        for entry in rows.iter().filter(|entry| entry.selectable()) {
             if self.instances(&entry.path) == 0 {
                 added |= self.add(entry);
             }
@@ -2096,6 +2093,12 @@ mod tests {
 
     impl Browse for Fixture {
         fn list(&self, path: &Path) -> Listing {
+            if path == Path::new("/home/dev/code/horizon-frontend") {
+                return Listing::of(vec![
+                    Entry::parent("/home/dev/code"),
+                    Entry::folder("projects", path.join("projects")),
+                ]);
+            }
             // A folder that is genuinely empty, and one that cannot be read:
             // the two the picker must never confuse.
             if path == Path::new("/home/dev/code/vendor/tmp") {
@@ -2320,7 +2323,7 @@ mod tests {
 
     /// A bulk key must not multiply what a deliberate one built.
     #[test]
-    fn selecting_every_repo_leaves_existing_instances_alone() {
+    fn selecting_every_target_leaves_existing_instances_alone() {
         let mut state = browsing();
         let frontend = entry(&state, "horizon-frontend");
         state.add(&frontend);
@@ -2329,7 +2332,7 @@ mod tests {
         assert!(state.select_all(&rows_of(&state)));
 
         assert_eq!(state.instances(&frontend.path), 2, "not multiplied");
-        assert_eq!(state.selection().len(), 6, "5 repos, one of them twice");
+        assert_eq!(state.selection().len(), 9, "8 targets, one of them twice");
     }
 
     /// Any directory can be a terminal, so a folder joins a workspace on the
@@ -3116,7 +3119,7 @@ mod tests {
     }
 
     fn sheet_rows(sheet: &SheetState) -> Vec<Entry> {
-        sheet.rows(&Fixture, &Fixture.roots())
+        sheet.rows(&Fixture)
     }
 
     fn render_sheet(sheet: &SheetState, open: &[Open]) -> Buffer {
@@ -3135,10 +3138,10 @@ mod tests {
         terminal.backend().buffer().clone()
     }
 
-    /// The sheet lists the current root's repositories, and says which of
-    /// them the session already holds.
+    /// The sheet lists the current folder's targets, including folders and
+    /// already-open repositories, without locking either.
     #[test]
-    fn the_sheet_lists_repositories_and_locks_the_open_ones() {
+    fn the_sheet_lists_unrestricted_terminal_targets() {
         let sheet = sheet_state();
         let open = open_two();
 
@@ -3146,14 +3149,13 @@ mod tests {
 
         assert!(rendered.contains("> add terminal"), "{rendered}");
         assert!(rendered.contains("ROOT ~/code"), "{rendered}");
-        assert!(rendered.contains("2 already open"), "{rendered}");
         assert!(
-            rendered.contains("[·] ◆  horizon-frontend    +  · already open · pane 1"),
+            rendered.contains("[ ] ◆  horizon-frontend    +  · already open · pane 1"),
             "{rendered}"
         );
         assert!(
-            !rendered.contains("archive"),
-            "a folder is not a terminal the sheet offers: {rendered}"
+            rendered.contains("[ ] ▸  archive"),
+            "a plain folder is a terminal target: {rendered}"
         );
         assert!(rendered.contains("[ ] ◆  termdeck"), "an unopened one");
         assert!(
@@ -3162,10 +3164,9 @@ mod tests {
         );
     }
 
-    /// `⏎` marks a row, and the lock is what stops it re-adding a pane the
-    /// session already has.
+    /// `⏎` marks an open row as another instance rather than refusing it.
     #[test]
-    fn enter_marks_a_row_but_not_one_that_is_already_open() {
+    fn enter_marks_another_instance_of_an_open_repository() {
         let mut sheet = sheet_state();
         let rows = sheet_rows(&sheet);
         let roots = Fixture.roots();
@@ -3177,24 +3178,15 @@ mod tests {
         sheet.state_mut().point_at(frontend, rows.len());
 
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
-        assert!(sheet.marked().is_empty(), "the lock held");
-
-        let termdeck = rows
-            .iter()
-            .position(|entry| entry.name == "termdeck")
-            .unwrap();
-        sheet.state_mut().point_at(termdeck, rows.len());
-        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
-
         assert_eq!(sheet.marked().len(), 1);
-        assert_eq!(sheet.marked()[0].name, "termdeck");
+        assert_eq!(sheet.marked()[0].name, "horizon-frontend");
         let rendered = text(&render_sheet(&sheet, &open));
-        assert!(rendered.contains("[+] ◆  termdeck"), "{rendered}");
+        assert!(rendered.contains("[+] ◆  horizon-frontend"), "{rendered}");
+        assert!(rendered.contains("another instance · pane 1"), "{rendered}");
         assert!(rendered.contains("o  Add 1 terminal"), "{rendered}");
     }
 
-    /// The note's relaxation: `+` on a locked row asks for *another* instance
-    /// of a repository that is already open.
+    /// `+` still appends an explicit additional instance of an open path.
     #[test]
     fn plus_appends_another_instance_of_an_open_repository() {
         let mut sheet = sheet_state();
@@ -3209,7 +3201,7 @@ mod tests {
 
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('+'));
 
-        assert_eq!(sheet.marked().len(), 1, "the lock never stopped `+`");
+        assert_eq!(sheet.marked().len(), 1, "an open path is still targetable");
         assert_eq!(sheet.marked()[0].path, code().join("horizon-frontend"));
 
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('+'));
@@ -3229,6 +3221,8 @@ mod tests {
 
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Up);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
         sheet_press(&mut sheet, &rows, &roots, &open, Key::Down);
         assert_eq!(rows[sheet.state().cursor()].name, "horizon-app");
@@ -3258,6 +3252,73 @@ mod tests {
             sheet_press(&mut sheet, &rows, &roots, &open, Key::Char('o')),
             Some(PickerReaction::Launch),
             "o commits the marked rows"
+        );
+    }
+
+    /// `→` and `←` use the picker's folder navigation, while `⏎` keeps a
+    /// folder a terminal target in its own right.
+    #[test]
+    fn the_sheet_navigates_into_repositories_and_marks_folders() {
+        let mut sheet = sheet_state();
+        let roots = Fixture.roots();
+        let open = open_two();
+        let rows = sheet_rows(&sheet);
+        let frontend = rows
+            .iter()
+            .position(|entry| entry.name == "horizon-frontend")
+            .unwrap();
+        sheet.state_mut().point_at(frontend, rows.len());
+
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Right);
+        assert_eq!(
+            sheet.state().cwd(),
+            Some(code().join("horizon-frontend").as_path())
+        );
+        let inside = sheet_rows(&sheet);
+        assert_eq!(inside[0].name, "..", "the repository's contents are shown");
+        assert_eq!(inside[1].name, "projects");
+
+        sheet_press(&mut sheet, &inside, &roots, &open, Key::Left);
+        let rows = sheet_rows(&sheet);
+        let archive = rows
+            .iter()
+            .position(|entry| entry.name == "archive")
+            .unwrap();
+        sheet.state_mut().point_at(archive, rows.len());
+        sheet_press(&mut sheet, &rows, &roots, &open, Key::Enter);
+        assert_eq!(sheet.marked()[0].path, code().join("archive"));
+    }
+
+    /// `a` is a bulk terminal-target gesture, so folders join repositories
+    /// while files and the parent row stay out.
+    #[test]
+    fn the_sheet_marks_every_selectable_target() {
+        let mut sheet = sheet_state();
+        let rows = sheet_rows(&sheet);
+        let roots = Fixture.roots();
+
+        sheet_press(&mut sheet, &rows, &roots, &open_two(), Key::Char('a'));
+
+        assert_eq!(
+            sheet.marked().len(),
+            8,
+            "five repositories and three folders"
+        );
+        assert!(
+            sheet
+                .marked()
+                .iter()
+                .any(|target| target.path == code().join("archive"))
+        );
+        assert!(
+            !sheet
+                .marked()
+                .iter()
+                .any(|target| target.name == "README.md")
+        );
+        assert!(
+            !sheet.marked().iter().any(|target| target.name == ".."),
+            "the parent row is navigation, not a terminal"
         );
     }
 
@@ -3369,7 +3430,7 @@ mod tests {
         assert_eq!(by_pointer.marked(), by_key.marked());
         assert_eq!(by_pointer.state().cursor(), termdeck, "and it points there");
 
-        // The lock holds for the pointer too.
+        // An open path is just another target for the pointer too.
         sheet_click(
             &mut by_pointer,
             &rows,
@@ -3377,16 +3438,11 @@ mod tests {
             &open,
             SheetHit::Row(frontend),
         );
-        assert_eq!(
-            by_pointer.marked().len(),
-            1,
-            "an open repo is not re-marked"
-        );
+        assert_eq!(by_pointer.marked().len(), 2, "an open repo is re-marked");
     }
 
-    /// The instance slot is `+`, and `-` on the secondary button — including
-    /// on a locked row, which is the only way the pointer can ask for another
-    /// instance of a repository the session already holds.
+    /// The instance slot is `+`, and `-` on the secondary button, including
+    /// for a path the session already holds.
     #[test]
     fn the_instance_slot_is_the_pointers_plus_and_minus() {
         let roots = Fixture.roots();
@@ -3418,7 +3474,7 @@ mod tests {
             SheetHit::Instance(frontend),
         );
 
-        assert_eq!(by_pointer.marked().len(), 2, "a locked row still appends");
+        assert_eq!(by_pointer.marked().len(), 2, "an open row still appends");
         assert_eq!(by_pointer.marked(), by_key.marked());
 
         // And the secondary button sheds one, as `-` does.
@@ -3510,22 +3566,31 @@ mod tests {
                 .unwrap_or_else(|| panic!("{needle} is drawn on row {row}"))
         };
 
-        // The first listed row: its `+` is the instance slot, and the name
-        // beside it is the row.
+        // `..` is the first listed row: it is navigation-only, so even the
+        // instance-slot columns remain its row.
         let first = view.rect(area).y + 3;
-        let plus = find("+", first);
+        let slot = view.rect(area).x + 2 + SHEET_INSTANCE;
         assert_eq!(
-            view.hit(area, Position::new(plus, first)),
-            Some(SheetHit::Instance(0))
+            view.hit(area, Position::new(slot, first)),
+            Some(SheetHit::Row(0))
+        );
+
+        // The first terminal target, `archive/`, owns the same two-cell
+        // instance slot as `+`.
+        let archive = first + 1;
+        let plus = find("+", archive);
+        assert_eq!(
+            view.hit(area, Position::new(plus, archive)),
+            Some(SheetHit::Instance(1))
         );
         assert_eq!(
-            view.hit(area, Position::new(plus + 1, first)),
-            Some(SheetHit::Instance(0)),
+            view.hit(area, Position::new(plus + 1, archive)),
+            Some(SheetHit::Instance(1)),
             "two columns wide, so the click needs no precision"
         );
         assert_eq!(
-            view.hit(area, Position::new(plus - 4, first)),
-            Some(SheetHit::Row(0)),
+            view.hit(area, Position::new(plus - 4, archive)),
+            Some(SheetHit::Row(1)),
             "the name is still the row"
         );
 
@@ -3641,11 +3706,11 @@ pub struct Open {
 /// What `^g a` opens: the picker's language reduced to a sheet over the live
 /// session (note §6).
 ///
-/// It is the picker with three differences, all of them here rather than in
-/// [`PickerState`], which it borrows wholesale: repositories already open are
-/// listed but locked, marks append rather than order, and the master never
-/// changes. `⇧⇥` cycles the configured roots in place, because the sheet has
-/// no room for a browse crumb.
+/// It is the picker with two differences, all of them here rather than in
+/// [`PickerState`], which it borrows wholesale: marks append rather than
+/// order, and the master never changes. Already-open paths are ordinary
+/// targets: marking one asks for another instance. `⇧⇥` cycles configured
+/// roots in place.
 #[derive(Clone, Debug)]
 pub struct SheetState {
     picker: PickerState,
@@ -3689,24 +3754,10 @@ impl SheetState {
         self.picker.go_to(roots[self.root].path.clone())
     }
 
-    /// The repositories the sheet lists: everything under the current root,
-    /// narrowed by the query. Folders are not offered — the sheet adds
-    /// terminals, and browsing is the launch picker's job.
-    pub fn rows(&self, browser: &dyn Browse, roots: &[Entry]) -> Vec<Entry> {
-        let Some(root) = roots.get(self.root) else {
-            return Vec::new();
-        };
-        let query = self.picker.filter().unwrap_or_default();
-        browser
-            .search(&root.path)
-            .into_iter()
-            // Repositories only. The sheet adds terminals to a running
-            // session; browsing a tree for a plain folder is the launch
-            // picker's job, and the sheet has no crumb to browse with.
-            .filter(|entry| entry.kind == EntryKind::Repository)
-            .filter(|entry| entry.path.starts_with(&root.path))
-            .filter(|entry| matches(&entry.name, query))
-            .collect()
+    /// The current folder's listing, including selectable folders and
+    /// repositories. Plain files and `..` remain navigation-only context.
+    pub fn rows(&self, browser: &dyn Browse) -> Vec<Entry> {
+        self.picker.rows(browser)
     }
 
     /// What the sheet will append, in the order it was marked.
@@ -3799,9 +3850,10 @@ impl Sheet<'_> {
 
     fn header(&self, buffer: &mut Buffer, content: Rect) {
         let root = self
-            .roots
-            .get(self.state.root())
-            .map(|root| display_path(&root.path, self.home))
+            .state
+            .state()
+            .cwd()
+            .map(|path| display_path(path, self.home))
             .unwrap_or_default();
         let open = self
             .rows
@@ -3812,7 +3864,10 @@ impl Sheet<'_> {
             Span::styled("ROOT ", Style::new().fg(MUTED)),
             Span::styled(root, Style::new().fg(MASTER_FG)),
             Span::styled("  ·  ", Style::new().fg(SEPARATOR)),
-            Span::styled(format!("{} repos", self.rows.len()), Style::new().fg(MUTED)),
+            Span::styled(
+                format!("{} targets", self.rows.len()),
+                Style::new().fg(MUTED),
+            ),
         ];
         if open > 0 {
             spans.push(Span::styled(
@@ -3851,7 +3906,7 @@ impl Sheet<'_> {
                 &Line::from(Span::styled(
                     match self.state.state().filter() {
                         Some(query) => format!("no match for {query}"),
-                        None => "no repositories under this root".to_owned(),
+                        None => "no targets in this folder".to_owned(),
                     },
                     Style::new().fg(MUTED),
                 )),
@@ -3891,12 +3946,10 @@ impl Sheet<'_> {
         };
         let open = open_pane(self.open, entry);
         let marks = self.state.state().instances(&entry.path);
-        // `[+]` marks an addition, `[·]` locks a repository the session
-        // already holds — locked against `⏎`, never against `+`.
-        let (box_text, box_colour) = match (marks, open) {
-            (0, Some(_)) => ("[·]".to_owned(), HINT),
-            (0, None) => ("[ ]".to_owned(), HINT),
-            (_, _) => ("[+]".to_owned(), ACCENT),
+        let (box_text, box_colour) = match (entry.selectable(), marks) {
+            (true, 0) => ("[ ]".to_owned(), HINT),
+            (true, _) => ("[+]".to_owned(), ACCENT),
+            (false, _) => ("   ".to_owned(), HINT),
         };
         put(
             buffer,
@@ -3909,7 +3962,21 @@ impl Sheet<'_> {
         put(
             buffer,
             COL_GLYPH,
-            vec![Span::styled("◆", Style::new().fg(ACCENT).bg(background))],
+            vec![Span::styled(
+                match entry.kind {
+                    EntryKind::Repository => "◆",
+                    EntryKind::Folder => "▸",
+                    EntryKind::Parent => "▴",
+                    EntryKind::File => "·",
+                },
+                Style::new()
+                    .fg(match entry.kind {
+                        EntryKind::Repository => ACCENT,
+                        EntryKind::Folder => WARNING,
+                        EntryKind::Parent | EntryKind::File => HINT,
+                    })
+                    .bg(background),
+            )],
         );
         put(
             buffer,
@@ -3919,30 +3986,34 @@ impl Sheet<'_> {
                 Style::new().fg(MASTER_FG).bg(background),
             )],
         );
-        // The instance slot. It is a `+` until there is more than one, then
-        // the count — and it is drawn on every row, including a locked one,
-        // because it is the pointer's only way to ask for another instance
-        // of a repository the session already holds.
-        let (badge, colour) = match marks {
-            0 => ("+".to_owned(), HINT),
-            1 => ("+".to_owned(), ACCENT),
-            _ => (format!("×{marks}"), ACCENT),
+        // The instance slot is a `+` until there is more than one, then the
+        // count. It stays on every terminal target so another instance is
+        // explicit.
+        let (badge, colour) = match (entry.selectable(), marks) {
+            (true, 0) => ("+".to_owned(), HINT),
+            (true, 1) => ("+".to_owned(), ACCENT),
+            (true, _) => (format!("×{marks}"), ACCENT),
+            (false, _) => (String::new(), HINT),
         };
         put(
             buffer,
             SHEET_INSTANCE,
             vec![Span::styled(badge, Style::new().fg(colour).bg(background))],
         );
-        let meta = match (open, entry.branch.as_deref()) {
-            (Some(pane), _) => vec![Span::styled(
+        let meta = match (marks, open, entry.branch.as_deref()) {
+            (_, Some(pane), _) if marks > 0 => vec![Span::styled(
+                format!("another instance · pane {pane}"),
+                Style::new().fg(MUTED).bg(background),
+            )],
+            (_, Some(pane), _) => vec![Span::styled(
                 format!("already open · pane {pane}"),
                 Style::new().fg(MUTED).bg(background),
             )],
-            (None, Some(branch)) => vec![Span::styled(
+            (_, None, Some(branch)) => vec![Span::styled(
                 format!("git · {branch}"),
                 Style::new().fg(MUTED).bg(background),
             )],
-            (None, None) => Vec::new(),
+            (_, None, None) => Vec::new(),
         };
         if !meta.is_empty() {
             put(
@@ -4007,7 +4078,7 @@ impl Sheet<'_> {
             ]),
             content.width,
         );
-        let keys = "↑↓ move  ⏎ mark  + instance  ⇧⇥ root  / filter  o add";
+        let keys = "↑↓ move  ⏎ mark  → inside  ← back  a all  o add";
         buffer.set_line(
             content.x + 1,
             bottom - 1,
@@ -4069,14 +4140,17 @@ impl Sheet<'_> {
         if index >= self.rows.len() {
             return None;
         }
+        let entry = self.rows.get(index)?;
         // The instance slot is two columns of the row and takes precedence
         // over it, the way the picker's marker cells do.
         let slot = content.x + 1 + SHEET_INSTANCE;
-        Some(if (slot..slot + 2).contains(&pointer.x) {
-            SheetHit::Instance(index)
-        } else {
-            SheetHit::Row(index)
-        })
+        Some(
+            if entry.selectable() && (slot..slot + 2).contains(&pointer.x) {
+                SheetHit::Instance(index)
+            } else {
+                SheetHit::Row(index)
+            },
+        )
     }
 }
 
@@ -4102,19 +4176,17 @@ pub fn sheet_click(
     sheet: &mut SheetState,
     rows: &[Entry],
     roots: &[Entry],
-    open: &[Open],
+    _open: &[Open],
     hit: SheetHit,
 ) -> Option<PickerReaction> {
     match hit {
-        // `⏎`: mark the row, unless the session already holds it.
+        // `⏎`: mark the row, including another instance of an open path.
         SheetHit::Row(index) => {
             let entry = rows.get(index).cloned()?;
             sheet.state_mut().point_at(index, rows.len());
-            if open_pane(open, &entry).is_none() {
-                sheet.state_mut().toggle(&entry);
-            }
+            sheet.state_mut().toggle(&entry);
         }
-        // `+`: another instance, locked row or not.
+        // `+`: another instance of any selectable row.
         SheetHit::Instance(index) => {
             let entry = rows.get(index).cloned()?;
             sheet.state_mut().point_at(index, rows.len());
@@ -4155,7 +4227,7 @@ pub fn sheet_press(
     sheet: &mut SheetState,
     rows: &[Entry],
     roots: &[Entry],
-    open: &[Open],
+    _open: &[Open],
     key: Key,
 ) -> Option<PickerReaction> {
     if sheet.state().filtering()
@@ -4166,9 +4238,6 @@ pub fn sheet_press(
         return None;
     }
     let cursor = rows.get(sheet.state().cursor()).cloned();
-    let locked = cursor
-        .as_ref()
-        .is_some_and(|entry| open_pane(open, entry).is_some());
     match key {
         Key::Down | Key::Char('j') => {
             sheet.state_mut().move_cursor(1, rows.len());
@@ -4176,13 +4245,8 @@ pub fn sheet_press(
         Key::Up | Key::Char('k') => {
             sheet.state_mut().move_cursor(-1, rows.len());
         }
-        // A repository the session already holds is locked against `⏎` — the
-        // lock is what stops a pane being re-added by accident — but never
-        // against `+`, which is how another instance of it is asked for.
         Key::Enter | Key::Char(' ') => {
-            if let Some(entry) = cursor.as_ref()
-                && !locked
-            {
+            if let Some(entry) = cursor.as_ref() {
                 sheet.state_mut().toggle(entry);
             }
         }
@@ -4196,6 +4260,14 @@ pub fn sheet_press(
                 sheet.state_mut().drop_one(entry);
             }
         }
+        Key::Right | Key::Char('l') => {
+            if let Some(entry) = cursor.as_ref() {
+                sheet.state_mut().enter(entry);
+            }
+        }
+        Key::Left | Key::Char('h') => {
+            sheet.state_mut().up(roots);
+        }
         // `⇧⇥` is what the note names; plain `⇥` does the same, because a
         // sheet with one way through it should not be fussy about which.
         Key::ShiftTab | Key::Tab => {
@@ -4203,6 +4275,9 @@ pub fn sheet_press(
         }
         Key::Char('/') => {
             sheet.state_mut().begin_filter();
+        }
+        Key::Char('a') => {
+            sheet.state_mut().select_all(rows);
         }
         Key::Backspace => {
             sheet.state_mut().pop_filter();
