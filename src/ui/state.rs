@@ -146,7 +146,15 @@ impl DeckState {
     /// The step lands on the grid rather than adding to whatever the drag
     /// left behind, so the keys always reach the same six splits however the
     /// pointer got there.
+    ///
+    /// With nothing stacked there is nothing to resize, so the keys are a
+    /// silent no-op: the stored split is left alone for the stack a
+    /// runtime-add may yet bring back. (The pointer half needs no guard —
+    /// with no stack there is no divider column to take hold of.)
     pub fn nudge_master_ratio(&mut self, steps: i32) -> bool {
+        if self.stack().is_empty() {
+            return false;
+        }
         let grid = ((self.master_ratio / MASTER_RATIO_STEP).round() + f64::from(steps))
             * MASTER_RATIO_STEP;
         self.set_master_ratio((grid * 100.0).round() / 100.0)
@@ -808,6 +816,21 @@ mod tests {
 
         assert!(!state.toggle_collapse_all());
         assert_eq!(state.collapsed_count(), 0);
+    }
+
+    /// With nothing stacked there is nothing to resize: the keys leave the
+    /// stored split alone for the stack a runtime-add may yet bring back.
+    #[test]
+    fn the_split_keys_are_inert_with_an_empty_stack() {
+        let mut state = DeckState::new(1);
+
+        assert!(!state.nudge_master_ratio(-1));
+        assert!(!state.nudge_master_ratio(1));
+        assert_eq!(state.master_ratio(), super::DEFAULT_MASTER_RATIO);
+
+        state.push_terminal();
+        assert!(state.nudge_master_ratio(-1));
+        assert_eq!(state.master_ratio(), 0.80);
     }
 
     /// The export: "^g 2-4 promotes a collapsed pane directly — it expands as
