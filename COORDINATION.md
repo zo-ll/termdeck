@@ -199,3 +199,9 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   reference/export itself). tmux-safety note: minimized window churn.
   Backend-impact scan (codex) still pending post-reset for the session.rs
   ownership part.
+- 2026-09-03: Declutter critic PASS; authority refresh RATIFIED (implements
+  the user's declutter order; lesson: implementers must get prior approval
+  before editing the design authority). Integration: re-root d25c97f onto
+  current main -> claude (coord/declutter). 3 NBs (incl. DESIGN.md
+  sheet-background note) folded into the pending NB cleanup. Backend-impact
+  scan (codex) still after reset.
