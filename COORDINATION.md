@@ -265,3 +265,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   failed too). #74 (alt-screen wheel) blocked until it recovers (or reassign).
   Claude pane stuck in queued-messages state -> relaunched FRESH for #76
   (hide stack when empty).
+- 2026-09-03: Providers struggling (OpenAI codex 404; Anthropic 529). Muse-
+  spark (opencode-go) took over: #74 engine-lane muse worker + #76 now on a
+  second muse worker (claude lane). Claude window closed (overload).
