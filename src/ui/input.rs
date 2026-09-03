@@ -574,6 +574,20 @@ mod tests {
     }
 
     /// Unprefixed they are still the shell's, and scrollback's, as before.
+    /// #74 keyboard parity: in-app scroll is reachable by keys without any
+    /// change — unprefixed navigation keys already forward as ANSI, so an
+    /// alternate-screen app scrolls on them natively. Termdeck scrollback
+    /// still needs `^g [` first, which is what the second half pins.
+    #[test]
+    fn unprefixed_navigation_keys_reach_the_app_as_ansi() {
+        let mut session = Session::new();
+
+        assert_eq!(session.press(Key::Up), sent(b"\x1b[A"));
+        assert_eq!(session.press(Key::Down), sent(b"\x1b[B"));
+        assert_eq!(session.press(Key::PageUp), sent(b"\x1b[5~"));
+        assert_eq!(session.press(Key::PageDown), sent(b"\x1b[6~"));
+    }
+
     #[test]
     fn an_unprefixed_page_key_is_not_a_stack_command() {
         let mut session = Session::new();

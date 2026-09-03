@@ -107,6 +107,19 @@ impl VtFrameAdapter {
             lines_below: lines_below as u32,
         }
     }
+
+    /// Whether the terminal shows its alternate screen: a full-screen app
+    /// (vim, less, claude) owns the grid, so termdeck scrollback is inert
+    /// there and the wheel belongs to the app (#74).
+    pub fn alt_screen(&self) -> bool {
+        self.term.mode().contains(TermMode::ALT_SCREEN)
+    }
+
+    /// Whether the app enabled mouse reporting: with it the app wants the
+    /// wheel as SGR mouse reports, without it as cursor keys (#74).
+    pub fn mouse_reporting(&self) -> bool {
+        self.term.mode().intersects(TermMode::MOUSE_MODE)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -344,6 +357,43 @@ mod tests {
         assert_eq!(adapter.scrollback_position().lines_below, 0);
         adapter.scroll(ScrollCommand::Up(1));
         assert_eq!(adapter.scrollback_position().lines_below, 1);
+    }
+
+    /// REPRO (#74): a full-screen app owns the grid, so termdeck's own
+    /// scrollback has nothing to display while one runs — scrolling the
+    /// alternate screen moves nothing, and the app never sees the wheel.
+    #[test]
+    fn scrollback_scroll_is_inert_on_the_alternate_screen() {
+        let mut app = adapter(ScreenSize::new(8, 2));
+        app.feed(b"\x1b[?1049h");
+        app.feed(b"one\r\ntwo\r\nthree\r\n");
+        app.scroll(ScrollCommand::Up(3));
+
+        assert_eq!(
+            app.scrollback_position().lines_below,
+            0,
+            "termdeck scrollback cannot move an app-owned grid"
+        );
+    }
+
+    #[test]
+    fn alt_screen_tracks_the_alternate_buffer() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+        assert!(!adapter.alt_screen());
+        adapter.feed(b"\x1b[?1049h");
+        assert!(adapter.alt_screen());
+        adapter.feed(b"\x1b[?1049l");
+        assert!(!adapter.alt_screen());
+    }
+
+    #[test]
+    fn mouse_reporting_tracks_the_app_mouse_mode() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+        assert!(!adapter.mouse_reporting());
+        adapter.feed(b"\x1b[?1000h\x1b[?1006h");
+        assert!(adapter.mouse_reporting());
+        adapter.feed(b"\x1b[?1000l");
+        assert!(!adapter.mouse_reporting());
     }
 
     /// Output advances a live viewport, but never steals a deliberately

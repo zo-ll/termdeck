@@ -22,8 +22,8 @@ use ratatui::{
 use crate::{
     config::Workspace,
     contracts::{
-        EngineCommand, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId, Timestamp,
-        UserCommand,
+        EngineCommand, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
+        TerminalMetadata, Timestamp, UserCommand,
     },
     engine::NativeEngine,
     ui::{
@@ -392,14 +392,14 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.set_resizing(false);
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
+                        let pane = Deck {
+                            workspace: &workspace.name,
+                            projects: &projects,
+                            state: &deck,
+                            master_ratio: deck.master_ratio(),
+                            now: now(),
+                        };
                         let (terminal, list) = {
-                            let pane = Deck {
-                                workspace: &workspace.name,
-                                projects: &projects,
-                                state: &deck,
-                                master_ratio: deck.master_ratio(),
-                                now: now(),
-                            };
                             let pointed = pane.position_at(area, pointer);
                             let terminal = pointed
                                 // A collapsed preview has no viewport, so there
@@ -414,7 +414,34 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             (terminal, list)
                         };
                         if let Some(terminal) = terminal {
-                            dispatch_scroll(&mut engine, terminal, command);
+                            // A full-screen app owns its grid: termdeck
+                            // scrollback is inert there, so the wheel belongs
+                            // to the app (#74). Line terminals keep the #25
+                            // scrollback below.
+                            match route_wheel(engine.metadata(&terminal), command) {
+                                WheelRoute::Scrollback(command) => {
+                                    dispatch_scroll(&mut engine, terminal, command);
+                                }
+                                WheelRoute::App { up, mouse } => {
+                                    let (column, row) = pane
+                                        .pane_cell(area, pointer)
+                                        .map(|(_, column, row)| (column, row))
+                                        .unwrap_or((0, 0));
+                                    let size = engine
+                                        .frame(&terminal)
+                                        .map(|frame| frame.size)
+                                        .unwrap_or(ScreenSize::new(1, 1));
+                                    let column = column.min(size.columns.saturating_sub(1)) + 1;
+                                    let row = row.min(size.rows.saturating_sub(1)) + 1;
+                                    // App input, not live-shell typing: no
+                                    // tail-resume preamble, which is inert on
+                                    // the alternate screen anyway.
+                                    engine.dispatch(EngineCommand::Input {
+                                        terminal,
+                                        bytes: app_wheel(up, column, row, mouse),
+                                    });
+                                }
+                            }
                         } else if let Some(window) = list {
                             let items = match command {
                                 ScrollCommand::Up(_) => -1,
@@ -599,6 +626,42 @@ fn dispatch_live_input(
 
 fn dispatch_scroll(engine: &mut dyn TerminalEngine, terminal: TerminalId, command: ScrollCommand) {
     engine.dispatch(EngineCommand::Scroll { terminal, command });
+}
+
+/// What a wheel tick over a pane becomes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum WheelRoute {
+    /// A line terminal: the engine-owned #25 scrollback viewport.
+    Scrollback(ScrollCommand),
+    /// An alternate-screen app: bytes for its PTY. `up` is the tick
+    /// direction and `mouse` whether the app enabled mouse reporting.
+    App { up: bool, mouse: bool },
+}
+
+/// Routes a wheel tick: alternate-screen apps scroll natively, everything
+/// else keeps termdeck scrollback. Unknown terminals keep the old behavior.
+fn route_wheel(metadata: Option<&TerminalMetadata>, command: ScrollCommand) -> WheelRoute {
+    let app = metadata.is_some_and(|metadata| metadata.alt_screen);
+    if !app {
+        return WheelRoute::Scrollback(command);
+    }
+    WheelRoute::App {
+        up: matches!(command, ScrollCommand::Up(_)),
+        mouse: metadata.is_some_and(|metadata| metadata.mouse_reporting),
+    }
+}
+
+/// Encodes one app-bound wheel tick: SGR mouse reports when the app enabled
+/// the mouse (1-based `column`/`row`, already clamped to its grid), cursor
+/// keys otherwise — the xterm alternate-scroll fallback `less` scrolls on.
+/// One tick sends [`WHEEL_LINES`] arrows, the same distance as scrollback.
+fn app_wheel(up: bool, column: u16, row: u16, mouse: bool) -> Vec<u8> {
+    if mouse {
+        format!("\x1b[{};{column};{row}M", if up { "<64" } else { "<65" }).into_bytes()
+    } else {
+        let arrow = if up { b"\x1b[A" } else { b"\x1b[B" };
+        arrow.repeat(usize::from(WHEEL_LINES))
+    }
 }
 
 fn spawn_terminals(
@@ -1183,8 +1246,9 @@ fn colour(colour: Color, foreground: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        InputEvent, KeyReader, MouseAction, add_terminal, chosen, dispatch_live_input,
-        mouse_action, open_terminals, resize_terminals, spawn_terminals, terminal_sizes,
+        InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
+        dispatch_live_input, mouse_action, open_terminals, resize_terminals, route_wheel,
+        spawn_terminals, terminal_sizes,
     };
     use crate::{
         contracts::{
@@ -1501,6 +1565,63 @@ mod tests {
             0
         );
         assert_eq!(engine.input(), &[(terminal, b"echo live\r".to_vec())]);
+    }
+
+    /// #74 revert-fail: the wheel over a line terminal keeps termdeck
+    /// scrollback, byte for byte the #25 behavior — only the alternate
+    /// screen leaves this path.
+    #[test]
+    fn wheel_over_a_line_terminal_keeps_termdeck_scrollback() {
+        assert_eq!(
+            route_wheel(None, ScrollCommand::Up(3)),
+            WheelRoute::Scrollback(ScrollCommand::Up(3))
+        );
+        assert_eq!(
+            route_wheel(Some(&TerminalMetadata::default()), ScrollCommand::Down(3)),
+            WheelRoute::Scrollback(ScrollCommand::Down(3))
+        );
+    }
+
+    /// #74 revert-fail: the wheel over a full-screen app reaches the app —
+    /// SGR reports when it enabled the mouse, cursor keys otherwise — and
+    /// never becomes termdeck scrollback.
+    #[test]
+    fn wheel_over_an_alt_screen_app_reaches_the_app() {
+        let mouse = TerminalMetadata {
+            alt_screen: true,
+            mouse_reporting: true,
+            ..TerminalMetadata::default()
+        };
+        assert_eq!(
+            route_wheel(Some(&mouse), ScrollCommand::Up(3)),
+            WheelRoute::App {
+                up: true,
+                mouse: true
+            }
+        );
+        assert_eq!(
+            route_wheel(Some(&mouse), ScrollCommand::Down(3)),
+            WheelRoute::App {
+                up: false,
+                mouse: true
+            }
+        );
+        let keys = TerminalMetadata {
+            alt_screen: true,
+            ..TerminalMetadata::default()
+        };
+        assert_eq!(
+            route_wheel(Some(&keys), ScrollCommand::Up(3)),
+            WheelRoute::App {
+                up: true,
+                mouse: false
+            }
+        );
+
+        assert_eq!(app_wheel(true, 7, 4, true), b"\x1b[<64;7;4M");
+        assert_eq!(app_wheel(false, 7, 4, true), b"\x1b[<65;7;4M");
+        assert_eq!(app_wheel(true, 1, 1, false), b"\x1b[A\x1b[A\x1b[A");
+        assert_eq!(app_wheel(false, 1, 1, false), b"\x1b[B\x1b[B\x1b[B");
     }
 
     #[cfg(target_os = "linux")]
