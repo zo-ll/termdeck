@@ -6,7 +6,7 @@
 //! Fixtures build real [`FakeEngine`] state so the renderer only ever reads
 //! terminal cells, cursor, status, and metadata through the frozen contracts.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::{
     contracts::{
@@ -17,7 +17,7 @@ use crate::{
     engine::FakeEngine,
 };
 
-/// Home directory the reference paths are abbreviated against.
+/// Home directory the reference project paths are rooted at.
 pub const HOME: &str = "/home/dev";
 /// Wall clock the reference state is rendered at: 12:06:14 UTC.
 pub const NOW: Timestamp = Timestamp {
@@ -193,10 +193,6 @@ fn frontend_metadata(scrollback: ScrollbackPosition) -> TerminalMetadata {
         scrollback,
         ..running(12_000, 4_207_331, 41_233)
     }
-}
-
-pub fn home() -> &'static Path {
-    Path::new(HOME)
 }
 
 fn running(idle_millis: u64, bytes_written: u64, pid: u32) -> TerminalMetadata {

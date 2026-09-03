@@ -15,8 +15,6 @@ mod fixture;
 mod input;
 mod state;
 
-use std::path::Path;
-
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -234,8 +232,6 @@ pub struct Deck<'a> {
     pub projects: &'a [Project],
     /// Which terminal is master, how the rest stack, and whether zoom is on.
     pub state: &'a DeckState,
-    /// Home directory used to abbreviate project paths.
-    pub home: Option<&'a Path>,
     /// Share of the width given to the master pane.
     pub master_ratio: f64,
     /// Wall clock used to age exit timestamps and the demotion highlight.
@@ -765,7 +761,7 @@ impl Deck<'_> {
         buffer.set_line(
             area.x + 1,
             area.y + area.height - 1,
-            &Line::from(self.stack_hints(demoted, window, area.width - 1)),
+            &Line::from(self.stack_hints(window, area.width - 1)),
             area.width - 1,
         );
         drawn
@@ -893,7 +889,7 @@ impl Deck<'_> {
     ) -> (String, Color) {
         match status {
             TerminalStatus::Exited { .. } | TerminalStatus::Failed { .. } => (
-                status_label(status, false).unwrap_or_else(|| "exited".to_owned()),
+                status_label(status).unwrap_or_else(|| "exited".to_owned()),
                 ERROR,
             ),
             TerminalStatus::Starting => ("starting".to_owned(), MUTED),
@@ -912,15 +908,11 @@ impl Deck<'_> {
         }
     }
 
-    /// The stack footer names the promotion that just happened and the key
-    /// that undoes it; otherwise it states what the window hides, the fold
-    /// census, or the promotion keys.
-    fn stack_hints(
-        &self,
-        demoted: Option<usize>,
-        window: StackWindow,
-        width: u16,
-    ) -> Vec<Span<'static>> {
+    /// The stack footer states what the window hides, or the fold census,
+    /// and otherwise says nothing. The declutter pass took out the promotion
+    /// keys and the `promoted x · ^g 1 back` line: the demoted pane's own
+    /// highlight already reports the swap, and the keys live in the help.
+    fn stack_hints(&self, window: StackWindow, width: u16) -> Vec<Span<'static>> {
         if self.state.scrollback() {
             return vec![
                 Span::styled("scrollback", Style::new().fg(WARNING)),
@@ -929,21 +921,14 @@ impl Deck<'_> {
                 Span::styled(" returns to live", Style::new().fg(HINT)),
             ];
         }
-        let promoted = self
-            .state
-            .active()
-            .and_then(|position| self.projects.get(position));
-        // A demotion outranks both censuses: it clears itself after ~1.5s and
-        // whichever of them applies comes back.
-        //
         // Hidden previews outrank folded ones. A fold is already declared by
         // its own strip, its marker and the status row, while a preview the
         // window has scrolled past says nothing about itself anywhere else.
-        if demoted.is_none() && window.overflows() {
+        if window.overflows() {
             return self.overflow_hints(window, width);
         }
         let collapsed = self.state.collapsed_count();
-        if demoted.is_none() && collapsed > 0 {
+        if collapsed > 0 {
             let census = format!("{collapsed} collapsed");
             // The key goes before the census does, the way the paging footer
             // drops `^g pgup/pgdn` first: at the minimum stack width (#44) the
@@ -959,22 +944,7 @@ impl Deck<'_> {
                 Span::styled(" expand all", Style::new().fg(HINT)),
             ];
         }
-        match (demoted, promoted) {
-            (Some(previous), Some(project)) => vec![
-                Span::styled("promoted ", Style::new().fg(HINT)),
-                Span::styled(project.terminal.to_string(), Style::new().fg(ACCENT)),
-                Span::styled(" · ", Style::new().fg(HINT)),
-                Span::styled(format!("^g {}", previous + 1), Style::new().fg(PREVIEW_FG)),
-                Span::styled(" back", Style::new().fg(HINT)),
-            ],
-            _ => vec![
-                Span::styled("ctrl+g ", Style::new().fg(HINT)),
-                Span::styled("N", Style::new().fg(PREVIEW_FG)),
-                Span::styled(" promote · ", Style::new().fg(HINT)),
-                Span::styled("j/k", Style::new().fg(PREVIEW_FG)),
-                Span::styled(" cycle", Style::new().fg(HINT)),
-            ],
-        }
+        Vec::new()
     }
 
     /// `↑ 2 more · ↓ 3 more · ^g pgup/pgdn`, naming only the end that has
@@ -1207,8 +1177,11 @@ impl Deck<'_> {
         }
     }
 
-    /// `> {n} {name} · {cwd} · {dot} {state} · {cmd}` for a full-width master,
-    /// and `{n} {name} · {cwd} · {dot}` for a preview or a compact master.
+    /// `> {n} {name} · {dot} · {cmd}` for a full-width master, and
+    /// `{n} {name} · {dot}` for a preview or a compact master. The declutter
+    /// pass took the working directory out of every pane title: the pane
+    /// number and name identify the terminal, and the path was the one field
+    /// that shrank to nothing on a narrow pane anyway.
     fn title(
         &self,
         project: &Project,
@@ -1247,15 +1220,6 @@ impl Deck<'_> {
         }
         spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
 
-        let fixed: usize = spans.iter().map(|span| span.content.chars().count()).sum();
-        let tail = separator.chars().count() + glyph.chars().count();
-        let path_budget = (budget as usize).saturating_sub(fixed + tail);
-        let path = self.path(&project.path, wide, path_budget);
-        spans.push(Span::styled(
-            path,
-            Style::new().fg(if wide { PREVIEW_FG } else { MUTED }),
-        ));
-        spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
         spans.push(Span::styled(
             glyph,
             Style::new().fg(if master && glyph_colour == SUCCESS {
@@ -1264,16 +1228,20 @@ impl Deck<'_> {
                 glyph_colour
             }),
         ));
-        if let Some(label) = status_label(status, wide) {
+        if let Some(label) = status_label(status) {
             spans.push(Span::styled(
                 format!(" {label}"),
                 Style::new().fg(glyph_colour),
             ));
         }
         if wide {
+            // With the path gone the command is the only elastic field left,
+            // so it takes what the budget holds and truncates right-first.
+            let fixed: usize = spans.iter().map(|span| span.content.chars().count()).sum();
+            let room = (budget as usize).saturating_sub(fixed + separator.chars().count());
             spans.push(Span::styled(separator, Style::new().fg(SEPARATOR)));
             spans.push(Span::styled(
-                self.command(project, metadata, pane),
+                clip(&self.command(project, metadata, pane), room),
                 Style::new().fg(MUTED),
             ));
         }
@@ -1293,22 +1261,10 @@ impl Deck<'_> {
         }
     }
 
-    /// A full-width master shows the complete path; every other pane keeps the
-    /// repository name only.
-    fn path(&self, path: &Path, wide: bool, budget: usize) -> String {
-        let full = abbreviate(path, self.home);
-        if wide && full.chars().count() <= budget {
-            return full;
-        }
-        let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or(full);
-        clip(&format!("…/{name}"), budget)
-    }
-
     /// The right-aligned slot: activity meter, idle age, exit age, and the
-    /// MASTER or ZOOM tag. A compact master has no room for it.
+    /// ZOOM tag. A compact master has no room for it. The master carries no
+    /// tag of its own — its border, caret, contrast and status-bar pointer
+    /// already say which pane it is.
     fn right_slot(
         &self,
         status: &TerminalStatus,
@@ -1358,10 +1314,6 @@ impl Deck<'_> {
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(format!(" {text}"), Style::new().fg(ACCENT)),
-            ],
-            Pane::Master => vec![
-                Span::styled(text, Style::new().fg(colour)),
-                Span::styled(" MASTER", Style::new().fg(ACCENT)),
             ],
             _ => vec![Span::styled(text, Style::new().fg(colour))],
         }
@@ -1546,10 +1498,9 @@ impl Deck<'_> {
                     Style::new().fg(WARNING).bg(STATUS_BG),
                 ));
             } else {
-                spans.push(Span::styled(
-                    format!("  ·  {} stacked", total.saturating_sub(1)),
-                    hint,
-                ));
+                // The stack count went with the declutter pass: the terminal
+                // census above it already implies it, and the row would
+                // rather spend the columns on what is not routine.
                 spans.extend(self.exited_summary(engine));
             }
             Line::from(spans)
@@ -1635,8 +1586,9 @@ impl Deck<'_> {
     }
 
     /// Candidate hint rows, widest first. The status bar drops shortcut
-    /// labels before keys and then collapses, per the export's responsive
-    /// rule; the caller takes the first one that fits.
+    /// labels before keys, per the export's responsive rule, and collapses
+    /// outright once the layout goes narrow; the caller takes the first one
+    /// that fits.
     fn key_hints(&self, layout: Layout) -> Vec<Line<'static>> {
         // A modal or mode states its own keys: nothing else is reachable while
         // it is open.
@@ -1667,23 +1619,25 @@ impl Deck<'_> {
         // there — the spec's "the zoom status line ... says nothing about
         // collapse". Since #39 every run starts folded, so without this the
         // zoomed row would trade its live `^g [` for an inert `^g c`.
-        let folded: [(&str, &str); 6] = [
+        let folded: [(&str, &str); 5] = [
             KEY_HINTS[0],
-            KEY_HINTS[1],
             ("^g c", "collapse"),
+            KEY_HINTS[1],
             KEY_HINTS[2],
-            KEY_HINTS[4],
-            KEY_HINTS[5],
+            KEY_HINTS[3],
         ];
-        let entries = if self.state.collapsed_count() > 0 && layout != Layout::Zoom {
-            folded
+        let entries: &[(&str, &str)] = if self.state.collapsed_count() > 0 && layout != Layout::Zoom
+        {
+            &folded
         } else {
-            KEY_HINTS
+            &KEY_HINTS
         };
+        // No collapsed rung here: at four keys the bare row is already
+        // narrower than `^g j/k · N · z · [ · ? · q`, so the collapsed form
+        // has nothing left to save and belongs to the narrow layout alone.
         vec![
-            self.hints(&entries, layout, true),
-            self.hints(&entries, layout, false),
-            collapsed,
+            self.hints(entries, layout, true),
+            self.hints(entries, layout, false),
         ]
     }
 
@@ -1914,11 +1868,12 @@ const SCROLLBACK_HINTS: [(&str, &str); 5] = [
     ("^g ?", "help"),
 ];
 
-const KEY_HINTS: [(&str, &str); 6] = [
+/// The wide status row names four keys. Select and scroll stay bound and stay
+/// in the help and the collapsed row; the declutter pass took them out of the
+/// bar, where the pane numbers and the scroll marker already point at them.
+const KEY_HINTS: [(&str, &str); 4] = [
     ("^g j/k", "switch"),
-    ("^g N", "select"),
     ("^g z", "zoom"),
-    ("^g [", "scroll"),
     ("^g ?", "help"),
     ("^g q", "quit"),
 ];
@@ -1984,12 +1939,11 @@ fn status_glyph(status: &TerminalStatus, metadata: &TerminalMetadata) -> (&'stat
     }
 }
 
-/// A full-width master always names its state; a narrower pane only names an
-/// exit.
-fn status_label(status: &TerminalStatus, wide: bool) -> Option<String> {
+/// A title names an exit and nothing else: the glyph already carries a live
+/// state, and the declutter pass dropped the word that repeated it.
+fn status_label(status: &TerminalStatus) -> Option<String> {
     match status {
-        TerminalStatus::Starting => wide.then(|| "starting".to_owned()),
-        TerminalStatus::Running => wide.then(|| "running".to_owned()),
+        TerminalStatus::Starting | TerminalStatus::Running => None,
         TerminalStatus::Exited { code: Some(code) } => Some(format!("exit {code}")),
         TerminalStatus::Exited { code: None } => Some("exited".to_owned()),
         TerminalStatus::Failed { .. } => Some("failed".to_owned()),
@@ -2050,12 +2004,6 @@ fn clock(at: Timestamp) -> String {
         seconds / 60 % 60,
         seconds % 60
     )
-}
-
-fn abbreviate(path: &Path, home: Option<&Path>) -> String {
-    home.and_then(|home| path.strip_prefix(home).ok())
-        .map(|rest| format!("~/{}", rest.display()))
-        .unwrap_or_else(|| path.display().to_string())
 }
 
 /// Right-first truncation with an ellipsis, per the export's truncation rule.
@@ -2163,7 +2111,6 @@ mod tests {
             workspace: "idp",
             projects: &projects,
             state,
-            home: Some(fixture::home()),
             master_ratio: state.master_ratio(),
             now: fixture::NOW,
         };
@@ -2190,7 +2137,6 @@ mod tests {
             workspace: "idp",
             projects: &projects,
             state,
-            home: Some(fixture::home()),
             master_ratio: state.master_ratio(),
             now: fixture::NOW,
         };
@@ -2375,7 +2321,9 @@ mod tests {
                 .map(|x| buffer[(x, 39u16)].symbol())
                 .collect::<String>();
             let expected = if folds == 0 {
-                "ctrl+g N promote · j/k cycle".to_owned()
+                // Nothing to state, so nothing is stated — but the row is
+                // still the footer's, and still row 39.
+                String::new()
             } else {
                 format!("{folds} collapsed · ^g c expand all")
             };
@@ -2489,7 +2437,6 @@ mod tests {
             workspace: "idp",
             projects: &projects,
             state: &state,
-            home: Some(fixture::home()),
             master_ratio: state.master_ratio(),
             now: fixture::NOW,
         };
@@ -2508,7 +2455,6 @@ mod tests {
             workspace: "idp",
             projects,
             state,
-            home: Some(fixture::home()),
             master_ratio: state.master_ratio(),
             now: fixture::NOW,
         }
@@ -2963,7 +2909,9 @@ mod tests {
             "the demoted master is open"
         );
         assert!(screen.contains("▸ 3 app"), "{screen}");
-        assert!(screen.contains("promoted backend · ^g 1 back"), "{screen}");
+        // The swap is reported by the demoted pane's own highlight, not by a
+        // footer line: the declutter pass took that line out.
+        assert!(!screen.contains("promoted backend"), "{screen}");
     }
 
     #[test]
@@ -3018,10 +2966,13 @@ mod tests {
         let screen = text(&buffer);
 
         assert_eq!(zoomed().collapsed_count(), 3, "the folds are still held");
-        // The `+ add` affordance (#50) widened the left segment past the
-        // room for labels here, so the keys stand alone — but they are still
-        // the unfolded set, which is what this is about.
-        assert!(screen.contains("^g ["), "{screen}");
+        // The trimmed key set buys back the room the `+ add` affordance
+        // (#50) took, so the labels are back at the reference width — and
+        // they are the unfolded set, which is what this is about.
+        assert!(
+            screen.contains("^g j/k switch  ^g z unzoom  ^g ? help  ^g q quit"),
+            "{screen}"
+        );
         assert!(!screen.contains("^g c"), "an inert key is not advertised");
         assert!(!screen.contains("collapsed"), "{screen}");
     }
@@ -3050,7 +3001,9 @@ mod tests {
         // The fold census replaces this one outright, so the stack is opened.
         let (buffer, _) = render(&engine, &expanded(4), (144, 42));
 
-        assert!(text(&buffer).contains("3 stacked  ·  all running"));
+        let screen = text(&buffer);
+        assert!(screen.contains("  ·  all running"), "{screen}");
+        assert!(!screen.contains("stacked"), "the stack census is gone");
     }
 
     fn scrolling() -> DeckState {
@@ -3115,27 +3068,40 @@ mod tests {
         assert_eq!(cursor, Some(Position::new(3, 29)));
     }
 
+    /// The other half of the declutter pass: dropping `running` did not drop
+    /// `exit 1`. A live state is inferable from the glyph; an exit code is not.
     #[test]
-    fn a_starting_terminal_renders_the_warning_ring_and_its_label() {
+    fn an_exited_preview_still_names_its_code_in_its_title() {
+        let screen = text(&render(&fixture::frontend_active(), &expanded(4), (144, 42)).0);
+
+        assert!(screen.contains("▾ 3 app · ✕ exit 1"), "{screen}");
+        // A pane that is merely alive says so with the glyph and stops: the
+        // border resumes right after it, with no state word in between.
+        // (`running` is not searched for here — the backend's own output says
+        // "Server running on", which is the terminal's text, not the chrome.)
+        assert!(screen.contains("▾ 2 backend · ● ─"), "{screen}");
+    }
+
+    #[test]
+    fn a_starting_terminal_renders_the_warning_ring_alone() {
         let mut engine = fixture::frontend_active();
         engine.set_status(&TerminalId::new("frontend"), TerminalStatus::Starting);
 
         let (buffer, _) = render(&engine, &reference_deck(4), (144, 42));
         let screen = text(&buffer);
 
-        // A wide master names the state it is in.
+        // The glyph carries the state; the declutter pass dropped the word
+        // that repeated it, and the path it used to sit behind.
         assert!(
-            screen.contains("> 1 frontend  ·  ~/idp/frontend  ·  ○ starting"),
+            screen.contains("> 1 frontend  ·  ○  ·  pnpm dev"),
             "{screen}"
         );
-        // The ring is warning, not the accent a running master takes, and the
-        // label follows the glyph's colour.
+        assert!(!screen.contains("starting"), "the glyph says it alone");
+        // The ring is warning, not the accent a running master takes.
         let ring = (0..144u16)
             .find(|column| buffer[(*column, 0u16)].symbol() == "○")
             .expect("the master title carries the starting ring");
         assert_eq!(buffer[(ring, 0u16)].fg, WARNING);
-        assert_eq!(buffer[(ring + 2, 0u16)].fg, WARNING);
-        assert_eq!(buffer[(ring + 2, 0u16)].symbol(), "s");
 
         // A preview shows the ring alone: the border resumes right after it.
         let mut engine = fixture::frontend_active();
@@ -3144,7 +3110,7 @@ mod tests {
         // states its own status in the collapsed-strip tests.
         let screen = text(&render(&engine, &expanded(4), (144, 42)).0);
 
-        assert!(screen.contains("▾ 2 backend · …/backend · ○ ─"), "{screen}");
+        assert!(screen.contains("▾ 2 backend · ○ ─"), "{screen}");
     }
 
     #[test]
@@ -3187,20 +3153,16 @@ mod tests {
         // a folded stack swaps `^g [` for `^g c` (§3.5 of the collapse spec).
         let state = expanded(4);
 
-        // The `+ add` affordance (#50) costs the left segment ten columns,
-        // so the labelled rung needs a wider canvas than the reference one to
-        // show itself. The ladder is what this tests, not where each rung
-        // falls: labels first, then keys, then the collapsed form.
-        let labelled = render(&fixture::frontend_active(), &state, (160, 42)).0;
-        let keys_only = render(&fixture::frontend_active(), &state, (128, 42)).0;
-        let collapsed = render(&fixture::frontend_active(), &state, (100, 42)).0;
+        // The ladder is what this tests, not where each rung falls: labels
+        // first, then keys, then — once the layout goes narrow — the
+        // collapsed form, which is the only rung that still names every key.
+        let labelled = render(&fixture::frontend_active(), &state, (144, 42)).0;
+        let keys_only = render(&fixture::frontend_active(), &state, (100, 42)).0;
+        let collapsed = render(&fixture::frontend_active(), &state, (84, 42)).0;
 
-        assert!(text(&labelled).contains("^g j/k switch  ^g N select"));
+        assert!(text(&labelled).contains("^g j/k switch  ^g z zoom"));
         let keys = text(&keys_only);
-        assert!(
-            keys.contains("^g j/k  ^g N  ^g z  ^g [  ^g ?  ^g q"),
-            "{keys}"
-        );
+        assert!(keys.contains("^g j/k  ^g z  ^g ?  ^g q"), "{keys}");
         assert!(!keys.contains("switch"), "{keys}");
         assert!(
             text(&collapsed).contains("^g j/k · N · z · [ · ? · q"),

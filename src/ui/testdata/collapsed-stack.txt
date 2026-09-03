@@ -1,4 +1,4 @@
-┌─ > 1 frontend  ·  ~/idp/frontend  ·  ● running  ·  pnpm dev ───────────────── [####··] MASTER ─┐│ ┌─ ▾ 2 backend · …/backend · ● ─ [##····] ─┐
+┌─ > 1 frontend  ·  ●  ·  pnpm dev ─────────────────────────────────────────────────── [####··] ─┐│ ┌─ ▾ 2 backend · ● ───────────── [##····] ─┐
 │  $ pnpm dev                                                                                    ││ │    INFO  Server running on               │
 │                                                                                                ││ │          [http://127.0.0.1:8000]         │
 │  > idp-frontend@0.4.2 dev                                                                      ││ │                                          │
@@ -39,4 +39,4 @@
 │                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  2 collapsed · ^g c expand all              
                                                                                                                                                 
-   idp   4 terminals   > 1 frontend  ·  + add  ·  1 open  ·  2 collapsed                                  ^g j/k  ^g N  ^g c  ^g z  ^g ?  ^g q  
+   idp   4 terminals   > 1 frontend  ·  + add  ·  1 open  ·  2 collapsed         ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  
