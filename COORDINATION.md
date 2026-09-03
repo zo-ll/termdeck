@@ -274,3 +274,13 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   — critic review; branch predates #76, integration after.
 - 2026-09-03: USER: do not dispatch — #81 (split god-files) and #82 (CI)
   NOT dispatched (interrupted). Both remain OPEN, undispatched.
+## END OF DAY 2026-09-03
+- main green 257 tests (`6c00bcc` + ledger). Shipped today: #74 alt-screen
+  wheel (hotfix for a broken-merge lápse), #76 empty-stack, #75 app-width
+  sizing, #77 declutter + scan, #66/#67 (#64/NB cleanup prior), fresh-per-
+  task policy, guarded real-message relay (notify-only rejected by user;
+  unguarded injection LOADED with copy-mode guard). WORKERS: codex (OpenAI)
+  backend 404 — paused; claude (Anthropic) 529 — paused; muse (opencode-go)
+  healthy — #81/#82 NOT dispatched (user halt; both OPEN).
+- NEXT (user's call): #81 split god-files, #82 CI, #74 leftover retest in
+  app, plus parked #33/#71/#72.
