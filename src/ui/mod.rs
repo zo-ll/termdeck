@@ -467,7 +467,9 @@ impl Deck<'_> {
             ..area
         };
         let rect = match self.layout(body) {
-            Layout::Zoom => body,
+            // An empty stack is the full body too: no stack, no divider,
+            // so the master owns every column the zoomed master does.
+            Layout::Zoom | Layout::Single => body,
             Layout::Narrow => Rect {
                 y: body.y + 2,
                 height: body.height.saturating_sub(2),
@@ -2379,6 +2381,28 @@ mod tests {
         assert!(
             matches!(pane.pane_cell(area, Position::new(10, 10)), Some((0, _, _))),
             "the master still does"
+        );
+    }
+
+    /// Hotfix: #74's `pane_cell` predates `Layout::Single` and did not cover
+    /// it, which broke the build. An empty deck's master is the full body,
+    /// so its cells measure from the same origin as a zoomed master's.
+    #[test]
+    fn pane_cell_covers_an_empty_stack() {
+        let projects = synthetic(1);
+        let state = DeckState::new(1);
+        let area = Rect::new(0, 0, 144, 42);
+        let pane = deck_for(&projects, &state);
+
+        assert_eq!(
+            pane.pane_cell(area, Position::new(130, 10)),
+            Some((0, 127, 9)),
+            "far past where the stack would start, still the full-body master"
+        );
+        assert_eq!(
+            pane.pane_cell(area, Position::new(10, 40)),
+            None,
+            "the hint row is still nothing"
         );
     }
 
