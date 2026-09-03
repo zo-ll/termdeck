@@ -205,3 +205,5 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   current main -> claude (coord/declutter). 3 NBs (incl. DESIGN.md
   sheet-background note) folded into the pending NB cleanup. Backend-impact
   scan (codex) still after reset.
+- 2026-09-03: coord/declutter integrated (022c691, 238 tests; session.rs
+  -7 dead-field removal carried; NB#1 fixed) — critic re-review queued.
