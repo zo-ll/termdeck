@@ -245,3 +245,7 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   inbox/*.ping at turn start (read+rm) and surfaces messages in replies.
   Root cause found: send-keys shared the PTY input queue (mid-draft gluing,
   stray Enter, copy-mode swallow + view yank).
+- 2026-09-03: #74 dispatched to codex (coord/73-scroll-stream): cannot
+  scroll a streaming/long session — suspected #64 output-follow re-pinning
+  (disengage on intentional scroll) + scrollback cap sanity. Researcher's
+  relay ARRIVE tests noted (delivered as designed).
