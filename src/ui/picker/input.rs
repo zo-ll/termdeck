@@ -51,7 +51,9 @@ pub fn press(
     }
     let cursor = rows.get(state.cursor()).cloned();
     match key {
-        Key::Down | Key::Char('j') => {
+        // `ctrl+j` is the control twin of `j`, and no shell is listening
+        // here, so it moves the cursor rather than falling through (#95).
+        Key::Down | Key::Char('j') | Key::Ctrl('j') => {
             state.move_cursor(1, rows.len());
         }
         // Shift plus an arrow takes everything from here to that end of the
