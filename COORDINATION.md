@@ -341,3 +341,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   non-modal toast; OSC-777 seam deferred). #97 opened, dispatched to FRESH
   claude (coord/97-notify; authority notifications-research.md §4; vt.rs
   BEL hook + ctl wiring cross-ownership approved by coordinator).
+- 2026-09-04: #71 IMPLEMENTED (slices 1+2) + MERGED (PR #98, 307 lib; binary
+  rebuilt — BEL/ctl-notify flash + toast + census live). #71 CLOSED; S3
+  OSC-777 optional follow-up noted. Open set: #33 (parked) + #94 (held MCP)
+  only.
