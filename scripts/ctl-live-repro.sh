@@ -10,3 +10,13 @@ lines=${2:-80}
 termctl status
 termctl list
 termctl peek "$target" "$lines"
+
+# The server responds with the ctl.v1 error envelope and exit code 2.
+set +e
+termctl --json peek "__termdeck_missing_pane__"
+status=$?
+set -e
+if [ "$status" -ne 2 ]; then
+    echo "expected missing-pane ctl exit 2, got $status" >&2
+    exit 1
+fi

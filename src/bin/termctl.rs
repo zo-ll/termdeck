@@ -136,7 +136,44 @@ const fn usage() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use std::path::PathBuf;
+
+    use termdeck::ctl::{Response, SCHEMA};
+
+    use super::{parse, print_response, run};
+
+    #[test]
+    fn exit_codes_cover_ok_runtime_usage_and_refusal() {
+        assert_eq!(
+            print_response(
+                Response {
+                    schema: SCHEMA.to_owned(),
+                    ok: true,
+                    data: Some(serde_json::json!({ "delivered": true })),
+                    error: None,
+                },
+                false,
+            ),
+            0
+        );
+        for code in 1..=3 {
+            assert_eq!(
+                print_response(Response::error(code, "expected"), false),
+                i32::from(code)
+            );
+        }
+        assert_eq!(run(Vec::new()), 2);
+        assert_eq!(
+            run(vec![
+                "--socket".to_owned(),
+                PathBuf::from("/definitely/not/a/termdeck.sock")
+                    .display()
+                    .to_string(),
+                "version".to_owned(),
+            ]),
+            1
+        );
+    }
 
     #[test]
     fn parse_peek_and_notify() {

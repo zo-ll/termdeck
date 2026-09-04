@@ -241,7 +241,10 @@ impl Listener {
             Err(message) => Response::error(2, format!("bad request: {message}")),
         };
         pending.stream.set_nonblocking(false)?;
-        write_response(&mut pending.stream, &response)?;
+        // The caller may abandon its one-shot connection after sending the
+        // request. Its EPIPE/ECONNRESET is local to that caller, never a
+        // reason to end the interactive session.
+        let _ = write_response(&mut pending.stream, &response);
         Ok(true)
     }
 }
@@ -387,7 +390,10 @@ mod tests {
 
     use crate::{
         config::Workspace,
-        contracts::{Project, ScreenSize, TerminalId, TerminalMetadata},
+        contracts::{
+            EngineCommand, EngineEvent, Project, ScreenSize, TerminalEngine, TerminalFrame,
+            TerminalId, TerminalMetadata, TerminalStatus,
+        },
         engine::FakeEngine,
         ui::DeckState,
     };
@@ -419,6 +425,30 @@ mod tests {
             terminal: TerminalId::new(name),
             path: std::env::temp_dir().join(name),
             command: vec!["sh".to_owned()],
+        }
+    }
+
+    struct NoHistory;
+
+    impl TerminalEngine for NoHistory {
+        fn dispatch(&mut self, _: EngineCommand) -> Vec<EngineEvent> {
+            Vec::new()
+        }
+
+        fn drain_events(&mut self) -> Vec<EngineEvent> {
+            Vec::new()
+        }
+
+        fn frame(&self, _: &TerminalId) -> Option<&TerminalFrame> {
+            None
+        }
+
+        fn status(&self, _: &TerminalId) -> Option<&TerminalStatus> {
+            None
+        }
+
+        fn metadata(&self, _: &TerminalId) -> Option<&TerminalMetadata> {
+            None
         }
     }
 
@@ -520,6 +550,73 @@ mod tests {
         let mut response = String::new();
         client.read_to_string(&mut response).unwrap();
         assert!(response.contains("\"code\":2"));
+    }
+
+    #[test]
+    fn abandoned_reply_does_not_stop_the_next_request() {
+        let _lock = LISTENER_TEST_LOCK.lock().unwrap();
+        let listener = Listener::bind().unwrap();
+        let mut abandoned = UnixStream::connect(listener.path()).unwrap();
+        abandoned
+            .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"version\"}\n")
+            .unwrap();
+        abandoned.shutdown(std::net::Shutdown::Both).unwrap();
+        let projects = vec![project("one")];
+        let engine = FakeEngine::new([projects[0].terminal.clone()]);
+        let deck = DeckState::new(1);
+        let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
+        let mut listener = listener;
+        assert!(
+            listener
+                .poll(state(&workspace, &engine, &projects, &deck))
+                .unwrap()
+        );
+
+        let mut client = UnixStream::connect(listener.path()).unwrap();
+        client
+            .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"version\"}\n")
+            .unwrap();
+        assert!(
+            listener
+                .poll(state(&workspace, &engine, &projects, &deck))
+                .unwrap()
+        );
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.contains("\"ok\":true"));
+    }
+
+    #[test]
+    fn unavailable_history_is_a_code_one_envelope_over_the_socket() {
+        let _lock = LISTENER_TEST_LOCK.lock().unwrap();
+        let listener = Listener::bind().unwrap();
+        let mut client = UnixStream::connect(listener.path()).unwrap();
+        client
+            .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"peek\",\"id\":\"one\"}\n")
+            .unwrap();
+        let projects = vec![project("one")];
+        let engine = NoHistory;
+        let deck = DeckState::new(1);
+        let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
+        let mut listener = listener;
+        assert!(
+            listener
+                .poll(State {
+                    workspace: &workspace,
+                    projects: &projects,
+                    deck: &deck,
+                    engine: &engine,
+                    size: ScreenSize::new(80, 24),
+                    sheet_open: false,
+                })
+                .unwrap()
+        );
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        let response: super::Response = serde_json::from_str(response.trim()).unwrap();
+        assert_eq!(response.schema, SCHEMA);
+        assert!(!response.ok);
+        assert_eq!(response.error.unwrap().code, 1);
     }
 
     #[test]
