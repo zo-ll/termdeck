@@ -240,3 +240,4 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   composer -> per-line messages). Rule added to the coordinator skill:
   pi panes receive SINGLE-LINE pointers only; content in files. Critic
   recovered and is idle; #82 fully closed (re-review verified NB fixes).
+- 2026-09-04: dispatched to codex lane: $N horizon-open investigation.
