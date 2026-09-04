@@ -236,3 +236,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   3 codex-terra-high; relay + inbox drain + hard rules). Live layout:
   0 coordinator, 1 critic, 2 codex-81, 3 codex-82 (both workers in flight
   from the previous take-over's dispatch; monitored here).
+- 2026-09-04: critic got fragmented boot-proto-fix (multi-line paste into pi
+  composer -> per-line messages). Rule added to the coordinator skill:
+  pi panes receive SINGLE-LINE pointers only; content in files. Critic
+  recovered and is idle; #82 fully closed (re-review verified NB fixes).
