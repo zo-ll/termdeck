@@ -351,3 +351,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   assert (grace-1/4 .. 2x) merged (PR #99, test-only) — grace 5x at
   2.01-2.03s; sibling fast-path untouched. Emails stop. USER has a new
   task for claude (lane idle).
+- 2026-09-04: #101 DESIGN IMPLEMENTED + MERGED (PR #100?? check number; 
+  status row -> canvas row 1 all layouts; notify right-slot; 14 fixtures
+  reblessed pure; critic pass; nit recorded). 4 DESIGN.md DOC-CONFLICTS
+  FLAGGED by the worker (stale committed export / DesignSync-vs-MCP note /
+  SPEC grid / split-divider row numbers) — PENDING USER: update DESIGN.md
+  or leave.
