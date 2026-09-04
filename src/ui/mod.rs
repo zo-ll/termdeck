@@ -101,8 +101,8 @@ const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 const METER_CELLS: u64 = 6;
 /// Help overlay size: the supplement's 60 columns by 21 rows, grown a row at
 /// a time for the collapse binding, the stack-paging keys, the split
-/// divider's keys and the runtime-add sheet.
-const HELP_SIZE: (u16, u16) = (60, 25);
+/// divider's keys, the runtime-add sheet and the close binding.
+const HELP_SIZE: (u16, u16) = (60, 26);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// Column the help overlay's descriptions start at.
@@ -112,6 +112,14 @@ const PAGE_KEYS: &str = "^g pgup/pgdn";
 /// The status bar's runtime-add affordance. Clicking it opens the same sheet
 /// `^g a` does.
 const ADD_AFFORDANCE: &str = "+";
+/// The per-pane close affordance (#84): the pointer's half of `^g x`.
+///
+/// A multiplication sign, not the `✕` [`status_glyph`] gives an exited pane:
+/// the two never mean the same thing, so they are never the same glyph. They
+/// are told apart three ways over — a different character, the hint colour
+/// against the status dot's [`ERROR`], and the pane's right edge against the
+/// title's left.
+const CLOSE_AFFORDANCE: &str = "×";
 
 /// How a single pane is dressed. Every pane draws the same chrome; the kind
 /// selects the colours and how much of the title the pane has room to say.

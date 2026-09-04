@@ -1,7 +1,7 @@
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
-    dispatch_live_input, mouse_action, open_terminals, resize_terminals, route_wheel,
-    spawn_terminals, terminal_sizes,
+    close_terminal, dispatch_live_input, mouse_action, now, open_terminals, request_close,
+    resize_terminals, route_wheel, spawn_terminals, terminal_sizes,
 };
 use crate::{
     contracts::{
@@ -9,7 +9,7 @@ use crate::{
         TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
-    ui::{DeckState, Key, SheetState},
+    ui::{DeckState, Input, Key, Modal, Reaction, SheetState},
 };
 use ratatui::layout::Position;
 use std::path::PathBuf;
@@ -376,6 +376,190 @@ fn wheel_over_an_alt_screen_app_reaches_the_app() {
     assert_eq!(app_wheel(false, 7, 4, true), b"\x1b[<65;7;4M");
     assert_eq!(app_wheel(true, 1, 1, false), b"\x1b[A\x1b[A\x1b[A");
     assert_eq!(app_wheel(false, 1, 1, false), b"\x1b[B\x1b[B\x1b[B");
+}
+
+/// A workspace of shells for the close tests: each one sleeps, so it is alive
+/// until something ends it.
+#[cfg(target_os = "linux")]
+fn sleepers(count: usize) -> Vec<Project> {
+    (1..=count)
+        .map(|number| Project {
+            terminal: TerminalId::new(format!("t{number}")),
+            path: PathBuf::from("/"),
+            command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "sleep 30".to_owned()],
+        })
+        .collect()
+}
+
+/// #84: closing a stacked pane drops it from the engine and the project list
+/// together, and the deck reflows around what is left. The two lists renumber
+/// as one, so pane 3 is still the third project afterwards.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_a_stacked_pane_drops_it_from_the_engine_and_the_list() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(3);
+    let closed = projects[1].terminal.clone();
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(close_terminal(&mut engine, &mut projects, &mut deck, 1));
+
+    assert_eq!(engine.frame(&closed), None, "the engine dropped it");
+    assert_eq!(
+        projects
+            .iter()
+            .map(|project| project.terminal.to_string())
+            .collect::<Vec<_>>(),
+        ["t1", "t3"]
+    );
+    assert_eq!(deck.active(), Some(0), "the master kept the frame");
+    assert_eq!(deck.stack(), [1]);
+    // The deck's positions still index the project list they came from.
+    assert_eq!(projects[deck.stack()[0]].terminal.to_string(), "t3");
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// Closing the master promotes the pane behind it, and the promoted one is
+/// resized to the master viewport it has just taken.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_the_master_promotes_and_resizes_what_takes_its_place() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(2);
+    let promoted = projects[1].terminal.clone();
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let preview = engine.frame(&promoted).unwrap().size;
+
+    assert!(close_terminal(&mut engine, &mut projects, &mut deck, 0));
+
+    assert_eq!(deck.active(), Some(0));
+    assert_eq!(projects[0].terminal, promoted);
+    assert!(resize_terminals(&mut engine, &projects, &deck, size));
+    let master = engine.frame(&promoted).unwrap().size;
+    assert_ne!(master, preview, "it holds the master viewport now");
+    // Nothing stacked, so the master is the whole body (#76).
+    assert_eq!(master, terminal_sizes(&projects, &deck, size)[0].unwrap());
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// The close itself keeps no last pane back: it ends the only shell and
+/// empties both lists. What asks first is `request_close`, below.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_the_last_pane_leaves_nothing_for_the_session_to_run() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let only = projects[0].terminal.clone();
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(close_terminal(&mut engine, &mut projects, &mut deck, 0));
+
+    assert!(projects.is_empty(), "the session has nothing left to run");
+    assert_eq!(deck.active(), None);
+    assert_eq!(engine.frame(&only), None);
+    // Out of range afterwards, and refused rather than panicking.
+    assert!(!close_terminal(&mut engine, &mut projects, &mut deck, 0));
+}
+
+/// #84: the last pane is the session, so the close gesture asks the same
+/// confirmation `^g q` asks instead of ending the run outright. Nothing is
+/// closed while the question stands — the shell is still there to go back to.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_the_last_pane_asks_the_quit_confirmation() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let only = projects[0].terminal.clone();
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(
+        !request_close(&mut engine, &mut projects, &mut deck, 0),
+        "it asked instead of closing"
+    );
+
+    assert_eq!(deck.modal(), Some(Modal::Quit));
+    assert_eq!(projects.len(), 1);
+    assert_eq!(deck.active(), Some(0));
+    assert!(engine.frame(&only).is_some(), "its shell is still running");
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// The confirmation is the ordinary one, keys and all: `n` and `esc` leave
+/// the pane and its shell exactly as they were, and only `y` ends the
+/// session — by the quit path, which is the loop's own break.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_last_pane_survives_a_cancelled_confirmation_and_leaves_on_a_confirmed_one() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let only = projects[0].terminal.clone();
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut input = Input::new(size.rows);
+
+    for key in [Key::Char('n'), Key::Escape] {
+        request_close(&mut engine, &mut projects, &mut deck, 0);
+        assert_eq!(deck.modal(), Some(Modal::Quit));
+
+        assert_eq!(input.press(key, &mut deck, &projects, now()), None);
+
+        assert_eq!(deck.modal(), None, "the question is gone");
+        assert_eq!(projects.len(), 1, "and the pane is not");
+        assert_eq!(deck.active(), Some(0));
+        assert!(engine.frame(&only).is_some(), "its shell kept running");
+    }
+
+    request_close(&mut engine, &mut projects, &mut deck, 0);
+    assert_eq!(
+        input.press(Key::Char('y'), &mut deck, &projects, now()),
+        Some(Reaction::Quit),
+        "the exit is the quit path's"
+    );
+    assert_eq!(deck.modal(), None);
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// Every other close is unchanged: the deck it leaves behind still holds a
+/// terminal, so the shell ends there and then, with nothing to confirm.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_a_pane_that_is_not_the_last_asks_nothing() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(2);
+    let closed = projects[1].terminal.clone();
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(request_close(&mut engine, &mut projects, &mut deck, 1));
+
+    assert_eq!(deck.modal(), None, "nothing to confirm");
+    assert_eq!(engine.frame(&closed), None, "the engine ended it");
+    assert_eq!(projects.len(), 1);
+    // The one left is the last, so its own close asks.
+    assert!(!request_close(&mut engine, &mut projects, &mut deck, 0));
+    assert_eq!(deck.modal(), Some(Modal::Quit));
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// A position no pane holds closes nothing and asks nothing, whatever is
+/// left in the list.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_close_out_of_range_neither_closes_nor_asks() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(!request_close(&mut engine, &mut projects, &mut deck, 4));
+
+    assert_eq!(deck.modal(), None);
+    assert_eq!(projects.len(), 1);
+    engine.dispatch(EngineCommand::Shutdown);
 }
 
 #[cfg(target_os = "linux")]

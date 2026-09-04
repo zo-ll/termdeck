@@ -227,6 +227,28 @@ impl NativeEngine {
         Ok(())
     }
 
+    /// Removes one terminal from a running engine (#84): the counterpart of
+    /// [`NativeEngine::add`].
+    ///
+    /// Dropping the terminal drops its [`PtyTransport`], whose own `Drop` is
+    /// the confirmed-quit path — HUP then TERM, one grace period, SIGKILL
+    /// behind it, reader and waiter joined — so a closed pane leaves no
+    /// orphaned process group behind and no thread still reading a dead PTY.
+    ///
+    /// This is what separates a close from an exit: a shell that exits on its
+    /// own keeps its terminal here, with its last frame, its status and the
+    /// `^g r` respawn that goes with them. A close takes the identity out of
+    /// the engine altogether, so nothing answers for it afterwards.
+    ///
+    /// Returns whether a terminal by that name was running.
+    pub fn close(&mut self, terminal: &TerminalId) -> bool {
+        let Some(index) = self.terminals.iter().position(|item| item.owns(terminal)) else {
+            return false;
+        };
+        self.terminals.remove(index);
+        true
+    }
+
     fn terminal_mut(&mut self, terminal: &TerminalId) -> Option<&mut NativeTerminal> {
         self.terminals.iter_mut().find(|item| item.owns(terminal))
     }
@@ -536,6 +558,68 @@ mod tests {
         let transport = engine.terminals[0].transport.as_ref().unwrap();
         assert!(!transport.is_process_group_alive(), "no orphaned shell");
         assert!(transport.has_joined_threads());
+    }
+
+    /// #84: closing takes the identity out of the engine and the process
+    /// group with it, and it is not the same thing as a shell that exited.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_closed_terminal_leaves_no_process_group_and_no_identity() {
+        let closed = TerminalId::new("closed");
+        let kept = TerminalId::new("kept");
+        let projects = [
+            project(closed.clone(), "printf CLOSED; sleep 30"),
+            project(kept.clone(), "printf KEPT; sleep 30"),
+        ];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        wait_for_frame(&mut engine, &closed, "CLOSED");
+        wait_for_frame(&mut engine, &kept, "KEPT");
+        let group = engine.metadata(&closed).unwrap().process.unwrap().pid;
+        assert!(crate::engine::pty::process_group_alive(group));
+
+        assert!(engine.close(&closed));
+
+        // Nothing answers for it any more: no frame, no status, no metadata,
+        // and no second close either.
+        assert_eq!(engine.frame(&closed), None);
+        assert_eq!(engine.status(&closed), None);
+        assert_eq!(engine.metadata(&closed), None);
+        assert!(!engine.close(&closed));
+        assert!(
+            !crate::engine::pty::process_group_alive(group),
+            "a closed pane leaves no orphaned process group"
+        );
+        // The pane beside it is undisturbed and still shuts down with the
+        // engine, so a close is not a partial shutdown.
+        assert_eq!(engine.status(&kept), Some(&TerminalStatus::Running));
+        assert!(frame_text(engine.frame(&kept).unwrap()).contains("KEPT"));
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    /// The distinction the interface draws on (#84): a shell that exits on
+    /// its own is kept, with its last frame and its `^g r`; closing it is
+    /// what takes it away.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_exited_terminal_is_kept_until_it_is_closed() {
+        let terminal = TerminalId::new("exits");
+        let projects = [project(terminal.clone(), "printf GONE; exit 3")];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 4)).unwrap();
+
+        wait_for_exit(&mut engine, &terminal, 3);
+
+        assert_eq!(
+            engine.status(&terminal),
+            Some(&TerminalStatus::Exited { code: Some(3) }),
+            "an exit keeps the terminal, as it always has"
+        );
+        assert!(engine.frame(&terminal).is_some());
+
+        assert!(engine.close(&terminal));
+
+        assert_eq!(engine.status(&terminal), None);
+        assert_eq!(engine.frame(&terminal), None);
+        assert!(engine.terminals.is_empty());
     }
 
     /// #50 A3: a terminal added to a running engine is a terminal like any

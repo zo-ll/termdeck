@@ -297,6 +297,56 @@ impl Deck<'_> {
         .map(|slot| slot.position)
     }
 
+    /// The configured position whose close affordance sits under `pointer`.
+    ///
+    /// Every drawn pane carries one — the master included, because closing it
+    /// promotes the pane behind it — and it owns its two cells the way the
+    /// disclosure marker owns its own: the press there starts no drag and
+    /// arms no promotion. The narrow fallback draws none, for the reason the
+    /// status bar's `+` is absent there too, so nothing answers here either.
+    pub fn close_at(&self, area: Rect, pointer: Position) -> Option<usize> {
+        if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
+            return None;
+        }
+        let body = Rect {
+            height: area.height - 2,
+            ..area
+        };
+        let hit = |position: usize, pane: Rect| {
+            let column = close_column(pane)?;
+            (pointer.y == pane.y && (pointer.x == column || pointer.x == column + 1))
+                .then_some(position)
+        };
+        let active = || {
+            self.state
+                .active()
+                .filter(|position| self.projects.get(*position).is_some())
+        };
+        match self.layout(body) {
+            Layout::Narrow => None,
+            Layout::Zoom | Layout::Single => active().and_then(|position| hit(position, body)),
+            Layout::Stacked { stack, preview } => {
+                let master = Rect {
+                    width: body.width - GUTTER - stack,
+                    ..body
+                };
+                if let Some(position) = active().and_then(|position| hit(position, master)) {
+                    return Some(position);
+                }
+                self.stack_layout(
+                    Rect {
+                        x: master.width + GUTTER,
+                        width: stack,
+                        ..body
+                    },
+                    preview,
+                )
+                .into_iter()
+                .find_map(|slot| hit(slot.position, slot.rect))
+            }
+        }
+    }
+
     /// The part of the preview list the stack column is currently showing.
     ///
     /// The caller pages the list through this: the window knows how far it can
@@ -753,6 +803,11 @@ impl Deck<'_> {
         // The strip sits two columns in, per the export's `padding:0 2ch`, and
         // keeps the same inset on the right.
         let width = area.width.saturating_sub(2 * PADDING);
+        // A folded preview closes like an open one (#84), so its row ends at
+        // the same column the open panes put their mark in, with a blank
+        // column before it holding the tail off.
+        let close = close_column(area);
+        let width = width.saturating_sub(u16::from(close.is_some()) * 3);
         let taken: usize = spans.iter().map(|span| span.content.chars().count()).sum();
         // The tail is the first thing the strip gives up. At the minimum stack
         // width (#44) there is no room for it, and a separator with nothing
@@ -767,6 +822,17 @@ impl Deck<'_> {
             ));
         }
         buffer.set_line(area.x + PADDING, area.y, &Line::from(spans), width);
+        if let Some(column) = close {
+            buffer.set_line(
+                column,
+                area.y,
+                &Line::from(Span::styled(
+                    CLOSE_AFFORDANCE,
+                    Style::new().fg(HINT).bg(DEMOTED_BG),
+                )),
+                CLOSE_AFFORDANCE.chars().count() as u16,
+            );
+        }
     }
 
     /// The strip's trailing text: what the pane would say if it had one line
@@ -1019,6 +1085,15 @@ impl Deck<'_> {
         // Title chrome aligns with the content columns and clears one border
         // cell on each side, matching the export's 2-column title inset.
         let border_style = Style::new().fg(border).bg(background);
+        // The close affordance takes the right end of the title row (#84).
+        // The narrow fallback's master has none, for the reason its right
+        // slot goes too — and it is the only pane there, so the pointer
+        // would be closing the session rather than a pane.
+        let close = (pane.base() != Pane::Compact)
+            .then(|| close_column(area))
+            .flatten();
+        // Its column, plus the blank one that keeps the slot off it.
+        let reserved = u16::from(close.is_some()) * 2;
         let slot = self.right_slot(&status, &metadata, pane);
         let slot_width: u16 = slot.iter().map(|span| span.width() as u16).sum();
         let title = self.title(
@@ -1027,7 +1102,7 @@ impl Deck<'_> {
             &status,
             &metadata,
             pane,
-            content.width.saturating_sub(slot_width + 2),
+            content.width.saturating_sub(slot_width + 2 + reserved),
         );
         buffer.set_line(
             left - 1,
@@ -1037,10 +1112,24 @@ impl Deck<'_> {
         );
         if slot_width > 0 {
             buffer.set_line(
-                right - slot_width,
+                right - reserved - slot_width,
                 area.y,
                 &Line::from(clear_around(slot, border_style)),
                 slot_width + 2,
+            );
+        }
+        if let Some(column) = close {
+            buffer.set_line(
+                column - 1,
+                area.y,
+                &Line::from(clear_around(
+                    vec![Span::styled(
+                        CLOSE_AFFORDANCE,
+                        Style::new().fg(HINT).bg(background),
+                    )],
+                    border_style,
+                )),
+                CLOSE_AFFORDANCE.chars().count() as u16 + 2,
             );
         }
 

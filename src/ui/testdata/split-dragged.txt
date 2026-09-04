@@ -1,8 +1,8 @@
-┌─ > 1 frontend  ·  ●  ·  pnpm dev ────────────────────────────── [####··] ─┐│   ▸ 2 backend · ● · 12:06:09 /api/terminals/2/log  8.7ms         
+┌─ > 1 frontend  ·  ●  ·  pnpm dev ──────────────────────────── [####··] × ─┐│   ▸ 2 backend · ● · 12:06:09 /api/terminals/2/log  8.7ms     ×   
 │  $ pnpm dev                                                            …  ││                                                                  
-│                                                                        …  ││   ▸ 3 app · ✕ · exit 1                                           
+│                                                                        …  ││   ▸ 3 app · ✕ · exit 1                                       ×   
 │  > idp-frontend@0.4.2 dev                                              …  ││                                                                  
-│  > vite --host                                                         …  ││   ▸ 4 worker · ○ · idle 6m                                       
+│  > vite --host                                                         …  ││   ▸ 4 worker · ○ · idle 6m                                   ×   
 │                                                                        …  ││                                                                  
 │    VITE v5.4.8  ready in 412 ms                                        …  ││                                                                  
 │                                                                        …  ││                                                                  

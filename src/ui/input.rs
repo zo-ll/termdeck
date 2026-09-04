@@ -85,6 +85,10 @@ pub enum Reaction {
     /// `^g a`: open the runtime-add sheet. Which repositories it can offer
     /// is the caller's business, so the deck only asks for it (#50 A3).
     AddTerminal,
+    /// `^g x`: close the active terminal. Ending a shell and dropping its
+    /// identity is the engine's and the session's business, not the deck's,
+    /// so the reflow waits for the caller to do it (#84).
+    Close,
     /// Quit confirmed at the confirmation modal that
     /// [`ActionCommand::RequestQuit`] opened.
     Quit,
@@ -234,6 +238,10 @@ impl Input {
             // The runtime-add sheet: the deck has nothing to change, so it
             // carries no frozen action either.
             Key::Char('a') => return Some(Reaction::AddTerminal),
+            // Its counterpart (#84). `x` is the pane the master holds, the
+            // one every other prefixed command already acts on, and the
+            // deck cannot reflow until the caller has ended that shell.
+            Key::Char('x') => return Some(Reaction::Close),
             Key::Char('[') => ActionCommand::ToggleScrollback,
             Key::Char('r') => ActionCommand::RespawnActive,
             Key::Char('?') => ActionCommand::ShowHelp,
@@ -614,8 +622,22 @@ mod tests {
     fn an_unbound_command_key_ends_the_prefix_without_reaching_the_shell() {
         let mut session = Session::new();
 
-        assert_eq!(session.command(Key::Char('x')), None);
+        assert_eq!(session.command(Key::Char('w')), None);
 
+        assert_eq!(session.press(Key::Char('w')), sent(b"w"));
+    }
+
+    /// #84: like respawn, closing needs the engine and the process, so the
+    /// deck hands it back rather than reflowing on its own.
+    #[test]
+    fn close_is_left_to_the_caller_that_owns_the_engine() {
+        let mut session = Session::new();
+
+        assert_eq!(session.command(Key::Char('x')), Some(Reaction::Close));
+        assert_eq!(session.deck.active(), Some(0), "the deck reflows nothing");
+        assert_eq!(session.deck.stack(), [1, 2, 3]);
+
+        // Unprefixed it is ordinary input and reaches the shell untouched.
         assert_eq!(session.press(Key::Char('x')), sent(b"x"));
     }
 

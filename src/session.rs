@@ -244,6 +244,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut last_click = None;
     // The preview whose disclosure marker is being pressed, if any.
     let mut marker_press: Option<usize> = None;
+    // The pane whose close affordance is being pressed, if any (#84).
+    let mut close_press: Option<usize> = None;
     // The runtime-add sheet, while it is open. It owns every key it sees.
     let mut sheet: Option<SheetState> = None;
     let browser = FsBrowse::new(crate::cli::picker_roots());
@@ -330,6 +332,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    close_press = None;
                     deck.set_resizing(false);
                     let was_scrollback = deck.scrollback();
                     let reaction = input.press(key, &mut deck, &projects, now());
@@ -394,6 +397,15 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             }
                         }
                         Some(Reaction::AddTerminal) => sheet = Some(SheetState::new(&roots)),
+                        // `^g x` closes the pane the master holds, which is
+                        // the pane every other prefixed command acts on. The
+                        // last one is the session, so it asks the quit
+                        // confirmation instead, and leaves by that door (#84).
+                        Some(Reaction::Close) => {
+                            if let Some(active) = deck.active() {
+                                request_close(&mut engine, &mut projects, &mut deck, active);
+                            }
+                        }
                         Some(Reaction::Quit) => break 'session,
                         None => {}
                     }
@@ -402,6 +414,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    close_press = None;
                     deck.set_resizing(false);
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -474,12 +487,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     ..
                 } => {
                     marker_press = None;
+                    close_press = None;
                     mouse_action(&mut deck, None, action, now(), &mut last_click);
                 }
                 InputEvent::Mouse { pointer, action } => {
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
-                        let (marker, divider, split, position) = {
+                        let (marker, close, divider, split, position) = {
                             let pane = Deck {
                                 workspace: &workspace.name,
                                 projects: &projects,
@@ -489,6 +503,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             };
                             (
                                 pane.marker_at(area, pointer),
+                                pane.close_at(area, pointer),
                                 pane.divider_at(area, pointer),
                                 pane.ratio_at(area, pointer.x),
                                 match action {
@@ -523,12 +538,39 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             deck.cancel_drag();
                             last_click = None;
                             marker_press = None;
+                            close_press = None;
                             deck.set_resizing(action != MouseAction::Up);
                             if action != MouseAction::Down
                                 && let Some(split) = split
                             {
                                 deck.set_master_ratio(split);
                             }
+                            continue;
+                        }
+                        // The close affordance owns its two cells the way
+                        // the marker below owns its own, and for the same
+                        // reason: the press there arms nothing else, and only
+                        // a release still on it closes the pane. Anything
+                        // that is neither of those falls through untouched.
+                        let closing = match (action, close, close_press) {
+                            (MouseAction::Down, Some(pressed), _) => {
+                                deck.cancel_drag();
+                                last_click = None;
+                                marker_press = None;
+                                close_press = Some(pressed);
+                                true
+                            }
+                            (MouseAction::Move, _, Some(_)) => true,
+                            (MouseAction::Up, _, Some(pressed)) => {
+                                close_press = None;
+                                if close == Some(pressed) {
+                                    request_close(&mut engine, &mut projects, &mut deck, pressed);
+                                }
+                                true
+                            }
+                            _ => false,
+                        };
+                        if closing {
                             continue;
                         }
                         // The disclosure marker owns its two cells: pressing
@@ -566,6 +608,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
+                    close_press = None;
                     deck.set_resizing(false);
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()
