@@ -319,3 +319,6 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   (coord/94-ctl-mcp on current main). Pin MCP spec version at impl time;
   docs snippets pi/claude/codex. Agent API Phases 1+2 already MERGED
   (PR #91, #93; binary rebuilt; 288 tests main).
+- 2026-09-04: #94 MCP PASS (protocol 2026-07-28 verified externally; 3 SHALL
+  nits; no live claude/codex handshake test on this machine). #95 Ctrl+J
+  PASS pending (queued). OPEN: user merge/drop call on MCP; #95 merge.
