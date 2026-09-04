@@ -243,3 +243,16 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
 - 2026-09-04: dispatched to codex lane: $N horizon-open investigation.
 - 2026-09-04: #87 (horizon CLI commands fail in a termdeck terminal)
   dispatched to the codex lane (coord/87-horizon-open).
+## LIVE STATE (pre-compaction snapshot)
+- tmux personal: 0 coordinator (this), 1 critic (pi, muse-1.3, critic-skill
+  only, idle), 2 claude lane (opus high, on #84), 3 codex lane (terra high/
+  full access, on #87). Relay running (guarded real-message ping; inbox
+  drained each turn). Main green 257, binary current.
+- IN FLIGHT: #84 close terminals (claude) ; #87 horizon CLI commands in a
+  termdeck terminal (codex). Critic idle → verdicts ping via relay.
+- ALL ISSUES BY STATUS: closed: everything through #82. open/parked: #33
+  animations, #71 notifications, #72 agent API (+ none else — #81/#82/#84/#87
+  handled as above).
+- PROCESS: pi panes single-line pointers only; only give work to idle
+  workers; fresh session per task; coordinator commits/pushes/merges after
+  critic passes + user says merge; NEVER merge a red gate.
