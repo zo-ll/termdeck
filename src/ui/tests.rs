@@ -2051,6 +2051,13 @@ fn message(body: &str) -> NotifyKind {
     }
 }
 
+fn rich_message(title: &str, body: &str) -> NotifyKind {
+    NotifyKind::Message {
+        title: title.to_owned(),
+        body: body.to_owned(),
+    }
+}
+
 /// The bell rings in app's folded strip at t=0; backend, the one open
 /// preview, is sent an explicit message two seconds later. Nothing is the
 /// master, so nothing is dropped.
@@ -2084,6 +2091,49 @@ fn notify_keyframes_match_the_reference_canvases() {
     // message, two seconds younger, is still asking.
     let (four, _) = render_at(&engine, &collapsed(), &notifies, at(4_000), (144, 42));
     assert_snapshot("notify-flash-t4", &four);
+}
+
+/// Rich shell-hook completions use the same keyframes as a bare bell, but
+/// keep the command and outcome visible wherever the layout has room.
+#[test]
+fn rich_notify_keyframes_match_the_reference_canvases() {
+    let mut notifies = Notifications::new();
+    assert!(notifies.record(
+        &TerminalId::new("backend"),
+        None,
+        rich_message("cargo build", "exit 1 · 84s"),
+        at(0)
+    ));
+    let engine = fixture::frontend_active();
+
+    for (name, now) in [
+        ("notify-rich-flash-t0", at(0)),
+        ("notify-rich-flash-t2", at(2_000)),
+        ("notify-rich-flash-t4", at(4_000)),
+    ] {
+        let (buffer, _) = render_at(&engine, &collapsed(), &notifies, now, (144, 42));
+        assert_snapshot(name, &buffer);
+    }
+}
+
+#[test]
+fn a_rich_hidden_completion_uses_the_toast() {
+    let mut notifies = Notifications::new();
+    assert!(notifies.record(
+        &TerminalId::new("worker"),
+        None,
+        rich_message("cargo test", "done · 6m12s"),
+        at(0)
+    ));
+    let (buffer, _) = render_at(
+        &fixture::frontend_active(),
+        &zoomed(),
+        &notifies,
+        at(1_000),
+        (144, 42),
+    );
+
+    assert_snapshot("notify-rich-toast", &buffer);
 }
 
 /// The chrome the keyframes above draw, read as colours rather than glyphs.

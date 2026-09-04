@@ -50,7 +50,9 @@ impl PtyTransport {
 
     /// Starts a project with the current session's ctl rendezvous variables.
     /// CommandBuilder inherits the parent environment, and these explicit
-    /// assignments deliberately replace any outer Termdeck values.
+    /// assignments deliberately replace any outer Termdeck values. The shell
+    /// hook marker is deliberately not inherited: a nested Termdeck must
+    /// install its own hook in each of its child panes.
     pub fn spawn_with_socket(
         project: &Project,
         size: ScreenSize,
@@ -69,10 +71,7 @@ impl PtyTransport {
             command.args(arguments);
         }
         command.cwd(&project.path);
-        if let Some(socket) = socket {
-            command.env("TERMDECK_SOCK", socket);
-            command.env("TERMDECK_PANE", project.terminal.to_string());
-        }
+        inject_session_environment(&mut command, project, socket);
         Self::spawn_command(project.terminal.clone(), command, size, shell_hook)
     }
 
@@ -238,6 +237,18 @@ impl PtyTransport {
     }
 }
 
+fn inject_session_environment(
+    command: &mut CommandBuilder,
+    project: &Project,
+    socket: Option<&Path>,
+) {
+    command.env_remove("TERMDECK_SHELL_HOOK");
+    if let Some(socket) = socket {
+        command.env("TERMDECK_SOCK", socket);
+        command.env("TERMDECK_PANE", project.terminal.to_string());
+    }
+}
+
 impl Drop for PtyTransport {
     fn drop(&mut self) {
         let _ = self.shutdown();
@@ -318,13 +329,16 @@ pub(crate) fn process_group_alive(process_group: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::{
+        path::PathBuf,
+        time::{Duration, Instant},
+    };
 
-    use std::path::PathBuf;
+    use portable_pty::CommandBuilder;
 
     use crate::contracts::{Project, ScreenSize, TerminalId, TerminalStatus};
 
-    use super::{PtyEvent, PtyTransport};
+    use super::{PtyEvent, PtyTransport, inject_session_environment};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -409,7 +423,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn socket_and_pane_environment_override_an_outer_session() {
+    fn child_environment_overrides_the_outer_session_and_clears_the_hook_marker() {
         let terminal = TerminalId::new("inner-pane");
         let project = Project {
             terminal: terminal.clone(),
@@ -417,16 +431,21 @@ mod tests {
             command: vec![
                 "/bin/sh".to_owned(),
                 "-c".to_owned(),
-                "printf '%s|%s\\n' \"$TERMDECK_SOCK\" \"$TERMDECK_PANE\"".to_owned(),
+                "printf '%s|%s|' \"$TERMDECK_SOCK\" \"$TERMDECK_PANE\"; if [ -z \"${TERMDECK_SHELL_HOOK+x}\" ]; then printf absent; else printf present; fi"
+                    .to_owned(),
             ],
             shell_hook: false,
         };
-        let mut transport = PtyTransport::spawn_with_socket(
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.env("TERMDECK_SHELL_HOOK", "outer-hook");
+        command.args(&project.command[1..]);
+        inject_session_environment(
+            &mut command,
             &project,
-            ScreenSize::new(80, 24),
             Some(std::path::Path::new("/tmp/inner.sock")),
-        )
-        .unwrap();
+        );
+        let mut transport =
+            PtyTransport::spawn_command(terminal, command, ScreenSize::new(80, 24), None).unwrap();
         let deadline = Instant::now() + Duration::from_secs(15);
         let mut output = Vec::new();
         while Instant::now() < deadline && !String::from_utf8_lossy(&output).contains("inner-pane")
@@ -440,6 +459,11 @@ mod tests {
         }
         assert!(
             String::from_utf8_lossy(&output).contains("/tmp/inner.sock|inner-pane"),
+            "output: {:?}",
+            String::from_utf8_lossy(&output)
+        );
+        assert!(
+            String::from_utf8_lossy(&output).contains("|absent"),
             "output: {:?}",
             String::from_utf8_lossy(&output)
         );
