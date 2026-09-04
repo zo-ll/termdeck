@@ -30,6 +30,9 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
     let mut json = false;
     let mut socket = None;
     let mut requested_lines = None;
+    let mut force = false;
+    let mut on = None;
+    let mut input = None;
     let mut positional = Vec::new();
     let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
@@ -54,6 +57,28 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
                         .map_err(|_| "peek lines must be a number".to_owned())?,
                 );
             }
+            "--force" => force = true,
+            "--on" => {
+                if on.replace(true).is_some() {
+                    return Err("zoom mode can only be specified once".to_owned());
+                }
+            }
+            "--off" => {
+                if on.replace(false).is_some() {
+                    return Err("zoom mode can only be specified once".to_owned());
+                }
+            }
+            "--text" | "--paste" | "--keys" => {
+                if input.is_some() {
+                    return Err("input kind can only be specified once".to_owned());
+                }
+                input = Some((
+                    argument,
+                    arguments
+                        .next()
+                        .ok_or_else(|| "input kind requires text".to_owned())?,
+                ));
+            }
             argument if argument.starts_with('-') => {
                 return Err(format!("unknown option: {argument}"));
             }
@@ -63,9 +88,11 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
     let Some(verb) = positional.first() else {
         return Err(usage().to_owned());
     };
-    let (id, lines, msg) = match verb.as_str() {
-        "status" | "list" | "version" if positional.len() == 1 => (None, None, None),
-        "peek" if positional.len() == 2 => (Some(positional[1].clone()), requested_lines, None),
+    let (id, lines, msg, path) = match verb.as_str() {
+        "status" | "list" | "version" if positional.len() == 1 => (None, None, None, None),
+        "peek" if positional.len() == 2 => {
+            (Some(positional[1].clone()), requested_lines, None, None)
+        }
         "peek" if positional.len() == 3 && requested_lines.is_none() => (
             Some(positional[1].clone()),
             Some(
@@ -74,10 +101,32 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
                     .map_err(|_| "peek lines must be a number".to_owned())?,
             ),
             None,
+            None,
         ),
-        "notify" if positional.len() >= 2 => (None, None, Some(positional[1..].join(" "))),
-        "status" | "list" | "peek" | "notify" | "version" => return Err(usage().to_owned()),
+        "notify" if positional.len() >= 2 => (None, None, Some(positional[1..].join(" ")), None),
+        "open" if positional.len() == 2 => (None, None, None, Some(positional[1].clone())),
+        "close" | "promote" | "input" if positional.len() == 2 => {
+            (Some(positional[1].clone()), None, None, None)
+        }
+        "zoom" if positional.len() == 1 => (None, None, None, None),
+        "status" | "list" | "peek" | "notify" | "version" | "open" | "close" | "promote"
+        | "zoom" | "input" => return Err(usage().to_owned()),
         _ => return Err(format!("unknown verb: {verb}")),
+    };
+    if (force && !matches!(verb.as_str(), "close" | "input"))
+        || (on.is_some() && verb != "zoom")
+        || (input.is_some() && verb != "input")
+    {
+        return Err(usage().to_owned());
+    }
+    if verb == "input" && input.is_none() {
+        return Err(usage().to_owned());
+    }
+    let (text, paste, keys) = match input {
+        Some((kind, value)) if kind == "--text" => (Some(value), None, None),
+        Some((kind, value)) if kind == "--paste" => (None, Some(value), None),
+        Some((_, value)) => (None, None, Some(value)),
+        None => (None, None, None),
     };
     Ok((
         json,
@@ -90,6 +139,12 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
             id,
             lines,
             msg,
+            path,
+            force,
+            on,
+            text,
+            paste,
+            keys,
         },
     ))
 }
@@ -131,7 +186,7 @@ fn print_plain(data: &serde_json::Value) {
 }
 
 const fn usage() -> &'static str {
-    "usage: termctl [--json] [--socket PATH] status|list|peek ID [--lines N|N]|notify MSG|version"
+    "usage: termctl [--json] [--socket PATH] status|list|peek ID [--lines N|N]|notify MSG|open PATH|close ID [--force]|promote ID|zoom [--on|--off]|input ID (--text|--paste|--keys) VALUE [--force]|version"
 }
 
 #[cfg(test)]
@@ -208,5 +263,50 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(notify.msg.as_deref(), Some("build done"));
+    }
+
+    #[test]
+    fn parse_control_verbs() {
+        let (_, _, open) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "open".to_owned(),
+            "/work/api".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(open.path.as_deref(), Some("/work/api"));
+
+        let (_, _, input) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "input".to_owned(),
+            "two".to_owned(),
+            "--paste".to_owned(),
+            "hello".to_owned(),
+            "--force".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(input.id.as_deref(), Some("two"));
+        assert_eq!(input.paste.as_deref(), Some("hello"));
+        assert!(input.force);
+
+        let (_, _, zoom) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "zoom".to_owned(),
+            "--on".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(zoom.on, Some(true));
+        assert!(
+            parse(vec![
+                "--socket".to_owned(),
+                "/tmp/ctl.sock".to_owned(),
+                "zoom".to_owned(),
+                "--on".to_owned(),
+                "--off".to_owned(),
+            ])
+            .is_err()
+        );
     }
 }

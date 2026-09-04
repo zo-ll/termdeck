@@ -14,6 +14,7 @@ use lifecycle::*;
 use outer::{OuterTerminal, PanicGuard, SignalGuard};
 
 use std::{
+    collections::BTreeSet,
     error::Error,
     io::{self, Read, Write},
     panic,
@@ -201,6 +202,165 @@ fn chosen(sheet: &SheetState, projects: &[Project]) -> Vec<Project> {
     added
 }
 
+/// Builds the ordinary runtime-add project used by the ctl `open` verb.
+fn opened(path: &str, projects: &[Project]) -> Result<Project, crate::ctl::Response> {
+    let path = std::fs::canonicalize(path).map_err(|error| {
+        crate::ctl::Response::error(2, format!("bad request: open path: {error}"))
+    })?;
+    if !path.is_dir() {
+        return Err(crate::ctl::Response::error(
+            2,
+            "bad request: open path must be a directory",
+        ));
+    }
+    let base = path
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy()
+        .into_owned();
+    let names = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect::<Vec<_>>();
+    let names = names.iter().map(String::as_str).collect::<Vec<_>>();
+    Ok(Project {
+        terminal: TerminalId::new(picker::unique_name(&names, &base)),
+        path,
+        command: vec!["bash".to_owned(), "-l".to_owned()],
+    })
+}
+
+#[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
+fn dispatch_control(
+    request: crate::ctl::Request,
+    caller: Option<&str>,
+    workspace: &Workspace,
+    projects: &mut Vec<Project>,
+    deck: &mut DeckState,
+    engine: &mut NativeEngine,
+    size: ScreenSize,
+    sheet_open: bool,
+    socket: &std::path::Path,
+    allow_input: bool,
+    closed: &mut BTreeSet<String>,
+    quit: &mut bool,
+) -> crate::ctl::Response {
+    if request.schema != crate::ctl::SCHEMA {
+        return crate::ctl::Response::error(2, "bad request: unsupported schema");
+    }
+    let control = match request.control() {
+        Ok(Some(control)) => control,
+        Ok(None) => {
+            return crate::ctl::dispatch(
+                request,
+                crate::ctl::State {
+                    workspace,
+                    projects,
+                    deck,
+                    engine,
+                    size,
+                    sheet_open,
+                },
+            );
+        }
+        Err(response) => return response,
+    };
+    match control {
+        crate::ctl::Control::Open { path } => {
+            if sheet_open {
+                return crate::ctl::Response::error(3, "refused: runtime-add sheet is open");
+            }
+            let project = match opened(&path, projects) {
+                Ok(project) => project,
+                Err(response) => return response,
+            };
+            match add_terminal_with_socket(engine, project.clone(), projects, deck, size, socket) {
+                Ok(()) => {
+                    let id = project.terminal.to_string();
+                    closed.remove(&id);
+                    projects.push(project);
+                    deck.push_terminal();
+                    crate::ctl::Response::ok(serde_json::json!({ "id": id }))
+                }
+                Err(error) => crate::ctl::Response::error(1, error),
+            }
+        }
+        crate::ctl::Control::Close { id, force } => {
+            if caller == Some(id.as_str()) && !force {
+                return crate::ctl::Response::error(
+                    3,
+                    "refused: cannot close caller pane without --force",
+                );
+            }
+            let Some(position) = projects
+                .iter()
+                .position(|project| project.terminal.to_string() == id)
+            else {
+                return if closed.contains(&id) {
+                    crate::ctl::Response::ok(
+                        serde_json::json!({ "id": id, "last": false, "already": true }),
+                    )
+                } else {
+                    crate::ctl::Response::error(2, "bad request: unknown terminal")
+                };
+            };
+            let last = projects.len() == 1;
+            if last {
+                if !force {
+                    return crate::ctl::Response::error(
+                        3,
+                        "refused: would end session; confirm --force",
+                    );
+                }
+                *quit = true;
+            } else {
+                request_close(engine, projects, deck, position);
+                closed.insert(id.clone());
+            }
+            crate::ctl::Response::ok(serde_json::json!({ "id": id, "last": last }))
+        }
+        crate::ctl::Control::Promote { id } => {
+            let Some(project) = projects
+                .iter()
+                .find(|project| project.terminal.to_string() == id)
+            else {
+                return crate::ctl::Response::error(2, "bad request: unknown terminal");
+            };
+            deck.apply(
+                &crate::contracts::ActionCommand::Promote(project.terminal.clone()),
+                projects,
+                now(),
+            );
+            crate::ctl::Response::ok(serde_json::json!({ "id": id, "master": true }))
+        }
+        crate::ctl::Control::Zoom { on } => {
+            if on.is_none_or(|on| on != deck.zoomed()) {
+                deck.apply(
+                    &crate::contracts::ActionCommand::ToggleZoom,
+                    projects,
+                    now(),
+                );
+            }
+            crate::ctl::Response::ok(serde_json::json!({ "zoom": deck.zoomed() }))
+        }
+        crate::ctl::Control::Input { id, bytes, force } => {
+            if !allow_input && !force {
+                return crate::ctl::Response::error(3, "refused: input is disabled; use --force");
+            }
+            let Some(project) = projects
+                .iter()
+                .find(|project| project.terminal.to_string() == id)
+            else {
+                return crate::ctl::Response::error(2, "bad request: unknown terminal");
+            };
+            dispatch_live_input(engine, project.terminal.clone(), bytes);
+            crate::ctl::Response::ok(serde_json::json!({ "id": id }))
+        }
+    }
+}
+
 /// Turns the picker's ordered `(name, path)` pairs into the workspace the
 /// session opens. The first pair is pane 1 and therefore the master.
 fn workspace_of(state: &PickerState) -> Workspace {
@@ -235,6 +395,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     // any outer TERMDECK_* values for nested sessions.
     #[cfg(unix)]
     let mut control = crate::ctl::Listener::bind()?;
+    #[cfg(unix)]
+    let allow_input = std::env::var("TERMDECK_ALLOW_INPUT").is_ok_and(|value| value == "1");
     let mut size = screen_size()?;
     // The workspace opened this list; `^g a` can lengthen it, so the session
     // owns it from here (#50 A3).
@@ -257,6 +419,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut close_press: Option<usize> = None;
     // The runtime-add sheet, while it is open. It owns every key it sees.
     let mut sheet: Option<SheetState> = None;
+    #[cfg(unix)]
+    let mut closed = BTreeSet::new();
     let browser = FsBrowse::new(crate::cli::picker_roots());
     let roots = Browse::roots(&browser);
 
@@ -277,14 +441,27 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         dirty |= input.expire(&mut deck, &projects, now());
         #[cfg(unix)]
         {
-            dirty |= control.poll(crate::ctl::State {
-                workspace,
-                projects: &projects,
-                deck: &deck,
-                engine: &engine,
-                size,
-                sheet_open: sheet.is_some(),
+            let mut quit = false;
+            let socket = control.path().to_path_buf();
+            dirty |= control.poll_with(|request, caller| {
+                dispatch_control(
+                    request,
+                    caller,
+                    workspace,
+                    &mut projects,
+                    &mut deck,
+                    &mut engine,
+                    size,
+                    sheet.is_some(),
+                    &socket,
+                    allow_input,
+                    &mut closed,
+                    &mut quit,
+                )
             })?;
+            if quit {
+                break 'session;
+            }
         }
 
         for event in keys.read(POLL_INTERVAL)? {
