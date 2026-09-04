@@ -332,3 +332,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   window spawned (on-demand); study-71 dispatched first (sequential; #33
   after its ping). Deliverables: notifications-research.md +
   animations-research.md.
+- 2026-09-04: RESEARCH DONE for #71 + #33 (researcher window retired).
+  Briefs committed: notifications-research.md, animations-research.md;
+  #71/#33 comments posted. Awaiting USER decisions (directions, slices,
+  sequencing — #33 pattern before #71 visual per the researcher note).
