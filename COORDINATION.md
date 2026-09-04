@@ -306,3 +306,8 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   FRESH codex session (kill+relaunch, full access, terra high).
   Authority: docs/design/termdeck/agent-api-spec.md.
   Critic idle; claude idle. #90 ping -> gates -> critic -> merge.
+- 2026-09-04 (LESSON): codex corrections can sit UNSUBMITTED — a send-keys
+  Enter inside the bracketed-paste stream never submits. Verify pane state
+  after every codex dispatch (Working vs pointer at prompt); one retry at
+  most, never while Working (twin-ping guard). Baked into the coordinator
+  skill. The #90 correction was delayed 1 turn this way; now running.
