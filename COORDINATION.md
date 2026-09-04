@@ -402,3 +402,12 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   binary rebuilt — bash/zsh/fish panes auto-notify on exit!=0 or >=10s;
   TERMDECK_NOTIFY knobs; no-rearm; nested-safe). Open set: #94 (MCP held),
   #33 (animations parked). Main 320 lib.
+## EOD 2026-09-04 (pre-close snapshot)
+- main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
+- tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
+  (idle) | researcher on-demand; relay alive; inbox empty.
+- OPEN: #94 MCP (held on coord/94-ctl-mcp, user call) · #33 animations
+  (parked). NOTHING in flight; safe to close.
+- Durable-resumption: read COORDINATION.md + docs/RESUME.md + journal
+  (the skills repo has the coordinator/critic/researcher specs incl. the
+  canonical env + protocols).
