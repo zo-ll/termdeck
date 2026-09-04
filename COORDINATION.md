@@ -295,3 +295,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   (TERMDECK_ALLOW_INPUT|--force); MCP = adapter; Q1-8 answered. Awaiting
   USER decision (adopt A? §4a allowed? input policy? close-last --force?)
   before Phase-1 dispatch (rendezvous + read verbs).
+- 2026-09-04: agent-api IMPLEMENTATION SPEC written + pushed
+  (docs/design/termdeck/agent-api-spec.md; #72 comment). Decisions fixed:
+  socket+JSON, history_lines additive method, env trust + TERMDECK_PANE,
+  input gated, close-last/close-self guards, nested override, MCP adapter.
+  Phases 1/2/3 with acceptance. NEXT: user approval -> Phase-1 issue +
+  dispatch to codex lane (engine/contracts/CLI ownership).
