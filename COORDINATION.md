@@ -241,3 +241,5 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   pi panes receive SINGLE-LINE pointers only; content in files. Critic
   recovered and is idle; #82 fully closed (re-review verified NB fixes).
 - 2026-09-04: dispatched to codex lane: $N horizon-open investigation.
+- 2026-09-04: #87 (horizon CLI commands fail in a termdeck terminal)
+  dispatched to the codex lane (coord/87-horizon-open).
