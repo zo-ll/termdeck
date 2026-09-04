@@ -1,5 +1,6 @@
 use std::{
     io::{Read, Write},
+    path::Path,
     sync::mpsc::{self, Receiver},
     thread::{self, JoinHandle},
     time::Duration,
@@ -40,12 +41,27 @@ pub struct PtyTransport {
 impl PtyTransport {
     /// Starts a configured host shell in its configured working directory.
     pub fn spawn(project: &Project, size: ScreenSize) -> Result<Self, String> {
+        Self::spawn_with_socket(project, size, None)
+    }
+
+    /// Starts a project with the current session's ctl rendezvous variables.
+    /// CommandBuilder inherits the parent environment, and these explicit
+    /// assignments deliberately replace any outer Termdeck values.
+    pub fn spawn_with_socket(
+        project: &Project,
+        size: ScreenSize,
+        socket: Option<&Path>,
+    ) -> Result<Self, String> {
         let Some((program, arguments)) = project.command.split_first() else {
             return Err(format!("{}: command must not be empty", project.terminal));
         };
         let mut command = CommandBuilder::new(program);
         command.args(arguments);
         command.cwd(&project.path);
+        if let Some(socket) = socket {
+            command.env("TERMDECK_SOCK", socket);
+            command.env("TERMDECK_PANE", project.terminal.to_string());
+        }
         Self::spawn_command(project.terminal.clone(), command, size)
     }
 
@@ -374,5 +390,43 @@ mod tests {
 
         assert!(!super::process_group_alive(process_group));
         assert!(transport.has_joined_threads());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn socket_and_pane_environment_override_an_outer_session() {
+        let terminal = TerminalId::new("inner-pane");
+        let project = Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "printf '%s|%s\\n' \"$TERMDECK_SOCK\" \"$TERMDECK_PANE\"".to_owned(),
+            ],
+        };
+        let mut transport = PtyTransport::spawn_with_socket(
+            &project,
+            ScreenSize::new(80, 24),
+            Some(std::path::Path::new("/tmp/inner.sock")),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut output = Vec::new();
+        while Instant::now() < deadline && !String::from_utf8_lossy(&output).contains("inner-pane")
+        {
+            for event in transport.drain_events() {
+                if let PtyEvent::Output { bytes, .. } = event {
+                    output.extend(bytes);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            String::from_utf8_lossy(&output).contains("/tmp/inner.sock|inner-pane"),
+            "output: {:?}",
+            String::from_utf8_lossy(&output)
+        );
+        transport.shutdown().unwrap();
     }
 }

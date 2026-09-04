@@ -8,6 +8,7 @@ use crate::contracts::{
 #[derive(Debug)]
 struct FakeTerminalState {
     frame: TerminalFrame,
+    history: Vec<String>,
     metadata: TerminalMetadata,
     status: TerminalStatus,
 }
@@ -33,6 +34,7 @@ impl FakeEngine {
                         terminal,
                         FakeTerminalState {
                             frame,
+                            history: Vec::new(),
                             metadata: TerminalMetadata::default(),
                             status: TerminalStatus::Starting,
                         },
@@ -124,6 +126,15 @@ impl FakeEngine {
 
     pub fn input(&self) -> &[(TerminalId, Vec<u8>)] {
         &self.input
+    }
+
+    /// Supplies retained output to ctl tests and fixtures.
+    pub fn set_history_lines(&mut self, terminal: &TerminalId, lines: Vec<String>) -> bool {
+        let Some(state) = self.terminals.get_mut(terminal) else {
+            return false;
+        };
+        state.history = lines;
+        true
     }
 }
 
@@ -238,6 +249,12 @@ impl TerminalEngine for FakeEngine {
 
     fn metadata(&self, terminal: &TerminalId) -> Option<&TerminalMetadata> {
         self.terminals.get(terminal).map(|state| &state.metadata)
+    }
+
+    fn history_lines(&self, terminal: &TerminalId, max: usize) -> Option<Vec<String>> {
+        let state = self.terminals.get(terminal)?;
+        let first = state.history.len().saturating_sub(max);
+        Some(state.history[first..].to_vec())
     }
 }
 

@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeSet,
+    path::Path,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,6 +16,7 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
 struct NativeTerminal {
     project: Project,
+    socket: Option<std::path::PathBuf>,
     transport: Option<PtyTransport>,
     adapter: VtFrameAdapter,
     frame: TerminalFrame,
@@ -25,8 +27,8 @@ struct NativeTerminal {
 }
 
 impl NativeTerminal {
-    fn spawn(project: Project, size: ScreenSize) -> Result<Self, String> {
-        let transport = PtyTransport::spawn(&project, size)?;
+    fn spawn(project: Project, size: ScreenSize, socket: Option<&Path>) -> Result<Self, String> {
+        let transport = PtyTransport::spawn_with_socket(&project, size, socket)?;
         let adapter = VtFrameAdapter::new(project.terminal.clone(), size);
         let frame = adapter.frame();
 
@@ -39,6 +41,7 @@ impl NativeTerminal {
                 ..TerminalMetadata::default()
             },
             project,
+            socket: socket.map(Path::to_path_buf),
             transport: Some(transport),
             adapter,
             frame,
@@ -136,7 +139,11 @@ impl NativeTerminal {
             transport.shutdown()?;
         }
 
-        let transport = PtyTransport::spawn(&self.project, self.frame.size)?;
+        let transport = PtyTransport::spawn_with_socket(
+            &self.project,
+            self.frame.size,
+            self.socket.as_deref(),
+        )?;
         self.adapter = VtFrameAdapter::new(self.project.terminal.clone(), self.frame.size);
         self.frame = self.adapter.frame();
         self.status = TerminalStatus::Running;
@@ -202,7 +209,7 @@ impl NativeEngine {
             .iter()
             .cloned()
             .zip(sizes.iter().copied())
-            .map(|(project, size)| NativeTerminal::spawn(project, size))
+            .map(|(project, size)| NativeTerminal::spawn(project, size, None))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self { terminals })
     }
@@ -223,8 +230,59 @@ impl NativeEngine {
                 project.terminal
             ));
         }
-        self.terminals.push(NativeTerminal::spawn(project, size)?);
+        self.terminals
+            .push(NativeTerminal::spawn(project, size, None)?);
         Ok(())
+    }
+
+    /// Starts one more terminal with this session's ctl rendezvous environment.
+    pub fn add_with_socket(
+        &mut self,
+        project: Project,
+        size: ScreenSize,
+        socket: &Path,
+    ) -> Result<(), String> {
+        if self
+            .terminals
+            .iter()
+            .any(|item| item.owns(&project.terminal))
+        {
+            return Err(format!(
+                "terminal '{}' is already running",
+                project.terminal
+            ));
+        }
+        self.terminals
+            .push(NativeTerminal::spawn(project, size, Some(socket))?);
+        Ok(())
+    }
+
+    /// Starts a session whose children inherit its ctl rendezvous path.
+    pub fn spawn_sized_with_socket(
+        projects: &[Project],
+        sizes: &[ScreenSize],
+        socket: &Path,
+    ) -> Result<Self, String> {
+        if projects.is_empty() {
+            return Err("native engine requires at least one terminal".to_owned());
+        }
+        if projects.len() != sizes.len() {
+            return Err("native engine requires one size per terminal".to_owned());
+        }
+        let mut ids = BTreeSet::new();
+        if projects
+            .iter()
+            .any(|project| !ids.insert(project.terminal.clone()))
+        {
+            return Err("native engine terminal identities must be unique".to_owned());
+        }
+        let terminals = projects
+            .iter()
+            .cloned()
+            .zip(sizes.iter().copied())
+            .map(|(project, size)| NativeTerminal::spawn(project, size, Some(socket)))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { terminals })
     }
 
     /// Removes one terminal from a running engine (#84): the counterpart of
@@ -410,6 +468,11 @@ impl TerminalEngine for NativeEngine {
 
     fn metadata(&self, terminal: &TerminalId) -> Option<&TerminalMetadata> {
         self.terminal(terminal).map(|item| &item.metadata)
+    }
+
+    fn history_lines(&self, terminal: &TerminalId, max: usize) -> Option<Vec<String>> {
+        self.terminal(terminal)
+            .map(|item| item.adapter.history_lines(max))
     }
 }
 
@@ -733,6 +796,7 @@ mod tests {
         let mut engine = NativeEngine {
             terminals: vec![NativeTerminal {
                 project,
+                socket: None,
                 transport: None,
                 adapter,
                 frame,
@@ -814,6 +878,7 @@ mod tests {
         let mut engine = NativeEngine {
             terminals: vec![NativeTerminal {
                 project,
+                socket: None,
                 transport: None,
                 adapter,
                 frame,

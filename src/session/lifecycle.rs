@@ -1,5 +1,7 @@
 use super::*;
+use std::path::Path;
 
+#[cfg(any(test, not(unix)))]
 pub(super) fn spawn_terminals(
     projects: &[Project],
     deck: &DeckState,
@@ -17,6 +19,26 @@ pub(super) fn spawn_terminals(
         .map(|size| size.unwrap_or(fallback))
         .collect::<Vec<_>>();
     NativeEngine::spawn_sized(projects, &sizes)
+}
+
+pub(super) fn spawn_terminals_with_socket(
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+    socket: &Path,
+) -> Result<NativeEngine, String> {
+    let sizes = terminal_sizes(projects, deck, size);
+    let fallback = sizes
+        .iter()
+        .flatten()
+        .copied()
+        .next()
+        .unwrap_or(ScreenSize::new(1, 1));
+    let sizes = sizes
+        .into_iter()
+        .map(|size| size.unwrap_or(fallback))
+        .collect::<Vec<_>>();
+    NativeEngine::spawn_sized_with_socket(projects, &sizes, socket)
 }
 
 pub(super) fn resize_terminals(
@@ -45,6 +67,7 @@ pub(super) fn resize_terminals(
     resized
 }
 
+#[cfg(any(test, not(unix)))]
 pub(super) fn add_terminal(
     engine: &mut NativeEngine,
     project: Project,
@@ -58,6 +81,22 @@ pub(super) fn add_terminal(
         .next()
         .unwrap_or(ScreenSize::new(1, 1));
     engine.add(project, size)
+}
+
+pub(super) fn add_terminal_with_socket(
+    engine: &mut NativeEngine,
+    project: Project,
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+    socket: &Path,
+) -> Result<(), String> {
+    let size = terminal_sizes(projects, deck, size)
+        .into_iter()
+        .flatten()
+        .next()
+        .unwrap_or(ScreenSize::new(1, 1));
+    engine.add_with_socket(project, size, socket)
 }
 
 /// Closes one pane (#84): the engine ends its shell the way a confirmed quit
