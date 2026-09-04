@@ -369,3 +369,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   canvas (audit behavior first; honest rebless; gate 309+3). #102-design-swap
   done (2 drifts, swap confirmed). Backend scan (#103-branch
   coord/103-backend-scan) CLEAN — no fixes.
+- 2026-09-04: #103 footer FIX merged (PR #105, 9474754->main; binary rebuilt —
+  fold-census footer gone per canvas; 312 tests). Docs-swap (PR #104) merged
+  BEFORE it (correct order thanks to claude's flag). PENDING USER: the slice
+  .md docs (collapse-stack.md/scrollable-stack.md/split-divider.md) still
+  describe the footer + the 5 canvas doc-notes (DesignSync-vs-MCP text, SPEC
+  grid, divider rows 0-39, zoom corner card, narrow double bar) + '1-4 vs N'.
