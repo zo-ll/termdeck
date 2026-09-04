@@ -375,3 +375,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   .md docs (collapse-stack.md/scrollable-stack.md/split-divider.md) still
   describe the footer + the 5 canvas doc-notes (DesignSync-vs-MCP text, SPEC
   grid, divider rows 0-39, zoom corner card, narrow double bar) + '1-4 vs N'.
+- 2026-09-04: DOCS SWEEP (#106) dispatched to FRESH claude
+  (coord/106-docs-sweep): slice docs to the canvas (footer deleted, row-1
+  bar, promote-N, DESIGN.md 5 notes) + ZERO horizon mentions in docs/README
+  (examples/*.yaml stay; code/horizontal untouched). Docs-only; grep-verify.
