@@ -260,3 +260,8 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   stale (735b4ee pre-split); rebase onto origin/main conflicted in
   session.rs + ui/mod.rs (the #81 split targets). Integration routed back to
   claude (idle; owns the slice). Codex still on #87.
+- 2026-09-04 (USER refinement, #84): closing the LAST pane should route
+  through the existing QUIT-CONFIRMATION modal, not exit silently. Pending:
+  deliver to claude's lane (idle) after its integration turn completes
+  (never steer a working worker). If the user's composed line already
+  reached claude, this is a no-op.
