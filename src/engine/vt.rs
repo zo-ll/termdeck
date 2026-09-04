@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
 use alacritty_terminal::{
-    event::VoidListener,
+    event::{Event, EventListener},
     grid::{Dimensions, Scroll},
     term::{Config, Term, TermMode, cell::Flags, color::Colors},
     vte::ansi::{Color, NamedColor, Processor},
@@ -13,14 +15,30 @@ use crate::contracts::{
 /// Current-thread adapter from recorded VT output to an owned frame.
 pub struct VtFrameAdapter {
     terminal: TerminalId,
-    term: Term<VoidListener>,
+    term: Term<PtyReplyListener>,
     parser: Processor,
+    replies: Rc<RefCell<Vec<u8>>>,
     revision: u64,
+}
+
+/// Alacritty asks its listener to return answers to terminal queries such as
+/// DSR (`CSI 6 n`). Those bytes belong on this terminal's PTY, not the outer
+/// UI terminal.
+#[derive(Clone)]
+struct PtyReplyListener(Rc<RefCell<Vec<u8>>>);
+
+impl EventListener for PtyReplyListener {
+    fn send_event(&self, event: Event) {
+        if let Event::PtyWrite(reply) = event {
+            self.0.borrow_mut().extend(reply.bytes());
+        }
+    }
 }
 
 impl VtFrameAdapter {
     pub fn new(terminal: TerminalId, size: ScreenSize) -> Self {
         let dimensions = VtSize::from(size);
+        let replies = Rc::new(RefCell::new(Vec::new()));
         Self {
             terminal,
             term: Term::new(
@@ -29,9 +47,10 @@ impl VtFrameAdapter {
                     ..Config::default()
                 },
                 &dimensions,
-                VoidListener,
+                PtyReplyListener(Rc::clone(&replies)),
             ),
             parser: Processor::new(),
+            replies,
             revision: 0,
         }
     }
@@ -41,6 +60,12 @@ impl VtFrameAdapter {
         self.parser.advance(&mut self.term, bytes);
         self.revision = self.revision.saturating_add(1);
         self.frame()
+    }
+
+    /// Takes bytes the terminal emulator generated in response to child
+    /// queries, ready to be written to the same child PTY.
+    pub fn take_pty_replies(&self) -> Vec<u8> {
+        std::mem::take(&mut *self.replies.borrow_mut())
     }
 
     pub fn resize(&mut self, size: ScreenSize) -> TerminalFrame {
@@ -384,6 +409,17 @@ mod tests {
         assert!(adapter.alt_screen());
         adapter.feed(b"\x1b[?1049l");
         assert!(!adapter.alt_screen());
+    }
+
+    /// `fzf`, which Horizon uses, asks for the cursor position before it
+    /// draws. The emulator's reply must survive the frame adapter so its PTY
+    /// owner can write it back to the application.
+    #[test]
+    fn device_status_query_produces_a_pty_reply() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+        adapter.feed(b"\x1b[2;3H\x1b[6n");
+
+        assert_eq!(adapter.take_pty_replies(), b"\x1b[2;3R");
     }
 
     #[test]

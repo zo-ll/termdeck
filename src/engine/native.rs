@@ -107,9 +107,16 @@ impl NativeTerminal {
                 self.refresh_timing();
                 events.push(EngineEvent::FrameReady(self.frame.clone()));
                 events.push(EngineEvent::MetadataChanged {
-                    terminal,
+                    terminal: terminal.clone(),
                     metadata: self.metadata.clone(),
                 });
+                let replies = self.adapter.take_pty_replies();
+                if !replies.is_empty()
+                    && let Some(transport) = self.transport.as_mut()
+                    && let Err(message) = transport.write(&replies)
+                {
+                    events.extend(self.status_changed(TerminalStatus::Failed { message }));
+                }
             }
             PtyEvent::StatusChanged { terminal, status } if self.owns(&terminal) => {
                 events.extend(self.status_changed(status));
@@ -690,6 +697,23 @@ mod tests {
                 .is_some_and(|metadata| metadata.alt_screen),
             "the app's alternate screen never surfaced"
         );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    /// `fzf` waits for this DSR reply before it draws. Keep the assertion at
+    /// the PTY boundary: recording the reply in the emulator alone is not
+    /// sufficient if it never reaches the child application.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_live_app_receives_its_device_status_reply() {
+        let terminal = TerminalId::new("query");
+        let projects = [project(
+            terminal.clone(),
+            "stty raw -echo; printf '\\033[6n'; reply=$(dd bs=1 count=6 status=none); stty sane; printf 'DSR:'; printf '%s' \"$reply\" | od -An -tx1",
+        )];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+
+        wait_for_frame(&mut engine, &terminal, "DSR: 1b 5b 31 3b 31 52");
         engine.dispatch(EngineCommand::Shutdown);
     }
 
