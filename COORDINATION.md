@@ -379,3 +379,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   (coord/106-docs-sweep): slice docs to the canvas (footer deleted, row-1
   bar, promote-N, DESIGN.md 5 notes) + ZERO horizon mentions in docs/README
   (examples/*.yaml stay; code/horizontal untouched). Docs-only; grep-verify.
+- 2026-09-04: #106 DOCS SWEEP MERGED (PR #106? — PR number captured; critic
+  pass; docs-only; main 312 tests). Horizon = 0 in docs/README except the
+  fidelity-pinned canvas reference export + a draft (20 hits) — USER CALL:
+  re-export canvas or leave.
