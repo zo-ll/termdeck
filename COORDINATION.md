@@ -345,3 +345,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   rebuilt — BEL/ctl-notify flash + toast + census live). #71 CLOSED; S3
   OSC-777 optional follow-up noted. Open set: #33 (parked) + #94 (held MCP)
   only.
+- 2026-09-04: CI-EMAIL ROOT-CAUSED + FIXED (#99): the ONLY recurring CI
+  failure was shutdown_terms_all_groups... (native.rs:588 zero-tolerance
+  grace assert, flaked by ms under load -> 10 failed-run emails). Window
+  assert (grace-1/4 .. 2x) merged (PR #99, test-only) — grace 5x at
+  2.01-2.03s; sibling fast-path untouched. Emails stop. USER has a new
+  task for claude (lane idle).
