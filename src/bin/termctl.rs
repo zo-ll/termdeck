@@ -10,6 +10,10 @@ fn main() {
 }
 
 fn run(arguments: Vec<String>) -> i32 {
+    if arguments == ["notify", "--help"] {
+        println!("{}", notify_help());
+        return 0;
+    }
     let (json, socket, request) = match parse(arguments) {
         Ok(value) => value,
         Err(message) => {
@@ -189,13 +193,22 @@ const fn usage() -> &'static str {
     "usage: termctl [--json] [--socket PATH] status|list|peek ID [--lines N|N]|notify MSG|open PATH|close ID [--force]|promote ID|zoom [--on|--off]|input ID (--text|--paste|--keys) VALUE [--force]|version"
 }
 
+const fn notify_help() -> &'static str {
+    "usage: termctl notify MSG\n\nSends an explicit notification from a Termdeck pane.\nFor automatic shell completion notifications and their environment settings, see README.md#shell-notifications."
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
     use termdeck::ctl::{Response, SCHEMA};
 
-    use super::{parse, print_response, run};
+    use super::{notify_help, parse, print_response, run};
+
+    #[test]
+    fn notify_help_cross_references_automatic_shell_notifications() {
+        assert!(notify_help().contains("README.md#shell-notifications"));
+    }
 
     #[test]
     fn exit_codes_cover_ok_runtime_usage_and_refusal() {

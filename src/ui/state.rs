@@ -65,10 +65,11 @@ impl Notifications {
     /// each of the two transports.
     ///
     /// Precedence and coalescing are the whole of the dedupe story, because
-    /// the slot is single: an explicit message always overwrites and re-arms;
-    /// a bell arriving behind a message younger than [`COALESCE_WINDOW`] is
-    /// the same event twice and is dropped; any other bell re-arms what
-    /// stands without downgrading a message to an attention.
+    /// the slot is single: a different explicit message overwrites and
+    /// re-arms, while a repeat inside the visible toast window is dropped; a
+    /// bell arriving behind a message younger than [`COALESCE_WINDOW`] is the
+    /// same event twice and is dropped; any other bell re-arms what stands
+    /// without downgrading a message to an attention.
     pub fn record(
         &mut self,
         terminal: &TerminalId,
@@ -79,12 +80,20 @@ impl Notifications {
         if master == Some(terminal) {
             return false;
         }
+        let dismissed = self.dismissed;
         let Some(standing) = self.pending.get_mut(terminal) else {
             self.pending
                 .insert(terminal.clone(), Notify { kind, at: now });
             return true;
         };
         match (&standing.kind, &kind) {
+            (NotifyKind::Message { .. }, NotifyKind::Message { .. })
+                if standing.kind == kind
+                    && dismissed.is_none_or(|at| standing.at > at)
+                    && elapsed(now, standing.at) < TOAST_WINDOW.millis =>
+            {
+                false
+            }
             (_, NotifyKind::Message { .. }) => {
                 *standing = Notify { kind, at: now };
                 true
@@ -1235,6 +1244,13 @@ mod tests {
         }
     }
 
+    fn rich_message(title: &str, body: &str) -> NotifyKind {
+        NotifyKind::Message {
+            title: title.to_owned(),
+            body: body.to_owned(),
+        }
+    }
+
     /// #97: one slot per terminal. An explicit message always outranks a
     /// bell and re-arms the flash; a bell behind a fresh message is the same
     /// event told twice; any later bell re-arms what stands without
@@ -1269,9 +1285,41 @@ mod tests {
         assert_eq!(pending.at, later(4_000));
         assert_eq!(pending.kind, message("build done"));
 
-        // The same message again re-arms without duplicating.
-        assert!(notifies.record(&worker, None, message("build done"), later(4_500)));
-        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(later(4_500)));
+        // A failing loop repeats this exact message. While its toast is on
+        // screen it must not keep pinning the flash; a distinct message is a
+        // fresh event and still re-arms normally.
+        assert!(!notifies.record(&worker, None, message("build done"), later(4_500)));
+        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(later(4_000)));
+        assert!(!notifies.flashing(&worker, later(8_000)));
+        assert!(notifies.toasting(&worker, later(8_000)));
+
+        assert!(notifies.record(&worker, None, message("tests failed"), later(8_000)));
+        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(later(8_000)));
+        assert!(notifies.flashing(&worker, later(8_000)));
+    }
+
+    #[test]
+    fn an_identical_rich_message_inside_the_toast_window_does_not_rearm() {
+        let worker = TerminalId::new("worker");
+        let mut notifies = Notifications::new();
+        let completion = rich_message("cargo build", "exit 1 · 84s");
+
+        assert!(notifies.record(&worker, None, completion.clone(), NOW));
+        assert!(!notifies.record(&worker, None, completion, later(5_000)));
+        assert_eq!(notifies.pending(&worker).map(|notify| notify.at), Some(NOW));
+        assert!(!notifies.flashing(&worker, later(5_000)));
+        assert!(notifies.toasting(&worker, later(5_000)));
+
+        assert!(notifies.record(
+            &worker,
+            None,
+            rich_message("cargo test", "exit 1 · 84s"),
+            later(5_000)
+        ));
+        assert_eq!(
+            notifies.pending(&worker).map(|notify| notify.at),
+            Some(later(5_000))
+        );
     }
 
     /// The master frame is drawn in every layout, so the pane holding it has

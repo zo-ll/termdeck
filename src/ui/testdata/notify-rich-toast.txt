@@ -1,0 +1,42 @@
+   idp   4 terminals   > 1 frontend  ·  + add  ·  hidden: 2● 3✕ 4!                            ^g j/k switch  ^g z unzoom  ^g ? help  ^g q quit  
+                                                                                                                                                
+┌─ > 1 frontend  ·  ●  ·  pnpm dev · pid 41233 · up 10m ───────────────────────────────────────────────────────────────────  ZOOM  [####··] × ─┐
+│  $ pnpm dev                                                                                                                                  │
+│                                                                                                                                              │
+│  > idp-frontend@0.4.2 dev                                                                                                                    │
+│  > vite --host                                                                                                                               │
+│                                                                                                                                              │
+│    VITE v5.4.8  ready in 412 ms                                                                                                              │
+│                                                                                                                                              │
+│    ➜  Local:   http://localhost:5173/                                                                                                        │
+│    ➜  Network: http://192.168.1.24:5173/                                                                                                     │
+│    ➜  press h + enter to show help                                                                                                           │
+│                                                                                                                                              │
+│  12:03:58 [vite] page reload src/main.tsx                                                                                                    │
+│  12:04:12 [vite] hmr update /src/routes/WorkspaceList.tsx                                                                                    │
+│  12:04:12 [vite] hmr update /src/styles/tokens.css                                                                                           │
+│  12:04:29 [vite] hmr update /src/routes/WorkspaceList.tsx                                                                                    │
+│  12:04:41 [vite] optimized dependencies chan┌─ 1 notification ─────────────────────────── esc ─┐                                             │
+│                                             │                                                  │                                             │
+│    VITE v5.4.8  ready in 268 ms             │  4 worker · cargo test · done · 6m12s · 1s       │                                             │
+│                                             │                                                  │                                             │
+│  12:05:02 [vite] hmr update /src/components/└──────────────────────────────────────────────────┘                                             │
+│  12:05:09 warning  src/components/PaneTitle.tsx:17:8                                                                                         │
+│           'status' is declared but its value is never read.                                                                                  │
+│  12:05:17 [vite] hmr update /src/components/PaneTitle.tsx                                                                                    │
+│  12:05:33 [vite] hmr update /src/components/StatusBar.tsx                                                                                    │
+│  12:05:58 [vite] hmr update /src/routes/Dashboard.tsx                                                                                        │
+│  12:06:04 [vite] hmr invalidate /src/hooks/useTerminals.ts — could not Fast Refresh                                                          │
+│  12:06:04 [vite] page reload src/hooks/useTerminals.ts                                                                                       │
+│  12:06:11 [vite] hmr update /src/routes/Dashboard.tsx                                                                                        │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

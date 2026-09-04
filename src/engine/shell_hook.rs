@@ -46,6 +46,29 @@ add-zsh-hook preexec __td_preexec
 add-zsh-hook precmd __td_precmd
 "#;
 
+const FISH_RC: &str = r#"if status is-interactive; and not set -q TERMDECK_SHELL_HOOK; and set -q TERMDECK_SOCK; and set -q TERMDECK_PANE
+  set -gx TERMDECK_SHELL_HOOK 1
+  set -g __td_cmd
+  function __td_preexec --on-event fish_preexec
+    set -g __td_cmd $argv[1]
+  end
+  function __td_postexec --on-event fish_postexec
+    set -l code $status; set -q __td_cmd CMD_DURATION; or return
+    set -l secs (math -s0 "$CMD_DURATION / 1000"); set -l mode $TERMDECK_NOTIFY; set -l threshold $TERMDECK_NOTIFY_LONG_SECS
+    string match -rq '^[0-9]+$' -- "$threshold"; or set threshold 10
+    switch $mode
+      case none; return
+      case error; test $code -ne 0; or return
+      case long; test $secs -ge $threshold; or return
+      case all ''; test $code -ne 0; or test $secs -ge $threshold; or return
+      case '*'; return
+    end
+    set -l cmd (string replace -ra '[\\x00-\\x1f\\x7f]' '' -- "$__td_cmd")
+    printf '\\e]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\\a' "$code" "$secs" (string sub -l 512 -- "$cmd")
+  end
+end
+"#;
+
 /// A short-lived generated startup directory. Its lifetime is the owned PTY.
 pub(super) struct ShellHook {
     dir: PathBuf,
@@ -63,7 +86,7 @@ impl ShellHook {
         else {
             return Ok(None);
         };
-        if name != "bash" && name != "zsh" {
+        if name != "bash" && name != "zsh" && name != "fish" {
             return Ok(None);
         }
         let dir = unique_dir()?;
@@ -73,12 +96,24 @@ impl ShellHook {
             command.arg("--rcfile");
             command.arg(rc);
             command.args(arguments);
-        } else {
+        } else if name == "zsh" {
             fs::write(dir.join(".zshrc"), ZSH_RC).map_err(|error| error.to_string())?;
             if let Some(user_zdotdir) = env::var_os("ZDOTDIR") {
                 command.env("TERMDECK_USER_ZDOTDIR", user_zdotdir);
             }
             command.env("ZDOTDIR", &dir);
+            command.args(arguments);
+        } else {
+            let hook_dir = dir.join("fish/vendor_conf.d");
+            fs::create_dir_all(&hook_dir).map_err(|error| error.to_string())?;
+            fs::write(hook_dir.join("termdeck.fish"), FISH_RC)
+                .map_err(|error| error.to_string())?;
+            let mut data_dirs = env::var_os("XDG_DATA_DIRS")
+                .map(|dirs| env::split_paths(&dirs).collect())
+                .unwrap_or_else(|| vec!["/usr/local/share".into(), "/usr/share".into()]);
+            data_dirs.insert(0, dir.clone());
+            let data_dirs = env::join_paths(data_dirs).map_err(|error| error.to_string())?;
+            command.env("XDG_DATA_DIRS", data_dirs);
             command.args(arguments);
         }
         Ok(Some(Self { dir }))
@@ -105,7 +140,24 @@ fn unique_dir() -> Result<PathBuf, String> {
 mod tests {
     use std::{fs, process::Command};
 
-    use super::{BASH_RC, unique_dir};
+    use portable_pty::CommandBuilder;
+
+    use super::{BASH_RC, FISH_RC, ShellHook, unique_dir};
+
+    #[test]
+    fn fish_hook_uses_a_small_vendor_data_shim() {
+        assert!(FISH_RC.lines().count() <= 30);
+        let mut command = CommandBuilder::new("fish");
+        let hook = ShellHook::install("fish", &[], &mut command)
+            .unwrap()
+            .unwrap();
+        assert!(hook.dir.join("fish/vendor_conf.d/termdeck.fish").is_file());
+        assert!(command.get_env("XDG_DATA_DIRS").is_some_and(|paths| {
+            paths
+                .to_string_lossy()
+                .starts_with(&*hook.dir.to_string_lossy())
+        }));
+    }
 
     #[test]
     fn bash_snippet_emits_error_and_long_rules_without_control_bytes_in_cmd() {

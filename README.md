@@ -53,6 +53,13 @@ back to `$HOME/.config/termdeck/config.yaml`.
 `check` validates workspace roots, required terminal paths, and command argv
 arrays. Missing optional terminal paths are omitted by `list`.
 
+## Shell notifications
+
+Default bash, zsh, and fish panes automatically notify when a command exits
+non-zero or runs for at least 10 seconds. Set `TERMDECK_NOTIFY` to `none`,
+`error`, `long`, or `all`, and set `TERMDECK_NOTIFY_LONG_SECS` to change the
+long-command threshold. Use `termctl notify --help` for explicit notifications.
+
 ## Current checks
 
 Once Rust 1.98.0 is installed:
