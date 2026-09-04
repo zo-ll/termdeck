@@ -395,3 +395,6 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   pre-scan decoder). Critic pass after the zmodload fix. Slice 2 pending
   (fixtures, identical-message refinement, fish?, nested-marker eyeball).
   NOTE: this machine has NO zsh binary — zsh path verified by construction.
+- 2026-09-04: #108 slice 2 dispatched to FRESH codex (coord/111-shell-slice2:
+  identical-message no-rearm (ui/state.rs, cross-ownership approved), rich
+  keyframes, fish-or-defer, nested TERMDECK_SHELL_HOOK env fix, README para.
