@@ -311,3 +311,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   after every codex dispatch (Working vs pointer at prompt); one retry at
   most, never while Working (twin-ping guard). Baked into the coordinator
   skill. The #90 correction was delayed 1 turn this way; now running.
+- 2026-09-04: Phase 2 (#92 control verbs) dispatched to FRESH codex
+  (coord/92-ctl-verbs, on current main incl. Phase 1). Gates: input/close
+  --force/close-self/sheet. NOTE: gh issue create output captures the URL
+  ($N trap, 3rd time) — always use the literal issue number afterwards.
