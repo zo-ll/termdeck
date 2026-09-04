@@ -556,7 +556,8 @@ pub fn sheet_press(
     }
     let cursor = rows.get(sheet.state().cursor()).cloned();
     match key {
-        Key::Down | Key::Char('j') => {
+        // As in the picker, `ctrl+j` is the control twin of `j` (#95).
+        Key::Down | Key::Char('j') | Key::Ctrl('j') => {
             sheet.state_mut().move_cursor(1, rows.len());
         }
         Key::Up | Key::Char('k') => {

@@ -250,7 +250,9 @@ impl KeyReader {
             }
             let byte = self.bytes.remove(0);
             let key = match byte {
-                b'\r' | b'\n' => Key::Enter,
+                // `⏎` is CR; LF is what `ctrl+j` sends, and it falls through
+                // to the control range below so it stays that key (#95).
+                b'\r' => Key::Enter,
                 b'\t' => Key::Tab,
                 0x7f => Key::Backspace,
                 1..=26 => Key::Ctrl((b'a' + byte - 1) as char),

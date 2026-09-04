@@ -299,6 +299,24 @@ fn enter_selects_the_row_and_a_second_press_deselects_it() {
     );
 }
 
+/// `ctrl+j` used to decode as `⏎` (#95), so it punched through the listing
+/// as a stray select. It is the control twin of `j`, and moves the cursor.
+#[test]
+fn ctrl_j_moves_the_picker_cursor_down_instead_of_selecting() {
+    let mut state = browsing();
+    let roots = Fixture.roots();
+    let rows = rows_of(&state);
+    state.point_at(0, rows.len());
+
+    assert_eq!(press(&mut state, &rows, &roots, Key::Ctrl('j')), None);
+
+    assert_eq!(state.cursor(), 1, "the same step `j` takes");
+    assert!(
+        state.selection().is_empty(),
+        "and nothing was selected on the way"
+    );
+}
+
 /// `+` is deliberately distinct from `⏎`: it appends another named
 /// instance of the cursor path instead of merging it into the first.
 #[test]
@@ -1107,6 +1125,25 @@ fn enter_marks_another_instance_of_an_open_repository() {
     assert!(rendered.contains("[+] ◆  horizon-frontend"), "{rendered}");
     assert!(rendered.contains("another instance · pane 1"), "{rendered}");
     assert!(rendered.contains("o  Add 1 terminal"), "{rendered}");
+}
+
+/// The same regression inside the runtime-add sheet: `ctrl+j` moves the
+/// cursor rather than marking the row it started on (#95).
+#[test]
+fn ctrl_j_moves_the_sheet_cursor_down_instead_of_marking() {
+    let mut sheet = sheet_state();
+    let rows = sheet_rows(&sheet);
+    let roots = Fixture.roots();
+    let open = open_two();
+    sheet.state_mut().point_at(0, rows.len());
+
+    sheet_press(&mut sheet, &rows, &roots, &open, Key::Ctrl('j'));
+
+    assert_eq!(sheet.state().cursor(), 1, "the same step `j` takes");
+    assert!(
+        sheet.marked().is_empty(),
+        "and nothing was marked on the way"
+    );
 }
 
 /// `+` still appends an explicit additional instance of an open path.

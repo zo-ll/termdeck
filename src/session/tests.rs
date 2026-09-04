@@ -62,6 +62,19 @@ fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
     assert!(matches!(events[8], InputEvent::Key(Key::Char('界'))));
 }
 
+/// The raw terminal sends CR for `⏎` and LF for `ctrl+j`. Merging them made
+/// `ctrl+j` transmit a Carriage Return, so LF never reached the shell (#95).
+#[test]
+fn the_decoder_keeps_line_feed_apart_from_carriage_return() {
+    let mut reader = reader_of(b"\n\r");
+
+    let events = reader.decode(true);
+
+    assert!(matches!(events[0], InputEvent::Key(Key::Ctrl('j'))));
+    assert!(matches!(events[1], InputEvent::Key(Key::Enter)));
+    assert_eq!(events.len(), 2);
+}
+
 fn reader_of(bytes: &[u8]) -> KeyReader {
     KeyReader {
         bytes: bytes.to_vec(),

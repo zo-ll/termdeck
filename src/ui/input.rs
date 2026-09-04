@@ -400,6 +400,19 @@ mod tests {
         assert_eq!(session.deck.active(), Some(0));
     }
 
+    /// `ctrl+j` is Line Feed, `⏎` is Carriage Return, and a shell that
+    /// distinguishes them (a REPL taking `ctrl+j` as a soft newline) can only
+    /// do so if the two keys stay two bytes (#95).
+    #[test]
+    fn ctrl_j_sends_line_feed_and_enter_still_sends_carriage_return() {
+        let mut session = Session::new();
+
+        assert_eq!(session.press(Key::Ctrl('j')), sent(b"\n"));
+        assert_eq!(session.press(Key::Ctrl('j')), sent(&[0x0a]));
+        assert_eq!(session.press(Key::Enter), sent(b"\r"));
+        assert_eq!(session.press(Key::Enter), sent(&[0x0d]));
+    }
+
     #[test]
     fn the_prefix_makes_the_next_key_a_command() {
         let mut session = Session::new();
