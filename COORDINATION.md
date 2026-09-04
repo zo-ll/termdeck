@@ -84,6 +84,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   green (257). Worker env restored in `personal` (codex-82, codex-81 windows).
   Worktrees `~/.worktrees/termdeck/{82-ci,81-split}` off origin/main `a0668a9`.
   #83 fix in progress; #82/#81 to codex next (parallel — no file overlap).
+- 2026-09-04: #83 MERGED on main (`9fc38f6`, pushed). Dispatched #82 → codex in
+  `personal:codex-82` (wt 82-ci) and #81 → codex in `personal:codex-81` (wt 81-split),
+  both fresh sessions (gpt-5.6-sol/high), briefs + single-Enter submit, both Working.
 
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
@@ -222,6 +225,14 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
 2. Dispatch #82 (CI) to codex in `personal:codex-82`, #81 (split) to codex in
    `personal:codex-81`, in parallel. Cross-ownership note: #81 touches
    Claude-owned UI files — pure-move exception, coordinator-approved per user order.
-3. Critic-review each; coordinator merges only after pass + user approval.
+3. Route each finished slice to the CRITIC for independent review (coordinator never
+   self-reviews); coordinator merges only after critic pass + user approval.
 4. Parked #33/#71/#72 stay parked until the user decides.
 5. Worker protocol in effect (see Decisions).
+- 2026-09-04: TAKEOVER — previous coordinator closed (its slips: critic booted
+  as plain shell/full-skill pi, codex workers off-recipe). This coordinator
+  now runs window 0. Canonical env spec committed to the coordinator skill
+  (0 coordinator, 1 critic muse-1.3 critic-skill-only, 2 claude-opus-high,
+  3 codex-terra-high; relay + inbox drain + hard rules). Live layout:
+  0 coordinator, 1 critic, 2 codex-81, 3 codex-82 (both workers in flight
+  from the previous take-over's dispatch; monitored here).
