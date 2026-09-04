@@ -357,3 +357,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   FLAGGED by the worker (stale committed export / DesignSync-vs-MCP note /
   SPEC grid / split-divider row numbers) — PENDING USER: update DESIGN.md
   or leave.
+- 2026-09-04: DESIGN SWAP — user updated the canvas on Windows desktop
+  (Termdeck TUI mockups.zip, 17:51); swapped reference/ export into the repo
+  (coord/102-design-swap, commit 0f18ff0: status bar now ROW 1 in the canvas
+  = confirms #101 impl; 'idle 6m'->'job done' sample). Claude reviewing the
+  updated design vs main (docs-sync check; job-done verdict; remaining
+  DESIGN.md conflicts 2-4).
