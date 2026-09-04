@@ -1,6 +1,9 @@
 # Coordination — Termdeck
 
-Status: ACTIVE — tracker on GitHub (issues #33
+Status: ACTIVE — tracker on GitHub.
+Open: #81 (split god-files), #82 (CI), #83 (this doc), #33 (animations, design-first), #71 (notifications, research), #72 (agent API, research).
+Recently closed: #74 (alt-screen wheel), #75 (PTY sizing), #76 (empty stack), #77 (declutter), #64 (live tail), #66 (promote-n), #67 (sheet reopen).
+Freshness: 2026-09-04 — main `a0668a9`, gate green (257 tests).
 
 ## Goal
 
@@ -54,26 +57,34 @@ scope.
 - With a one-hour user window, next-wave tasks are intentionally bounded to one
   behavior and a focused test/snapshot rather than whole subsystem branches.
 
+- Worker protocol (earned, keep): fresh session per task by default (reuse only
+  healthy mid-series); give work only to IDLE workers (verify prompt, no
+  working/queued state); single Enter submits for codex (double-Enter only for
+  claude); workers commit locally, never push/merge; finish = status marker +
+  inbox ping; never steer a running worker — new specs only when the task is
+  with the critic; codex restores keep reasoning effort high; NEVER merge a
+  red-gated branch (#74/#80 lesson).
+- Worker env: tmux session `personal`, one window per worker (user decision
+  2026-09-04: no separate `termdeck-agents` session).
+
 ## Handoffs
 
-Rotated history: `.coordinator/journal/` (latest archives: check journal dir).
-The last ~15 events — older ones live in the journal above; ask and the coordinator greps it.
+Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
+- 2026-09-03 (end of day): main green 257 tests (`6c00bcc` + ledger). Shipped:
+  #74 alt-screen wheel (incl. hotfix for a broken-merge lapse), #76 empty-stack,
+  #75 app-width sizing, #77 declutter + scan, #66/#67 (#64/NB cleanup prior).
+  Workers stopped; codex backend 404 / claude 529 — muse healthy. (Full note in journal.)
+- 2026-09-03: #82 CI done (8f30398+20b0d87; gate green, --all-features;
+  triggers every push/PR) — critic review; merge on user go (do-not-dispatch
+  honored: not yet merged).
+- 2026-09-03: PARKED #81 + #82 (user) — worktrees/branches removed locally, then
+  fully DELETED local AND remote; user works them 2026-09-04. ONLY #33/#71/#72
+  parked remain. All workers stopped; main green 257.
+- 2026-09-04: Coordinator takeover (muse-spark). Baseline `cargo test --all-targets`
+  green (257). Worker env restored in `personal` (codex-82, codex-81 windows).
+  Worktrees `~/.worktrees/termdeck/{82-ci,81-split}` off origin/main `a0668a9`.
+  #83 fix in progress; #82/#81 to codex next (parallel — no file overlap).
 
-- 2026-09-02: #50 A3 done (claude `25fc0b0`: sheet ^g a/+ / enter/+ /o/esc, [.] lock relaxed, NativeEngine::add (only engine touch), push_terminal folded-append, -2/-3 vs running set; 214 tests) — critic full review + codex quick engine-seam check in parallel.
-- 2026-09-02: A3 MERGED via #58 (`9be6a0c`, 214 tests; codex engine approve; #50 closed; binary rebuilt — runtime add live). NB open: add-sheet mouse parity partial (+, -, filter, root-cycle, xN badge keyboard-only) — user decision pending. Next: A4 (integration) closes #42.
-- 2026-09-02: PARALLEL: claude → add-sheet mouse parity (coord/50-sheet-parity); codex → A4 integration/acceptance (coord/51-integration) — both working.
-- 2026-09-02: USER testing feedback: shift-range must TOGGLE (unselect too) + per-row checkbox square (click/Tab toggles). Dispatched to claude (coord/49-range-toggle).
-- 2026-09-02: 49-range-toggle done (codex `4945b56`: toggle ranges + checkboxes; 222 tests) — critic review.
-- 2026-09-02: range-toggle/checkbox MERGED via #61 (222 tests); binary rebuilt. NBs recorded: filter-hint copy, deliberate-instance add-path test.
-- 2026-09-02: #63 rescope merged (176d132; sheet keys pinned, over-claim gone; 224 tests). Picker test backlog ZERO. Remaining: only #33 (animations).
-- 2026-09-03: USER test findings: master scroll + prompt return gap (new OUTPUT doesn't snap to live tail; #31 is input-only). #64 dispatched to codex (coord/64-live-tail): reproduce + output-snap rule + wheel-down-to-live.
-- 2026-09-03: #64 done (codex `d02daa5`: live output follows tail, history stays deliberate; 226 tests) — critic review.
-- 2026-09-03: #64 MERGED via PR #65 (`97c63ab`, 228 tests; coordinator number-mixup: issue 64 / PR 65). #64 closed. Binary rebuilt with the live-tail fix.
-- 2026-09-03: #67-sheet MERGED (PR #68 -> dbfb253, 237 tests; binary rebuilt — sheet unrestricted + folder targets + nav). Remaining: claude UI-declutter design (running) -> backend-impact scan (codex) after.
-- 2026-09-03: DECLUTTER MERGED (PR #69 -> a048d76, 238 tests; binary rebuilt). Remaining: codex backend-impact scan (session.rs Deck::home sign-off + NB cleanup batch) after its ~2:56 PM reset.
-- 2026-09-03: declutter backend scan merged (PR #70 -> d63047d, 239; binary rebuilt). ONLY remaining: NB-cleanup batch to codex at ~14:56 reset (fresh session).
-- 2026-09-03: #75 merged (PR #76 -> 5a898eb, 243; #75 closed; binary rebuilt). #74 (scroll-stream) still open/parked — possibly resolved by the sizing fix; awaiting user decision to retry or close.
-- 2026-09-03: #74 + hotfix merged (7c2e469; main green 257; #74 closed). Alt-screen wheel forwarding live (#74), empty-stack (#76/#78), sizing (#75). Lesson: NEVER merge a red-gated branch (my sequence lapse caused the hotfix).
 ## Durable resumption
 - This file, `docs/RESUME.md`, and `docs/WORKSTREAMS.md` are the tracked source
   of truth. tmux scrollback and local agent conversations are disposable.
@@ -83,8 +94,6 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   give it to a new agent. Do not rely on an old conversation for context.
 - Private remote: `https://github.com/zo-ll/termdeck`. `main` and the active
   `coord/*` branches were first pushed on 2026-08-31.
-'
-  heading from the earlier rotation run.)
 - 2026-09-02: USER directive — monitor claude every 2 min; at 99% usage FORK
   the active slice (49-range-toggle) to codex. Monitor running detached
   (claude-monitor.sh, 30s interval): pings the inbox at >=99% or if the pane dies;
@@ -207,88 +216,12 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   scan (codex) still after reset.
 - 2026-09-03: coord/declutter integrated (022c691, 238 tests; session.rs
   -7 dead-field removal carried; NB#1 fixed) — critic re-review queued.
-## NEXT ACTIONS (resume here if coordinator context resets)
-1. codex RESET ~14:56 — dispatch TWO fresh-session tasks (fresh-per-task
-   policy): (a) backend-impact scan of the declutter incl. session.rs
-   Deck::home/abbreviate removal sign-off (coord/backend-scan); (b) the NB
-   cleanup batch (coord/nb-cleanup: A1 DEFAULT_SCROLLBACK + expect(),
-   feed-while-scrolled pin, #13 footer helper, declutter DESIGN.md residual
-   NBs, #9 resize-scrollback resolve/retire).
-2. Then merge those (critic pass each, coordinator pushes/merges).
-3. User is TESTING the decluttered binary (238 tests, main a048d76).
-4. Worker protocol in effect: fresh session per task; only give work to
-   IDLE workers; single-write finish protocol (inbox ping + marker).
-- 2026-09-03: REASSIGNED — backend-impact scan of the declutter goes to
-  CLAUDE (its own session.rs removal; coord/declutter-scan), not codex.
-  codex post-reset keeps only the NB cleanup batch.
-  NEXT ACTION stays: dispatch NB cleanup to codex at ~14:56 (fresh session).
-- 2026-09-03: declutter backend scan (claude) APPROVED + one fix 35ac12f
-  (trailing '·' at 33-35 char names, gated pair; 239 tests) — critic
-  review queued.
-- 2026-09-03: NB-cleanup dispatched to a FRESH codex session (coord/nb-cleanup
-  reset onto main a68abf5; brief incl. the declutter 40+-name clamp NB).
-  Reset confirmed by user.
-- 2026-09-03 15:07: NB-cleanup done (codex d9bd013, 242 tests; ping logged
-  DELIVER) — critic review. NOTIFICATION feature (user): assume a GENERIC
-  termdeck user WITHOUT the coordinator skills — design = `termdeck notify`
-  (documented) + implicit BEL/OSC-777 decode so any agent works; design-
-  first-vs-direct still open.
-- 2026-09-03: Notification feature PARKED for research (user unsure) — issue
-  opened on GH (generic-user spec: termdeck notify + BEL/OSC-777 decode;
-  design questions listed). No dispatch until the user decides.
-- 2026-09-03: AGENT-API issue opened (AI-first: termdeck notify/list/status/
-  open/promote with --json, generic-user constraint, research/parked like
-  #71). No dispatch yet.
-- 2026-09-03: RELAY IS NOW NOTIFY-ONLY (research-verified + applied by the
-  muse-spark-1.3 researcher, commit 5e7454d): zero keystroke injection —
-  inbox .ping files badge (✉ N) + ARRIVE log; the coordinator DRAINS
-  inbox/*.ping at turn start (read+rm) and surfaces messages in replies.
-  Root cause found: send-keys shared the PTY input queue (mid-draft gluing,
-  stray Enter, copy-mode swallow + view yank).
-- 2026-09-03: #74 dispatched to codex (coord/73-scroll-stream): cannot
-  scroll a streaming/long session — suspected #64 output-follow re-pinning
-  (disengage on intentional scroll) + scrollback cap sanity. Researcher's
-  relay ARRIVE tests noted (delivered as designed).
-- 2026-09-03: USER STOPPED codex — #74 (scroll-stream) interrupted; no
-  work done (was ~7s in). Issue #74 remains OPEN, undispatchded; revisit
-  when the user decides.
-- 2026-09-03: #75 dispatched to codex (coord/75-app-width): PTY size must
-  equal the VISIBLE master area (chrome excluded) so full-screen apps aren't
-  width-cut; folds in #74's scroll report (likely same sizing root); #74
-  itself remains open, parked (user stopped it earlier).
-- 2026-09-03: #75 done (codex df00104: size terminals to visible panes; 243
-  tests) — critic review queued.
-- 2026-09-03: #74 re-scoped (wheel into alt-screen apps, not tail-pinning)
-  and dispatched to codex (coord/74-app-scroll) after user retest.
-- 2026-09-03: codex BACKEND DOWN (persistent 404 on
-  chatgpt.com/backend-api/codex/responses — server/account side; probe
-  failed too). #74 (alt-screen wheel) blocked until it recovers (or reassign).
-  Claude pane stuck in queued-messages state -> relaunched FRESH for #76
-  (hide stack when empty).
-- 2026-09-03: Providers struggling (OpenAI codex 404; Anthropic 529). Muse-
-  spark (opencode-go) took over: #74 engine-lane muse worker + #76 now on a
-  second muse worker (claude lane). Claude window closed (overload).
-- 2026-09-03: #76 done (muse 7ab023f: empty stack hides column/divider,
-  master full width, runtime-add restores; 247 tests) — critic review.
-- 2026-09-03: #74 done (muse 89950ae: wheel into alt-screen apps; 252 tests)
-  — critic review; branch predates #76, integration after.
-- 2026-09-03: USER: do not dispatch — #81 (split god-files) and #82 (CI)
-  NOT dispatched (interrupted). Both remain OPEN, undispatched.
-## END OF DAY 2026-09-03
-- main green 257 tests (`6c00bcc` + ledger). Shipped today: #74 alt-screen
-  wheel (hotfix for a broken-merge lápse), #76 empty-stack, #75 app-width
-  sizing, #77 declutter + scan, #66/#67 (#64/NB cleanup prior), fresh-per-
-  task policy, guarded real-message relay (notify-only rejected by user;
-  unguarded injection LOADED with copy-mode guard). WORKERS: codex (OpenAI)
-  backend 404 — paused; claude (Anthropic) 529 — paused; muse (opencode-go)
-  healthy — #81/#82 NOT dispatched (user halt; both OPEN).
-- NEXT (user's call): #81 split god-files, #82 CI, #74 leftover retest in
-  app, plus parked #33/#71/#72.
-- 2026-09-03: #82 CI done (8f30398+20b0d87; gate green, --all-features;
-  triggers every push/PR) — critic review; merge on user go (do-not-dispatch
-  honored: not yet merged).
-- 2026-09-03: PARKED also #81 + #82 (user) — both worktrees/branches removed
-  locally (remote branches kept same as others). ONLY #33/#71/#72 parked
-  remain. All workers stopped; main green 257.
-- 2026-09-03: #81/#82 fully DELETED (worktrees, local AND remote branches) —
-  user will work on them tomorrow. All other coord/* remote branches kept.
+
+## NEXT ACTIONS
+1. Finish #83 (this doc) — commit on main; note it on issue #83.
+2. Dispatch #82 (CI) to codex in `personal:codex-82`, #81 (split) to codex in
+   `personal:codex-81`, in parallel. Cross-ownership note: #81 touches
+   Claude-owned UI files — pure-move exception, coordinator-approved per user order.
+3. Critic-review each; coordinator merges only after pass + user approval.
+4. Parked #33/#71/#72 stay parked until the user decides.
+5. Worker protocol in effect (see Decisions).
