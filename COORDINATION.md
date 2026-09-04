@@ -271,3 +271,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   orphans; NOT pushed). USER now steering claude directly (composer lines);
   REFINEMENT (last-pane close -> quit-confirm modal) still pending handoff
   when claude is clean-idle with no user-composed line.
+- 2026-09-04: #84 MERGED (PR #89, 276 tests; binary rebuilt — ^g x +
+  per-pane × live; last-pane close via quit-confirm). #87 merged earlier
+  (PR #88). 2026-09-04 session: #81/#82/#84/#87 all shipped, critic-passed.
+  All workers idle. Open/parked only: #33, #71, #72.
