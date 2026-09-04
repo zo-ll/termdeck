@@ -121,7 +121,7 @@ pub(super) fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-pub(super) const HELP: [(&str, &str); 17] = [
+pub(super) const HELP: [(&str, &str); 18] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
@@ -135,6 +135,7 @@ pub(super) const HELP: [(&str, &str); 17] = [
     ("^g [", "enter scrollback mode"),
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
+    ("^g x", "close active terminal"),
     ("^g ^g", "send a literal ^g"),
     ("SESSION", ""),
     ("^g ?", "this help"),
@@ -160,6 +161,16 @@ pub(super) const KEY_HINTS: [(&str, &str); 4] = [
     ("^g ?", "help"),
     ("^g q", "quit"),
 ];
+
+/// The column one pane's close affordance takes: [`PADDING`] in from the
+/// right edge, which is the inset the title already keeps on the left, so the
+/// marks line up down the stack column whether a pane is open or folded.
+///
+/// `None` for a pane too narrow to spare the columns, which no drawn pane is
+/// — the guard is there so the arithmetic can never wrap.
+pub(super) fn close_column(pane: Rect) -> Option<u16> {
+    (pane.width > 2 * PADDING + 2).then(|| pane.x + pane.width - 2 - PADDING)
+}
 
 /// Whether the split can move at this width. Below [`WIDE_COLUMNS`] the export
 /// fixes the stack at [`COMPACT_STACK`], so the ratio has nothing to say and

@@ -282,7 +282,7 @@ fn send_signal(process_group: u32, signal: libc::c_int) -> Result<(), String> {
 }
 
 #[cfg(unix)]
-fn process_group_alive(process_group: u32) -> bool {
+pub(crate) fn process_group_alive(process_group: u32) -> bool {
     let result = unsafe { libc::kill(-(process_group as libc::pid_t), 0) };
     result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }

@@ -60,6 +60,28 @@ pub(super) fn add_terminal(
     engine.add(project, size)
 }
 
+/// Closes one pane (#84): the engine ends its shell the way a confirmed quit
+/// does, the session drops its identity, and the deck reflows around what is
+/// left — promoting a new master when the closed pane held the frame.
+///
+/// The project list and the deck are renumbered together, so a pane's number
+/// stays its place in the live list and `^g N` never points at a terminal
+/// that has gone. An empty list afterwards is the caller's cue to end the
+/// session; nothing here decides that.
+pub(super) fn close_terminal(
+    engine: &mut NativeEngine,
+    projects: &mut Vec<Project>,
+    deck: &mut DeckState,
+    position: usize,
+) -> bool {
+    let Some(project) = projects.get(position) else {
+        return false;
+    };
+    engine.close(&project.terminal);
+    projects.remove(position);
+    deck.close(position)
+}
+
 /// The renderer owns pane geometry, so PTYs always receive precisely the
 /// dimensions their applications can see.
 pub(super) fn terminal_sizes(

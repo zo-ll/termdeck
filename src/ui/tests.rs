@@ -383,9 +383,10 @@ fn a_folded_running_pane_shows_its_last_output_line() {
 
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-    // The tail takes what the 44-column strip has left and clips.
+    // The tail takes what the 44-column strip has left — less the close
+    // affordance's own three columns (#84) — and clips.
     assert!(
-        text(&buffer).contains("▸ 2 backend · ● · 12:06:09 /api/termina…"),
+        text(&buffer).contains("▸ 2 backend · ● · 12:06:09 /api/term…"),
         "{}",
         text(&buffer)
     );
@@ -446,6 +447,134 @@ fn deck_for<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
         state,
         master_ratio: state.master_ratio(),
         now: fixture::NOW,
+    }
+}
+
+/// Every cell the close affordance is drawn in, top to bottom (#84).
+///
+/// The body only: the status row keeps the glyph for the narrow fallback's
+/// `84×22`, which is a size and not an affordance, and no pane is ever drawn
+/// there.
+fn close_marks(buffer: &Buffer) -> Vec<Position> {
+    let area = buffer.area();
+    (0..area.height.saturating_sub(2))
+        .flat_map(|row| (0..area.width).map(move |column| Position::new(column, row)))
+        .filter(|at| buffer[(at.x, at.y)].symbol() == super::CLOSE_AFFORDANCE)
+        .collect()
+}
+
+/// #84: the pointer's half of `^g x`. Every drawn pane carries a mark at the
+/// inset the title keeps on the left, the master included, and the cells that
+/// answer are the cells the mark is actually drawn in.
+#[test]
+fn every_open_pane_draws_a_close_mark_the_pointer_answers_for() {
+    let projects = fixture::projects();
+    let state = expanded(4);
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    let view = deck_for(&projects, &state);
+
+    // The master at column 94, and the three open previews at 140: two
+    // columns in from each pane's right edge, which is where the title starts
+    // on the left.
+    assert_eq!(
+        close_marks(&buffer),
+        [
+            Position::new(94, 0),
+            Position::new(140, 0),
+            Position::new(140, 13),
+            Position::new(140, 26),
+        ]
+    );
+    for (mark, position) in close_marks(&buffer).into_iter().zip([0, 1, 2, 3]) {
+        assert_eq!(view.close_at(SCREEN, mark), Some(position), "{mark:?}");
+        // The blank beside it belongs to the affordance too, so the pointer
+        // has the marker's own two cells to land in.
+        assert_eq!(
+            view.close_at(SCREEN, Position::new(mark.x + 1, mark.y)),
+            Some(position)
+        );
+        assert_eq!(
+            view.close_at(SCREEN, Position::new(mark.x - 1, mark.y)),
+            None
+        );
+        assert_eq!(
+            view.close_at(SCREEN, Position::new(mark.x, mark.y + 1)),
+            None
+        );
+    }
+    // And it never takes cells the other title affordances own.
+    assert_eq!(view.close_at(SCREEN, Position::new(102, 0)), None);
+    assert_eq!(view.marker_at(SCREEN, Position::new(140, 0)), None);
+}
+
+/// A folded preview closes like an open one, and its mark lines up with
+/// theirs: one column down the stack, whatever each pane is doing.
+#[test]
+fn a_folded_strip_carries_the_same_close_mark_as_an_open_pane() {
+    let projects = fixture::projects();
+    let state = collapsed();
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    let view = deck_for(&projects, &state);
+
+    // The open preview at the top of the column, then the two strips.
+    assert_eq!(
+        close_marks(&buffer),
+        [
+            Position::new(94, 0),
+            Position::new(140, 0),
+            Position::new(140, 35),
+            Position::new(140, 37),
+        ]
+    );
+    assert_eq!(view.close_at(SCREEN, Position::new(140, 35)), Some(2));
+    assert_eq!(view.close_at(SCREEN, Position::new(140, 37)), Some(3));
+    // The strip's own marker still owns its head, so the two gestures never
+    // contend for a cell.
+    assert_eq!(view.marker_at(SCREEN, Position::new(102, 35)), Some(2));
+}
+
+/// With nothing stacked (#76) the one pane still closes; zoom hides the
+/// stack, so only the master it shows carries a mark.
+#[test]
+fn the_single_and_zoomed_layouts_close_the_pane_they_show() {
+    let single = synthetic(1);
+    let state = DeckState::new(1);
+    let buffer = render_long(&single, &state, (144, 42));
+    assert_eq!(close_marks(&buffer), [Position::new(140, 0)]);
+    assert_eq!(
+        deck_for(&single, &state).close_at(SCREEN, Position::new(140, 0)),
+        Some(0)
+    );
+
+    let projects = fixture::projects();
+    let state = zoomed();
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    assert_eq!(close_marks(&buffer), [Position::new(140, 0)]);
+    assert_eq!(
+        deck_for(&projects, &state).close_at(SCREEN, Position::new(140, 0)),
+        Some(0)
+    );
+}
+
+/// The narrow fallback draws no mark and answers for none, exactly as the
+/// status bar's `+` is absent there: its one pane is the session.
+#[test]
+fn the_narrow_fallback_offers_no_close_affordance() {
+    let projects = fixture::projects();
+    let state = reference_deck(4);
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (84, 22));
+
+    assert_eq!(close_marks(&buffer), []);
+    let narrow = Rect {
+        width: 84,
+        height: 22,
+        ..SCREEN
+    };
+    let view = deck_for(&projects, &state);
+    for row in 0..22 {
+        for column in 0..84 {
+            assert_eq!(view.close_at(narrow, Position::new(column, row)), None);
+        }
     }
 }
 
@@ -780,10 +909,12 @@ fn a_strip_still_names_itself_at_the_minimum_stack_width() {
     // column on their own names, which is the right order to give things
     // up in. A strip with no room left for a tail drops the separator
     // with it, rather than ending on one that separates nothing.
-    assert!(rendered.contains("▸ 3 app · ✕ · exi…"), "{rendered}");
+    assert!(rendered.contains("▸ 3 app · ✕"), "{rendered}");
+    // The close affordance keeps its column whatever the tail does, and
+    // the tail gives way to it: at 22 columns there is none left (#84).
     for (row, strip) in [(0u16, "▸ 2 backend · ●"), (4, "▸ 4 worker · ○")] {
         let drawn: String = (122..144).map(|c| buffer[(c, row)].symbol()).collect();
-        assert_eq!(drawn.trim_end(), format!("  {strip}"), "row {row}");
+        assert_eq!(drawn.trim_end(), format!("  {strip:<16}×"), "row {row}");
     }
     // Every marker is still in its own two cells, so the affordance the
     // fresh run depends on (#39) survives the narrower column.
@@ -1254,11 +1385,11 @@ fn the_help_overlay_takes_the_focus_the_master_gives_up() {
 
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-    // 60x25 centred on the canvas: columns 42..101, rows 8..32. The
-    // overlay grew a row for the split divider's keys (#41) and another
-    // for the runtime-add sheet (#50).
+    // 60x26 centred on the canvas: columns 42..101, rows 8..33. The
+    // overlay grew a row for the split divider's keys (#41), another for
+    // the runtime-add sheet (#50) and another for `^g x` (#84).
     assert_eq!(buffer[(42u16, 8u16)].symbol(), "┌");
-    assert_eq!(buffer[(101u16, 32u16)].symbol(), "┘");
+    assert_eq!(buffer[(101u16, 33u16)].symbol(), "┘");
     assert_eq!(buffer[(42u16, 8u16)].fg, ACCENT);
     // Focus is singular: the master border is no longer the accent, and
     // the underlay recedes by foreground alone.

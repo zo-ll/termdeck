@@ -198,6 +198,53 @@ impl DeckState {
         position
     }
 
+    /// Removes a terminal from the deck and reflows around it (#84).
+    ///
+    /// Closing renumbers, where adding deliberately does not: the numbers a
+    /// pane wears are its position in the live list, so a hole would leave
+    /// `^g N` pointing at a terminal that is no longer there. Every position
+    /// above the closed one therefore steps down, and the caller drops the
+    /// same index from its own project list so the two stay aligned.
+    ///
+    /// Closing the master promotes whatever was at the head of the stack,
+    /// which takes the master frame open (the fold invariant
+    /// [`DeckState::new`] states) and live, exactly as a promotion does.
+    /// Closing anything else leaves the master, its mode and its fold alone.
+    ///
+    /// Returns whether a terminal was there to close. The last one can be
+    /// closed like any other; what an empty deck means is the session's
+    /// business, not the state's.
+    pub fn close(&mut self, position: usize) -> bool {
+        if position >= self.collapsed.len() {
+            return false;
+        }
+        let was_master = self.active() == Some(position);
+        self.collapsed.remove(position);
+        self.order.retain(|index| *index != position);
+        for index in &mut self.order {
+            if *index > position {
+                *index -= 1;
+            }
+        }
+        // A highlight belongs to a pane, so it goes when the pane does and
+        // follows it down otherwise.
+        self.demotion = match self.demotion {
+            Some((demoted, _)) if demoted == position => None,
+            Some((demoted, at)) if demoted > position => Some((demoted - 1, at)),
+            demotion => demotion,
+        };
+        // Whatever the pointer was holding is gone or has moved under it.
+        self.drag = None;
+        if was_master {
+            if let Some(master) = self.order.first().copied() {
+                self.collapsed[master] = false;
+            }
+            self.scrollback = false;
+        }
+        self.stack_offset = self.stack_offset.min(self.stack().len().saturating_sub(1));
+        true
+    }
+
     /// Configured position of the terminal holding the master pane.
     pub fn active(&self) -> Option<usize> {
         self.order.first().copied()
@@ -537,6 +584,101 @@ mod tests {
         ));
 
         assert_eq!(state.active(), Some(2));
+    }
+
+    /// #84: closing the master hands the frame to the top of the stack, and
+    /// what is left renumbers so a pane's number is still its place in the
+    /// live list.
+    #[test]
+    fn closing_the_master_promotes_the_top_of_the_stack_and_renumbers() {
+        let mut state = DeckState::new(4);
+
+        assert!(state.close(0));
+
+        // The old 2, 3 and 4 are now 1, 2 and 3, in the order they stood in.
+        assert_eq!(state.active(), Some(0));
+        assert_eq!(state.stack(), [1, 2]);
+        // The new master holds the frame, so it holds it open.
+        assert!(!state.collapsed(0));
+        assert!(state.collapsed(1));
+        assert!(state.collapsed(2));
+    }
+
+    /// A promotion made before the close still means what it meant: identity
+    /// travels with the position, and the order is untouched around the hole.
+    #[test]
+    fn closing_a_preview_leaves_the_master_and_the_order_it_stands_in() {
+        let mut state = DeckState::new(4);
+        state.apply(&ActionCommand::SelectPosition(3), &fixture::projects(), NOW);
+        assert_eq!(state.active(), Some(3));
+        assert_eq!(state.stack(), [1, 2, 0]);
+
+        // Close the pane numbered 2, which is above the master's own number.
+        assert!(state.close(1));
+
+        assert_eq!(state.active(), Some(2), "the old 4 is the new 3");
+        assert_eq!(state.stack(), [1, 0]);
+        assert!(!state.collapsed(2), "the master is untouched");
+    }
+
+    /// The last one closes like any other. What an empty deck means is the
+    /// session's business, so nothing here refuses it.
+    #[test]
+    fn the_last_terminal_closes_and_leaves_an_empty_deck() {
+        let mut state = DeckState::new(1);
+
+        assert!(state.close(0));
+
+        assert_eq!(state.active(), None);
+        assert!(state.stack().is_empty());
+        assert!(!state.close(0), "and there is nothing left to close");
+    }
+
+    /// Everything a pane was carrying goes with it: its demotion highlight,
+    /// the drag it was in, and the scrollback mode it held as master. A
+    /// scrolled column keeps a window it can still draw.
+    #[test]
+    fn closing_takes_the_state_the_pane_was_carrying_with_it() {
+        let mut state = DeckState::new(4);
+        state.apply(&ActionCommand::SelectPosition(1), &fixture::projects(), NOW);
+        assert_eq!(state.demoted(NOW), Some(0));
+        assert!(state.begin_drag(2));
+        state.set_stack_offset(2);
+        state.apply(&ActionCommand::ToggleScrollback, &fixture::projects(), NOW);
+
+        // The demoted pane is position 0, closed here from the stack.
+        assert!(state.close(0));
+
+        assert_eq!(state.demoted(NOW), None);
+        assert_eq!(state.dragged(), None);
+        assert_eq!(state.stack_offset(), 1, "clamped to what is still drawable");
+        assert!(
+            state.scrollback(),
+            "the master kept its frame, so it kept its mode"
+        );
+
+        // Closing the master itself does return the new one to live output.
+        assert!(state.close(state.active().unwrap()));
+        assert!(!state.scrollback());
+    }
+
+    /// A demotion highlight follows its pane down the renumbering.
+    #[test]
+    fn a_demotion_highlight_follows_the_pane_it_belongs_to() {
+        let mut state = DeckState::new(4);
+        state.apply(&ActionCommand::SelectPosition(3), &fixture::projects(), NOW);
+        assert_eq!(state.demoted(NOW), Some(0));
+
+        assert!(state.close(3), "close the pane that is not the master");
+
+        assert_eq!(state.demoted(NOW), Some(0), "0 is below the closed 3");
+
+        let mut state = DeckState::new(4);
+        state.apply(&ActionCommand::SelectPosition(3), &fixture::projects(), NOW);
+        assert!(state.close(1));
+        assert_eq!(state.demoted(NOW), Some(0));
+        assert!(state.close(0));
+        assert_eq!(state.demoted(NOW), None, "the highlighted pane is gone");
     }
 
     #[test]
