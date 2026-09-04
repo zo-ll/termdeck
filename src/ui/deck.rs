@@ -912,10 +912,15 @@ impl Deck<'_> {
         }
     }
 
-    /// The stack footer states what the window hides, or the fold census,
-    /// and otherwise says nothing. The declutter pass took out the promotion
-    /// keys and the `promoted x · ^g 1 back` line: the demoted pane's own
-    /// highlight already reports the swap, and the keys live in the help.
+    /// The stack footer states what the window hides, and otherwise says
+    /// nothing. The declutter pass took out the promotion keys and the
+    /// `promoted x · ^g 1 back` line: the demoted pane's own highlight
+    /// already reports the swap, and the keys live in the help. The updated
+    /// canvas (screen 05) took the fold census out with them — a fold is
+    /// already declared by its own strip, its marker, and the status row's
+    /// `N collapsed` beside an accented `^g c`, so the column said it twice.
+    /// A preview the window has scrolled past says nothing about itself
+    /// anywhere else, and so keeps the row.
     fn stack_hints(&self, window: StackWindow, width: u16) -> Vec<Span<'static>> {
         if self.state.scrollback() {
             return vec![
@@ -925,28 +930,8 @@ impl Deck<'_> {
                 Span::styled(" returns to live", Style::new().fg(HINT)),
             ];
         }
-        // Hidden previews outrank folded ones. A fold is already declared by
-        // its own strip, its marker and the status row, while a preview the
-        // window has scrolled past says nothing about itself anywhere else.
         if window.overflows() {
             return self.overflow_hints(window, width);
-        }
-        let collapsed = self.state.collapsed_count();
-        if collapsed > 0 {
-            let census = format!("{collapsed} collapsed");
-            // The key goes before the census does, the way the paging footer
-            // drops `^g pgup/pgdn` first: at the minimum stack width (#44) the
-            // column has room to say how many are folded but not to say the
-            // key as well, and half a key word says nothing at all.
-            const EXPAND: &str = " · ^g c expand all";
-            if census.chars().count() + EXPAND.chars().count() > usize::from(width) {
-                return vec![Span::styled(census, Style::new().fg(HINT))];
-            }
-            return vec![
-                Span::styled(format!("{census} · "), Style::new().fg(HINT)),
-                Span::styled("^g c", Style::new().fg(PREVIEW_FG)),
-                Span::styled(" expand all", Style::new().fg(HINT)),
-            ];
         }
         Vec::new()
     }

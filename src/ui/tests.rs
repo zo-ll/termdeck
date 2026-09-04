@@ -296,7 +296,6 @@ fn folded_previews_hand_their_rows_to_the_one_still_open() {
     assert_eq!(buffer[(102u16, 39u16)].symbol(), "▸");
     // The strips sit on the export's #101317, and carry no border.
     assert_eq!(buffer[(100u16, 37u16)].bg, DEMOTED_BG);
-    assert!(text(&buffer).contains("2 collapsed · ^g c expand all"));
 }
 
 /// One fold among three previews: 11 freed rows split 6/5, the remainder
@@ -331,17 +330,13 @@ fn folding_never_changes_the_height_the_stack_uses() {
         let footer = (100..144)
             .map(|x| buffer[(x, 41u16)].symbol())
             .collect::<String>();
-        let expected = if folds == 0 {
-            // Nothing to state, so nothing is stated — but the row is
-            // still the footer's, and still row 39.
-            String::new()
-        } else {
-            format!("{folds} collapsed · ^g c expand all")
-        };
+        // A fold states itself in its strip and in the status row, so the
+        // footer has nothing to add — but the row is still the footer's,
+        // and still row 39.
         assert_eq!(
             footer.trim(),
-            expected,
-            "the footer stays on row 39 with {folds} folded"
+            "",
+            "the footer stays blank on row 39 with {folds} folded"
         );
         // The row above it stays blank, so nothing has overrun.
         assert_eq!(buffer[(102u16, 40u16)].symbol(), " ");
@@ -949,21 +944,20 @@ fn a_strip_still_names_itself_at_the_minimum_stack_width() {
     assert_eq!(view.marker_at(SCREEN, Position::new(125, 6)), Some(3));
 }
 
-/// The stack footer gives up its key before it gives up the census, and
-/// never renders half a word.
+/// The updated canvas (screen 05) leaves the stack footer empty while
+/// previews are folded: the census belongs to the status row alone, at the
+/// minimum stack width (#44) as much as at the export's own.
 #[test]
-fn the_fold_census_drops_its_key_when_the_column_is_narrow() {
+fn the_fold_census_no_longer_takes_the_stack_footer() {
     let (narrow, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
     let footer: String = (122..144).map(|c| narrow[(c, 41u16)].symbol()).collect();
-    assert_eq!(footer.trim(), "3 collapsed", "{footer}");
+    assert_eq!(footer.trim(), "", "{footer}");
 
-    // The export's own column has room for both, and still states both.
     let (wide, _) = render(&fixture::frontend_active(), &reference_deck(4), (144, 42));
-    assert!(
-        text(&wide).contains("3 collapsed · ^g c expand all"),
-        "{}",
-        text(&wide)
-    );
+    let footer: String = (100..144).map(|c| wide[(c, 41u16)].symbol()).collect();
+    assert_eq!(footer.trim(), "", "{footer}");
+    // The count itself is not lost: the status row still carries it.
+    assert!(text(&wide).contains("3 collapsed"), "{}", text(&wide));
 }
 
 #[test]
@@ -1977,7 +1971,7 @@ fn the_footer_states_what_the_window_hides() {
 /// A hidden preview is the one thing collapse never announces elsewhere,
 /// so it takes the footer while the fold census keeps the status row.
 #[test]
-fn hidden_previews_outrank_the_fold_census_in_the_footer() {
+fn the_footer_states_hidden_previews_while_the_status_row_keeps_the_census() {
     let projects = synthetic(8);
     let mut state = expanded(8);
     state.toggle_collapse(1);
@@ -1985,7 +1979,6 @@ fn hidden_previews_outrank_the_fold_census_in_the_footer() {
     let rendered = text(&render_long(&projects, &state, (144, 42)));
 
     assert!(rendered.contains("more"), "{rendered}");
-    assert!(!rendered.contains("expand all"));
     assert!(
         rendered.contains("1 collapsed"),
         "the status row still says"
