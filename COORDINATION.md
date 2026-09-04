@@ -301,3 +301,8 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   input gated, close-last/close-self guards, nested override, MCP adapter.
   Phases 1/2/3 with acceptance. NEXT: user approval -> Phase-1 issue +
   dispatch to codex lane (engine/contracts/CLI ownership).
+- 2026-09-04: USER APPROVED agent-api Phase 1. Issue #90 opened
+  (rendezvous + read surface), coord/90-agent-ctl worktree, dispatched to a
+  FRESH codex session (kill+relaunch, full access, terra high).
+  Authority: docs/design/termdeck/agent-api-spec.md.
+  Critic idle; claude idle. #90 ping -> gates -> critic -> merge.
