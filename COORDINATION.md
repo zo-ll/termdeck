@@ -256,3 +256,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
 - PROCESS: pi panes single-line pointers only; only give work to idle
   workers; fresh session per task; coordinator commits/pushes/merges after
   critic passes + user says merge; NEVER merge a red gate.
+- 2026-09-04: #84 done (claude 1987c9d, 272 tests, 15 new) — branch base
+  stale (735b4ee pre-split); rebase onto origin/main conflicted in
+  session.rs + ui/mod.rs (the #81 split targets). Integration routed back to
+  claude (idle; owns the slice). Codex still on #87.
