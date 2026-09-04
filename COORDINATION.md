@@ -328,3 +328,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   + marked held. Rebase onto main when picked up.
 - 2026-09-04: #72 CLOSED (umbrella done: Phases 1+2 merged #91/#93; Phase 3
   held on coord/94-ctl-mcp via #94). Open set now: #33, #71, #94 only.
+- 2026-09-04: RESEARCH (#71 notifications + #33 animations) — researcher
+  window spawned (on-demand); study-71 dispatched first (sequential; #33
+  after its ping). Deliverables: notifications-research.md +
+  animations-research.md.
