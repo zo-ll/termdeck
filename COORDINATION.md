@@ -336,3 +336,8 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   Briefs committed: notifications-research.md, animations-research.md;
   #71/#33 comments posted. Awaiting USER decisions (directions, slices,
   sequencing — #33 pattern before #71 visual per the researcher note).
+- 2026-09-04 (USER): SKIP animations (#33 stays parked); IMPLEMENT
+  notifications (#71) — slices 1+2 (explicit ctl notify + BEL -> flash +
+  non-modal toast; OSC-777 seam deferred). #97 opened, dispatched to FRESH
+  claude (coord/97-notify; authority notifications-research.md §4; vt.rs
+  BEL hook + ctl wiring cross-ownership approved by coordinator).
