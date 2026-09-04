@@ -387,3 +387,6 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   completion). Research dispatched (#107-branch study): when-to-notify rules,
   mechanism (BEL vs private sequence via the OSC seam), install via PTY env,
   coverage/security/determinism. Researcher window on-demand.
+- 2026-09-04: SHELL-INTEGRATION issue #$N (dir 107-shell-integration,
+  branch coord/107-shell-integration when implementing; no worktree yet).
+  Cleaned: #97 (slice, merged) + #100 (record) closed now.
