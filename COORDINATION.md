@@ -363,3 +363,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   = confirms #101 impl; 'idle 6m'->'job done' sample). Claude reviewing the
   updated design vs main (docs-sync check; job-done verdict; remaining
   DESIGN.md conflicts 2-4).
+- 2026-09-04: #104-fold-footer (ISSUE #103 — GitHub shares one number space
+  with PRs, so the footer issue = #103; branch coord/104-fold-footer)
+  dispatched to FRESH claude: cut the fold-census footer per the updated
+  canvas (audit behavior first; honest rebless; gate 309+3). #102-design-swap
+  done (2 drifts, swap confirmed). Backend scan (#103-branch
+  coord/103-backend-scan) CLEAN — no fixes.
