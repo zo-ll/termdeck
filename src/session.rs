@@ -399,14 +399,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         Some(Reaction::AddTerminal) => sheet = Some(SheetState::new(&roots)),
                         // `^g x` closes the pane the master holds, which is
                         // the pane every other prefixed command acts on. The
-                        // last one closes like any other, and with nothing
-                        // left to run the session is over (#84).
+                        // last one is the session, so it asks the quit
+                        // confirmation instead, and leaves by that door (#84).
                         Some(Reaction::Close) => {
                             if let Some(active) = deck.active() {
-                                close_terminal(&mut engine, &mut projects, &mut deck, active);
-                                if projects.is_empty() {
-                                    break 'session;
-                                }
+                                request_close(&mut engine, &mut projects, &mut deck, active);
                             }
                         }
                         Some(Reaction::Quit) => break 'session,
@@ -567,18 +564,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             (MouseAction::Up, _, Some(pressed)) => {
                                 close_press = None;
                                 if close == Some(pressed) {
-                                    close_terminal(&mut engine, &mut projects, &mut deck, pressed);
+                                    request_close(&mut engine, &mut projects, &mut deck, pressed);
                                 }
                                 true
                             }
                             _ => false,
                         };
                         if closing {
-                            // The pointer closed the last pane, so there is
-                            // nothing left to run (#84).
-                            if projects.is_empty() {
-                                break 'session;
-                            }
                             continue;
                         }
                         // The disclosure marker owns its two cells: pressing

@@ -82,6 +82,37 @@ pub(super) fn close_terminal(
     deck.close(position)
 }
 
+/// The close gesture, wherever it comes from: `^g x` or a pane's `×`.
+///
+/// The last pane is the session, so closing it asks the confirmation `^g q`
+/// asks rather than ending the run outright — same modal, same `y`/`n`/`esc`,
+/// and the exit is the quit path's own. Cancelling leaves the pane and its
+/// shell exactly as they were, because nothing has been closed yet: the
+/// question is asked before the engine is touched.
+///
+/// Anything else closes at once, since the deck it leaves behind still holds
+/// a terminal. Returns whether a terminal was closed, which the confirmation
+/// never is.
+pub(super) fn request_close(
+    engine: &mut NativeEngine,
+    projects: &mut Vec<Project>,
+    deck: &mut DeckState,
+    position: usize,
+) -> bool {
+    if projects.get(position).is_none() {
+        return false;
+    }
+    if projects.len() == 1 {
+        deck.apply(
+            &crate::contracts::ActionCommand::RequestQuit,
+            projects,
+            now(),
+        );
+        return false;
+    }
+    close_terminal(engine, projects, deck, position)
+}
+
 /// The renderer owns pane geometry, so PTYs always receive precisely the
 /// dimensions their applications can see.
 pub(super) fn terminal_sizes(

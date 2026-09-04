@@ -1,7 +1,7 @@
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
-    close_terminal, dispatch_live_input, mouse_action, open_terminals, resize_terminals,
-    route_wheel, spawn_terminals, terminal_sizes,
+    close_terminal, dispatch_live_input, mouse_action, now, open_terminals, request_close,
+    resize_terminals, route_wheel, spawn_terminals, terminal_sizes,
 };
 use crate::{
     contracts::{
@@ -9,7 +9,7 @@ use crate::{
         TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
-    ui::{DeckState, Key, SheetState},
+    ui::{DeckState, Input, Key, Modal, Reaction, SheetState},
 };
 use ratatui::layout::Position;
 use std::path::PathBuf;
@@ -444,8 +444,8 @@ fn closing_the_master_promotes_and_resizes_what_takes_its_place() {
     engine.dispatch(EngineCommand::Shutdown);
 }
 
-/// The last pane closes like any other and leaves nothing running, which is
-/// the condition the session loop ends on.
+/// The close itself keeps no last pane back: it ends the only shell and
+/// empties both lists. What asks first is `request_close`, below.
 #[cfg(target_os = "linux")]
 #[test]
 fn closing_the_last_pane_leaves_nothing_for_the_session_to_run() {
@@ -462,6 +462,104 @@ fn closing_the_last_pane_leaves_nothing_for_the_session_to_run() {
     assert_eq!(engine.frame(&only), None);
     // Out of range afterwards, and refused rather than panicking.
     assert!(!close_terminal(&mut engine, &mut projects, &mut deck, 0));
+}
+
+/// #84: the last pane is the session, so the close gesture asks the same
+/// confirmation `^g q` asks instead of ending the run outright. Nothing is
+/// closed while the question stands — the shell is still there to go back to.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_the_last_pane_asks_the_quit_confirmation() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let only = projects[0].terminal.clone();
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(
+        !request_close(&mut engine, &mut projects, &mut deck, 0),
+        "it asked instead of closing"
+    );
+
+    assert_eq!(deck.modal(), Some(Modal::Quit));
+    assert_eq!(projects.len(), 1);
+    assert_eq!(deck.active(), Some(0));
+    assert!(engine.frame(&only).is_some(), "its shell is still running");
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// The confirmation is the ordinary one, keys and all: `n` and `esc` leave
+/// the pane and its shell exactly as they were, and only `y` ends the
+/// session — by the quit path, which is the loop's own break.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_last_pane_survives_a_cancelled_confirmation_and_leaves_on_a_confirmed_one() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let only = projects[0].terminal.clone();
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut input = Input::new(size.rows);
+
+    for key in [Key::Char('n'), Key::Escape] {
+        request_close(&mut engine, &mut projects, &mut deck, 0);
+        assert_eq!(deck.modal(), Some(Modal::Quit));
+
+        assert_eq!(input.press(key, &mut deck, &projects, now()), None);
+
+        assert_eq!(deck.modal(), None, "the question is gone");
+        assert_eq!(projects.len(), 1, "and the pane is not");
+        assert_eq!(deck.active(), Some(0));
+        assert!(engine.frame(&only).is_some(), "its shell kept running");
+    }
+
+    request_close(&mut engine, &mut projects, &mut deck, 0);
+    assert_eq!(
+        input.press(Key::Char('y'), &mut deck, &projects, now()),
+        Some(Reaction::Quit),
+        "the exit is the quit path's"
+    );
+    assert_eq!(deck.modal(), None);
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// Every other close is unchanged: the deck it leaves behind still holds a
+/// terminal, so the shell ends there and then, with nothing to confirm.
+#[cfg(target_os = "linux")]
+#[test]
+fn closing_a_pane_that_is_not_the_last_asks_nothing() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(2);
+    let closed = projects[1].terminal.clone();
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(request_close(&mut engine, &mut projects, &mut deck, 1));
+
+    assert_eq!(deck.modal(), None, "nothing to confirm");
+    assert_eq!(engine.frame(&closed), None, "the engine ended it");
+    assert_eq!(projects.len(), 1);
+    // The one left is the last, so its own close asks.
+    assert!(!request_close(&mut engine, &mut projects, &mut deck, 0));
+    assert_eq!(deck.modal(), Some(Modal::Quit));
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// A position no pane holds closes nothing and asks nothing, whatever is
+/// left in the list.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_close_out_of_range_neither_closes_nor_asks() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+
+    assert!(!request_close(&mut engine, &mut projects, &mut deck, 4));
+
+    assert_eq!(deck.modal(), None);
+    assert_eq!(projects.len(), 1);
+    engine.dispatch(EngineCommand::Shutdown);
 }
 
 #[cfg(target_os = "linux")]
