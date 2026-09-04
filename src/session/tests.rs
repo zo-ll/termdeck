@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use super::dispatch_control;
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, mouse_action, now, open_terminals, request_close,
@@ -542,6 +544,117 @@ fn closing_a_pane_that_is_not_the_last_asks_nothing() {
     // The one left is the last, so its own close asks.
     assert!(!request_close(&mut engine, &mut projects, &mut deck, 0));
     assert_eq!(deck.modal(), Some(Modal::Quit));
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
+    use std::collections::BTreeSet;
+
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(2);
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
+    let mut closed = BTreeSet::new();
+    let mut quit = false;
+    let request = |verb: &str| crate::ctl::Request {
+        schema: crate::ctl::SCHEMA.to_owned(),
+        verb: verb.to_owned(),
+        ..Default::default()
+    };
+    macro_rules! call {
+        ($request:expr, $caller:expr, $allow:expr) => {
+            dispatch_control(
+                $request,
+                $caller,
+                &workspace,
+                &mut projects,
+                &mut deck,
+                &mut engine,
+                size,
+                false,
+                socket,
+                $allow,
+                &mut closed,
+                &mut quit,
+            )
+        };
+    }
+
+    let mut sheet_open = request("open");
+    sheet_open.path = Some("/tmp".to_owned());
+    let response = dispatch_control(
+        sheet_open,
+        None,
+        &workspace,
+        &mut projects,
+        &mut deck,
+        &mut engine,
+        size,
+        true,
+        socket,
+        false,
+        &mut closed,
+        &mut quit,
+    );
+    assert_eq!(response.error.unwrap().code, 3);
+
+    let mut open = request("open");
+    open.path = Some("/tmp".to_owned());
+    let response = call!(open, None, false);
+    assert!(response.ok);
+    let opened = response.data.unwrap()["id"].as_str().unwrap().to_owned();
+    assert_eq!(projects.len(), 3);
+
+    let mut promote = request("promote");
+    promote.id = Some("t2".to_owned());
+    assert!(call!(promote, None, false).ok);
+    assert_eq!(deck.active(), Some(1));
+    assert!(deck.toggle_collapse(0));
+    let mut zoom = request("zoom");
+    zoom.on = Some(true);
+    assert_eq!(call!(zoom, None, false).data.unwrap()["zoom"], true);
+    assert!(deck.collapsed(0), "zoom changes the model, not the fold");
+
+    let mut input = request("input");
+    input.id = Some("t2".to_owned());
+    input.text = Some("echo ctl\n".to_owned());
+    assert_eq!(call!(input.clone(), None, false).error.unwrap().code, 3);
+    assert!(
+        call!(input, None, true).ok,
+        "session input permission opens the gate"
+    );
+    let mut forced = request("input");
+    forced.id = Some("t2".to_owned());
+    forced.keys = Some("\u{3}".to_owned());
+    forced.force = true;
+    assert!(
+        call!(forced, None, false).ok,
+        "per-call force opens the gate"
+    );
+
+    let mut self_close = request("close");
+    self_close.id = Some("t2".to_owned());
+    assert_eq!(call!(self_close, Some("t2"), false).error.unwrap().code, 3);
+    let mut close = request("close");
+    close.id = Some(opened.clone());
+    assert!(call!(close, None, false).ok);
+    let mut again = request("close");
+    again.id = Some(opened);
+    assert_eq!(call!(again, None, false).data.unwrap()["already"], true);
+
+    let mut close_t2 = request("close");
+    close_t2.id = Some("t2".to_owned());
+    assert!(call!(close_t2, None, false).ok);
+    let mut last = request("close");
+    last.id = Some("t1".to_owned());
+    assert_eq!(call!(last.clone(), None, false).error.unwrap().code, 3);
+    last.force = true;
+    assert_eq!(call!(last, None, false).data.unwrap()["last"], true);
+    assert!(quit, "forced last close takes the quit path");
     engine.dispatch(EngineCommand::Shutdown);
 }
 

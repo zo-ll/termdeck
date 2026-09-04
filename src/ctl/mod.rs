@@ -26,7 +26,7 @@ use crate::{
 pub const SCHEMA: &str = "ctl.v1";
 const MAX_LINE: usize = 64 * 1024;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Request {
     pub schema: String,
     pub verb: String,
@@ -36,6 +36,86 @@ pub struct Request {
     pub lines: Option<usize>,
     #[serde(default)]
     pub msg: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub force: bool,
+    #[serde(default)]
+    pub on: Option<bool>,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub paste: Option<String>,
+    #[serde(default)]
+    pub keys: Option<String>,
+}
+
+/// The Phase-2 part of ctl.v1.  The session applies these on its existing
+/// lifecycle/input paths; parsing lives here so socket and CLI requests agree.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Control {
+    Open {
+        path: String,
+    },
+    Close {
+        id: String,
+        force: bool,
+    },
+    Promote {
+        id: String,
+    },
+    Zoom {
+        on: Option<bool>,
+    },
+    Input {
+        id: String,
+        bytes: Vec<u8>,
+        force: bool,
+    },
+}
+
+impl Request {
+    pub fn control(&self) -> Result<Option<Control>, Response> {
+        let required = |name: &str, value: &Option<String>| {
+            value.clone().ok_or_else(|| {
+                Response::error(2, format!("bad request: {name} requires an argument"))
+            })
+        };
+        match self.verb.as_str() {
+            "open" => Ok(Some(Control::Open {
+                path: required("open", &self.path)?,
+            })),
+            "close" => Ok(Some(Control::Close {
+                id: required("close", &self.id)?,
+                force: self.force,
+            })),
+            "promote" => Ok(Some(Control::Promote {
+                id: required("promote", &self.id)?,
+            })),
+            "zoom" => Ok(Some(Control::Zoom { on: self.on })),
+            "input" => {
+                let values = [self.text.as_ref(), self.paste.as_ref(), self.keys.as_ref()];
+                if values.iter().flatten().count() != 1 {
+                    return Err(Response::error(
+                        2,
+                        "bad request: input requires exactly one of text, paste, or keys",
+                    ));
+                }
+                Ok(Some(Control::Input {
+                    id: required("input", &self.id)?,
+                    bytes: values
+                        .into_iter()
+                        .flatten()
+                        .next()
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec(),
+                    force: self.force,
+                }))
+            }
+            _ => Ok(None),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -55,7 +135,7 @@ pub struct CtlError {
 }
 
 impl Response {
-    fn ok(data: Value) -> Self {
+    pub fn ok(data: Value) -> Self {
         Self {
             schema: SCHEMA.to_owned(),
             ok: true,
@@ -170,6 +250,7 @@ fn dispatch_notify(_message: &str) {}
 struct Pending {
     stream: UnixStream,
     bytes: Vec<u8>,
+    pane: Option<String>,
 }
 
 /// Session-owned listener.  `poll` accepts at most one connection and serves
@@ -213,11 +294,21 @@ impl Listener {
     /// pending until its newline arrives; no second connection is accepted in
     /// that frame.
     pub fn poll<E: TerminalEngine>(&mut self, state: State<'_, E>) -> io::Result<bool> {
+        self.poll_with(|request, _| dispatch(request, state))
+    }
+
+    /// Like [`Listener::poll`], but hands the caller's pane identity to the
+    /// session for the Phase-2 close-self guard.
+    pub fn poll_with(
+        &mut self,
+        dispatch_request: impl FnOnce(Request, Option<&str>) -> Response,
+    ) -> io::Result<bool> {
         if self.pending.is_none() {
             match self.listener.accept() {
                 Ok((stream, _)) if trusted_peer(&stream, self.uid) => {
                     stream.set_nonblocking(true)?;
                     self.pending = Some(Pending {
+                        pane: caller_pane(&stream),
                         stream,
                         bytes: Vec::new(),
                     });
@@ -233,7 +324,7 @@ impl Listener {
         };
         let result = read_request(&mut pending);
         let response = match result {
-            Ok(Some(request)) => dispatch(request, state),
+            Ok(Some(request)) => dispatch_request(request, pending.pane.as_deref()),
             Ok(None) => {
                 self.pending = Some(pending);
                 return Ok(false);
@@ -375,6 +466,30 @@ fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
     }
 }
 
+fn caller_pane(stream: &UnixStream) -> Option<String> {
+    let mut credentials: libc::ucred = unsafe { std::mem::zeroed() };
+    let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: all pointers reference valid writable storage for SO_PEERCRED.
+    let result = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&raw mut credentials).cast(),
+            &raw mut length,
+        )
+    };
+    if result != 0 {
+        return None;
+    }
+    let bytes = fs::read(format!("/proc/{}/environ", credentials.pid)).ok()?;
+    bytes
+        .split(|byte| *byte == 0)
+        .find_map(|entry| entry.strip_prefix(b"TERMDECK_PANE="))
+        .and_then(|value| std::str::from_utf8(value).ok())
+        .map(str::to_owned)
+}
+
 fn trusted_peer(stream: &UnixStream, uid: u32) -> bool {
     peer_uid(stream).is_ok_and(|peer| peer == uid)
 }
@@ -399,7 +514,8 @@ mod tests {
     };
 
     use super::{
-        Listener, Request, SCHEMA, State, dispatch, peer_uid, socket_directory, trusted_peer,
+        Control, Listener, Request, SCHEMA, State, dispatch, peer_uid, socket_directory,
+        trusted_peer,
     };
 
     static LISTENER_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -478,6 +594,12 @@ mod tests {
                 id: Some("one".to_owned()),
                 lines: Some(1),
                 msg: None,
+                path: None,
+                force: false,
+                on: None,
+                text: None,
+                paste: None,
+                keys: None,
             },
             state(&workspace, &engine, &projects, &deck),
         );
@@ -491,10 +613,54 @@ mod tests {
                 id: None,
                 lines: None,
                 msg: None,
+                path: None,
+                force: false,
+                on: None,
+                text: None,
+                paste: None,
+                keys: None,
             },
             state(&workspace, &engine, &projects, &deck),
         );
         assert!(version.ok);
+    }
+
+    #[test]
+    fn control_requests_require_their_arguments_and_keep_input_kinds_distinct() {
+        let missing = Request {
+            schema: SCHEMA.to_owned(),
+            verb: "close".to_owned(),
+            ..Default::default()
+        }
+        .control()
+        .unwrap_err();
+        assert_eq!(missing.error.unwrap().code, 2);
+
+        for request in [
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "input".to_owned(),
+                id: Some("one".to_owned()),
+                text: Some("text".to_owned()),
+                ..Default::default()
+            },
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "input".to_owned(),
+                id: Some("one".to_owned()),
+                paste: Some("paste".to_owned()),
+                ..Default::default()
+            },
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "input".to_owned(),
+                id: Some("one".to_owned()),
+                keys: Some("\u{1b}[A".to_owned()),
+                ..Default::default()
+            },
+        ] {
+            assert!(matches!(request.control(), Ok(Some(Control::Input { .. }))));
+        }
     }
 
     #[test]
