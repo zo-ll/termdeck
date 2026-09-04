@@ -283,3 +283,8 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   BEFORE implementation; user decides from the brief. My #72 hand-brief
   (docs/design/termdeck/agent-api-design-brief.md) may be pressure-tested by
   an independent researcher study.
+- 2026-09-04 (USER): researcher is ON-DEMAND — NOT in the default env. The
+  coordinator spawns window 4 only when the user asks to research (spawn
+  recipe + research protocol in the coordinator skill), then kills the window
+  after the brief lands. Env default = 0 coordinator, 1 critic, 2 claude,
+  3 codex.
