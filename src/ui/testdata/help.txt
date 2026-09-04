@@ -1,34 +1,34 @@
+   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                          ^g ? help open  ·  esc close  
+                                                                                                                                                
 ┌─ > 1 frontend  ·  ●  ·  pnpm dev ───────────────────────────────────────────────── [####··] × ─┐│   ▸ 2 backend · ● · 12:06:09 /api/term… ×   
 │  $ pnpm dev                                                                                    ││                                             
 │                                                                                                ││   ▸ 3 app · ✕ · exit 1                  ×   
 │  > idp-frontend@0.4.2 dev                                                                      ││                                             
 │  > vite --host                                                                                 ││   ▸ 4 worker · ○ · idle 6m              ×   
 │                                                                                                ││                                             
-│    VITE v5.4.8  ready in 412 ms                                                                ││                                             
-│                                                                                                ││                                             
-│    ➜  Local:   http://localhost:5173/   ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                          
-│    ➜  Network: http://192.168.1.24:5173/│                                                          │                                          
-│    ➜  press h + enter to show help      │  NAVIGATE                                                │                                          
-│                                         │  ^g j  ^g k       promote next / previous                │                                          
-│  12:03:58 [vite] page reload src/main.ts│  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
-│  12:04:12 [vite] hmr update /src/routes/│  ^g N             promote terminal number                │                                          
-│  12:04:12 [vite] hmr update /src/styles/│                                                          │                                          
-│  12:04:29 [vite] hmr update /src/routes/│  VIEW                                                    │                                          
-│  12:04:41 [vite] optimized dependencies │  ^g z             toggle zoom                            │                                          
-│                                         │  ^g c             collapse / expand previews             │                                          
-│    VITE v5.4.8  ready in 268 ms         │  ^g pgup/pgdn     page the preview stack                 │                                          
+│    VITE v5.4.8  ready in 412 ms         ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                          
+│                                         │                                                          │                                          
+│    ➜  Local:   http://localhost:5173/   │  NAVIGATE                                                │                                          
+│    ➜  Network: http://192.168.1.24:5173/│  ^g j  ^g k       promote next / previous                │                                          
+│    ➜  press h + enter to show help      │  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
+│                                         │  ^g N             promote terminal number                │                                          
+│  12:03:58 [vite] page reload src/main.ts│                                                          │                                          
+│  12:04:12 [vite] hmr update /src/routes/│  VIEW                                                    │                                          
+│  12:04:12 [vite] hmr update /src/styles/│  ^g z             toggle zoom                            │                                          
+│  12:04:29 [vite] hmr update /src/routes/│  ^g c             collapse / expand previews             │                                          
+│  12:04:41 [vite] optimized dependencies │  ^g pgup/pgdn     page the preview stack                 │                                          
 │                                         │  ^g -  ^g =       narrow / widen the master              │                                          
-│  12:05:02 [vite] hmr update /src/compone│  ^g a             open any folder / repo                 │                                          
-│  12:05:09 warning  src/components/PaneTi│  ^g [             enter scrollback mode                  │                                          
-│           'status' is declared but its v│                                                          │                                          
-│  12:05:17 [vite] hmr update /src/compone│  TERMINAL                                                │                                          
-│  12:05:33 [vite] hmr update /src/compone│  ^g r             respawn active terminal                │                                          
-│  12:05:58 [vite] hmr update /src/routes/│  ^g x             close active terminal                  │                                          
-│  12:06:04 [vite] hmr invalidate /src/hoo│  ^g ^g            send a literal ^g                      │                                          
-│  12:06:04 [vite] page reload src/hooks/u│                                                          │                                          
-│  12:06:11 [vite] hmr update /src/routes/│  SESSION                                                 │                                          
-│                                         │  ^g ?             this help                              │                                          
-│                                         │  ^g q             quit termdeck                          │                                          
+│    VITE v5.4.8  ready in 268 ms         │  ^g a             open any folder / repo                 │                                          
+│                                         │  ^g [             enter scrollback mode                  │                                          
+│  12:05:02 [vite] hmr update /src/compone│                                                          │                                          
+│  12:05:09 warning  src/components/PaneTi│  TERMINAL                                                │                                          
+│           'status' is declared but its v│  ^g r             respawn active terminal                │                                          
+│  12:05:17 [vite] hmr update /src/compone│  ^g x             close active terminal                  │                                          
+│  12:05:33 [vite] hmr update /src/compone│  ^g ^g            send a literal ^g                      │                                          
+│  12:05:58 [vite] hmr update /src/routes/│                                                          │                                          
+│  12:06:04 [vite] hmr invalidate /src/hoo│  SESSION                                                 │                                          
+│  12:06:04 [vite] page reload src/hooks/u│  ^g ?             this help                              │                                          
+│  12:06:11 [vite] hmr update /src/routes/│  ^g q             quit termdeck                          │                                          
 │                                         │                                                          │                                          
 │                                         │  esc  close                                              │                                          
 │                                         └──────────────────────────────────────────────────────────┘                                          
@@ -37,6 +37,6 @@
 │                                                                                                ││                                             
 │                                                                                                ││                                             
 │                                                                                                ││                                             
+│                                                                                                ││                                             
+│                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  3 collapsed · ^g c expand all              
-                                                                                                                                                
-   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                          ^g ? help open  ·  esc close  

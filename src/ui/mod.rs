@@ -133,6 +133,10 @@ const CLOSE_AFFORDANCE: &str = "×";
 /// a flashing strip, and in the censuses that keep hidden panes accounted for
 /// once the toast has been dismissed.
 const NOTIFY_MARK: &str = "!";
+/// Columns the flashing pane's right slot spends naming its notification
+/// (#101). Wide enough for the canvas's `job done` and for `attention`, and
+/// no wider: the slot is borrowed from the activity meter, which is eight.
+const NOTIFY_SLOT: usize = 12;
 
 /// How a single pane is dressed. Every pane draws the same chrome; the kind
 /// selects the colours and how much of the title the pane has room to say.

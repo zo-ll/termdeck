@@ -77,23 +77,23 @@ fn pane_hit_testing_follows_the_rendered_layout() {
     let area = Rect::new(0, 0, 144, 42);
 
     let terminal = |pointer| deck.terminal_at(area, pointer).map(ToString::to_string);
-    assert_eq!(terminal(Position::new(10, 10)).as_deref(), Some("frontend"));
-    assert_eq!(terminal(Position::new(110, 5)).as_deref(), Some("backend"));
-    assert_eq!(terminal(Position::new(110, 18)).as_deref(), Some("app"));
-    assert_eq!(terminal(Position::new(110, 31)).as_deref(), Some("worker"));
+    assert_eq!(terminal(Position::new(10, 12)).as_deref(), Some("frontend"));
+    assert_eq!(terminal(Position::new(110, 7)).as_deref(), Some("backend"));
+    assert_eq!(terminal(Position::new(110, 20)).as_deref(), Some("app"));
+    assert_eq!(terminal(Position::new(110, 33)).as_deref(), Some("worker"));
     assert_eq!(
-        terminal(Position::new(99, 10)),
+        terminal(Position::new(99, 12)),
         None,
         "the gutter is not a pane"
     );
     assert_eq!(
-        terminal(Position::new(10, 40)),
+        terminal(Position::new(10, 1)),
         None,
-        "the hint row is not a pane"
+        "the blank row is not a pane"
     );
-    assert_eq!(deck.swap_position_at(area, Position::new(10, 10)), Some(0));
+    assert_eq!(deck.swap_position_at(area, Position::new(10, 12)), Some(0));
     assert_eq!(
-        deck.swap_position_at(Rect::new(0, 0, 84, 22), Position::new(10, 10)),
+        deck.swap_position_at(Rect::new(0, 0, 84, 22), Position::new(10, 12)),
         None,
         "a hidden stack has no swap target"
     );
@@ -120,26 +120,26 @@ fn pane_cell_measures_from_the_viewport_origin() {
     let mut zoomed = reference_deck(4);
     zoomed.apply(&ActionCommand::ToggleZoom, &projects, fixture::NOW);
     assert_eq!(
-        deck(&projects, &zoomed).pane_cell(area, Position::new(10, 10)),
+        deck(&projects, &zoomed).pane_cell(area, Position::new(10, 12)),
         Some((0, 7, 9)),
         "column past border and title inset, row past the border"
     );
 
     // Stacked: the master agrees with hit testing, the gutter and the
-    // hint row are nothing.
+    // blank row are nothing.
     let state = expanded(4);
     let pane = deck(&projects, &state);
     assert!(matches!(
-        pane.pane_cell(area, Position::new(10, 10)),
+        pane.pane_cell(area, Position::new(10, 12)),
         Some((0, _, _))
     ));
-    assert_eq!(pane.pane_cell(area, Position::new(99, 10)), None);
-    assert_eq!(pane.pane_cell(area, Position::new(10, 40)), None);
+    assert_eq!(pane.pane_cell(area, Position::new(99, 12)), None);
+    assert_eq!(pane.pane_cell(area, Position::new(10, 1)), None);
 
     // Folded strips keep hit testing but own no cells to forward into.
     let folded = DeckState::new(4);
     let pane = deck(&projects, &folded);
-    let strip = (0..40)
+    let strip = (2..42)
         .flat_map(|y| (100..144).map(move |x| Position::new(x, y)))
         .find(|pointer| {
             pane.position_at(area, *pointer).is_some() && pane.pane_cell(area, *pointer).is_none()
@@ -149,7 +149,7 @@ fn pane_cell_measures_from_the_viewport_origin() {
         "a folded strip is hit-tested but owns no cells"
     );
     assert!(
-        matches!(pane.pane_cell(area, Position::new(10, 10)), Some((0, _, _))),
+        matches!(pane.pane_cell(area, Position::new(10, 12)), Some((0, _, _))),
         "the master still does"
     );
 }
@@ -165,14 +165,14 @@ fn pane_cell_covers_an_empty_stack() {
     let pane = deck_for(&projects, &state);
 
     assert_eq!(
-        pane.pane_cell(area, Position::new(130, 10)),
+        pane.pane_cell(area, Position::new(130, 12)),
         Some((0, 127, 9)),
         "far past where the stack would start, still the full-body master"
     );
     assert_eq!(
-        pane.pane_cell(area, Position::new(10, 40)),
+        pane.pane_cell(area, Position::new(10, 1)),
         None,
-        "the hint row is still nothing"
+        "the blank row is still nothing"
     );
 }
 
@@ -188,9 +188,9 @@ fn dragging_marks_the_source_and_only_valid_drop_target() {
 
     // The held preview is warning-coloured, while the master is lifted as
     // the valid drop target using the accepted accent palette.
-    assert_eq!(buffer[(100u16, 0u16)].fg, WARNING);
-    assert_eq!(buffer[(0u16, 0u16)].fg, ACCENT);
-    assert_eq!(buffer[(5u16, 1u16)].bg, DEMOTED_BG);
+    assert_eq!(buffer[(100u16, 2u16)].fg, WARNING);
+    assert_eq!(buffer[(0u16, 2u16)].fg, ACCENT);
+    assert_eq!(buffer[(5u16, 3u16)].bg, DEMOTED_BG);
 }
 
 fn text(buffer: &Buffer) -> String {
@@ -286,16 +286,16 @@ fn collapsed_stack_matches_the_reference_canvas() {
 fn folded_previews_hand_their_rows_to_the_one_still_open() {
     let (buffer, _) = render(&fixture::frontend_active(), &collapsed(), (144, 42));
 
-    assert_eq!(buffer[(100u16, 0u16)].symbol(), "┌");
+    assert_eq!(buffer[(100u16, 2u16)].symbol(), "┌");
     assert_eq!(
-        buffer[(100u16, 33u16)].symbol(),
+        buffer[(100u16, 35u16)].symbol(),
         "└",
         "12 + 2 x 11 = 34 rows"
     );
-    assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
     assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    assert_eq!(buffer[(102u16, 39u16)].symbol(), "▸");
     // The strips sit on the export's #101317, and carry no border.
-    assert_eq!(buffer[(100u16, 35u16)].bg, DEMOTED_BG);
+    assert_eq!(buffer[(100u16, 37u16)].bg, DEMOTED_BG);
     assert!(text(&buffer).contains("2 collapsed · ^g c expand all"));
 }
 
@@ -311,10 +311,10 @@ fn freed_rows_split_evenly_with_the_remainder_going_to_the_top() {
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
     // 18 rows, then 17, then the strip.
-    assert_eq!(buffer[(100u16, 17u16)].symbol(), "└");
-    assert_eq!(buffer[(100u16, 19u16)].symbol(), "┌");
-    assert_eq!(buffer[(100u16, 35u16)].symbol(), "└");
-    assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    assert_eq!(buffer[(100u16, 19u16)].symbol(), "└");
+    assert_eq!(buffer[(100u16, 21u16)].symbol(), "┌");
+    assert_eq!(buffer[(100u16, 37u16)].symbol(), "└");
+    assert_eq!(buffer[(102u16, 39u16)].symbol(), "▸");
 }
 
 /// Every fold hands over exactly the rows it gave up, so the stack always
@@ -329,7 +329,7 @@ fn folding_never_changes_the_height_the_stack_uses() {
         let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
         // The stack's own columns, on the row the footer always owns.
         let footer = (100..144)
-            .map(|x| buffer[(x, 39u16)].symbol())
+            .map(|x| buffer[(x, 41u16)].symbol())
             .collect::<String>();
         let expected = if folds == 0 {
             // Nothing to state, so nothing is stated — but the row is
@@ -344,7 +344,7 @@ fn folding_never_changes_the_height_the_stack_uses() {
             "the footer stays on row 39 with {folds} folded"
         );
         // The row above it stays blank, so nothing has overrun.
-        assert_eq!(buffer[(102u16, 38u16)].symbol(), " ");
+        assert_eq!(buffer[(102u16, 40u16)].symbol(), " ");
         if opened < 3 {
             state.toggle_collapse(opened + 1);
         }
@@ -455,11 +455,11 @@ fn a_folded_strip_is_hit_tested_but_has_nothing_to_scroll() {
     };
     let area = Rect::new(0, 0, 144, 42);
 
-    let position = deck.position_at(area, Position::new(110, 35));
+    let position = deck.position_at(area, Position::new(110, 37));
 
     assert_eq!(position, Some(2), "the strip on row 35 is app");
     assert!(state.collapsed(2), "so the wheel skips it");
-    assert_eq!(deck.position_at(area, Position::new(110, 10)), Some(1));
+    assert_eq!(deck.position_at(area, Position::new(110, 12)), Some(1));
     assert!(!state.collapsed(1), "the open preview still scrolls");
 }
 
@@ -481,7 +481,7 @@ fn deck_for<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
 /// there.
 fn close_marks(buffer: &Buffer) -> Vec<Position> {
     let area = buffer.area();
-    (0..area.height.saturating_sub(2))
+    (2..area.height)
         .flat_map(|row| (0..area.width).map(move |column| Position::new(column, row)))
         .filter(|at| buffer[(at.x, at.y)].symbol() == super::CLOSE_AFFORDANCE)
         .collect()
@@ -503,10 +503,10 @@ fn every_open_pane_draws_a_close_mark_the_pointer_answers_for() {
     assert_eq!(
         close_marks(&buffer),
         [
-            Position::new(94, 0),
-            Position::new(140, 0),
-            Position::new(140, 13),
-            Position::new(140, 26),
+            Position::new(94, 2),
+            Position::new(140, 2),
+            Position::new(140, 15),
+            Position::new(140, 28),
         ]
     );
     for (mark, position) in close_marks(&buffer).into_iter().zip([0, 1, 2, 3]) {
@@ -527,8 +527,8 @@ fn every_open_pane_draws_a_close_mark_the_pointer_answers_for() {
         );
     }
     // And it never takes cells the other title affordances own.
-    assert_eq!(view.close_at(SCREEN, Position::new(102, 0)), None);
-    assert_eq!(view.marker_at(SCREEN, Position::new(140, 0)), None);
+    assert_eq!(view.close_at(SCREEN, Position::new(102, 2)), None);
+    assert_eq!(view.marker_at(SCREEN, Position::new(140, 2)), None);
 }
 
 /// A folded preview closes like an open one, and its mark lines up with
@@ -544,17 +544,17 @@ fn a_folded_strip_carries_the_same_close_mark_as_an_open_pane() {
     assert_eq!(
         close_marks(&buffer),
         [
-            Position::new(94, 0),
-            Position::new(140, 0),
-            Position::new(140, 35),
+            Position::new(94, 2),
+            Position::new(140, 2),
             Position::new(140, 37),
+            Position::new(140, 39),
         ]
     );
-    assert_eq!(view.close_at(SCREEN, Position::new(140, 35)), Some(2));
-    assert_eq!(view.close_at(SCREEN, Position::new(140, 37)), Some(3));
+    assert_eq!(view.close_at(SCREEN, Position::new(140, 37)), Some(2));
+    assert_eq!(view.close_at(SCREEN, Position::new(140, 39)), Some(3));
     // The strip's own marker still owns its head, so the two gestures never
     // contend for a cell.
-    assert_eq!(view.marker_at(SCREEN, Position::new(102, 35)), Some(2));
+    assert_eq!(view.marker_at(SCREEN, Position::new(102, 37)), Some(2));
 }
 
 /// With nothing stacked (#76) the one pane still closes; zoom hides the
@@ -564,18 +564,18 @@ fn the_single_and_zoomed_layouts_close_the_pane_they_show() {
     let single = synthetic(1);
     let state = DeckState::new(1);
     let buffer = render_long(&single, &state, (144, 42));
-    assert_eq!(close_marks(&buffer), [Position::new(140, 0)]);
+    assert_eq!(close_marks(&buffer), [Position::new(140, 2)]);
     assert_eq!(
-        deck_for(&single, &state).close_at(SCREEN, Position::new(140, 0)),
+        deck_for(&single, &state).close_at(SCREEN, Position::new(140, 2)),
         Some(0)
     );
 
     let projects = fixture::projects();
     let state = zoomed();
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
-    assert_eq!(close_marks(&buffer), [Position::new(140, 0)]);
+    assert_eq!(close_marks(&buffer), [Position::new(140, 2)]);
     assert_eq!(
-        deck_for(&projects, &state).close_at(SCREEN, Position::new(140, 0)),
+        deck_for(&projects, &state).close_at(SCREEN, Position::new(140, 2)),
         Some(0)
     );
 }
@@ -613,19 +613,19 @@ fn the_disclosure_marker_is_hit_tested_in_its_own_two_cells() {
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
     // An open preview insets its title past the border: columns 103-104.
-    assert_eq!(buffer[(103u16, 0u16)].symbol(), "▾");
-    assert_eq!(deck.marker_at(area, Position::new(103, 0)), Some(1));
-    assert_eq!(deck.marker_at(area, Position::new(104, 0)), Some(1));
+    assert_eq!(buffer[(103u16, 2u16)].symbol(), "▾");
+    assert_eq!(deck.marker_at(area, Position::new(103, 2)), Some(1));
+    assert_eq!(deck.marker_at(area, Position::new(104, 2)), Some(1));
     // A strip has no border to inset past: columns 102-103.
-    assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
-    assert_eq!(deck.marker_at(area, Position::new(102, 35)), Some(2));
-    assert_eq!(deck.marker_at(area, Position::new(103, 37)), Some(3));
+    assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    assert_eq!(deck.marker_at(area, Position::new(102, 37)), Some(2));
+    assert_eq!(deck.marker_at(area, Position::new(103, 39)), Some(3));
 
     // Neither the border cell beside it nor the pane body is the marker.
-    assert_eq!(deck.marker_at(area, Position::new(102, 0)), None);
-    assert_eq!(deck.marker_at(area, Position::new(110, 5)), None);
+    assert_eq!(deck.marker_at(area, Position::new(102, 2)), None);
+    assert_eq!(deck.marker_at(area, Position::new(110, 7)), None);
     // The master carries no marker of its own.
-    assert_eq!(deck.marker_at(area, Position::new(3, 0)), None);
+    assert_eq!(deck.marker_at(area, Position::new(3, 2)), None);
 }
 
 /// The marker cells sit inside the pane, so the gesture has to be consumed
@@ -637,8 +637,8 @@ fn the_marker_overlaps_the_pane_it_belongs_to() {
     let deck = deck_for(&projects, &state);
     let area = Rect::new(0, 0, 144, 42);
 
-    assert_eq!(deck.marker_at(area, Position::new(103, 0)), Some(1));
-    assert_eq!(deck.position_at(area, Position::new(103, 0)), Some(1));
+    assert_eq!(deck.marker_at(area, Position::new(103, 2)), Some(1));
+    assert_eq!(deck.position_at(area, Position::new(103, 2)), Some(1));
 }
 
 /// Issues #32 and #39: the marker a fresh run draws is the marker a fresh
@@ -652,7 +652,7 @@ fn the_markers_are_clickable_before_anything_is_expanded() {
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
     // Three strips at the head of the column, each with its own marker.
-    for (position, row) in [(1usize, 0u16), (2, 2), (3, 4)] {
+    for (position, row) in [(1usize, 2u16), (2, 4), (3, 6)] {
         assert_eq!(buffer[(102u16, row)].symbol(), "▸", "row {row}");
         assert_eq!(
             deck_for(&projects, &state).marker_at(area, Position::new(102, row)),
@@ -689,16 +689,16 @@ fn toggling_a_marker_expands_just_that_preview() {
     let mut state = collapsed();
     let area = Rect::new(0, 0, 144, 42);
 
-    let marker = deck_for(&projects, &state).marker_at(area, Position::new(102, 35));
+    let marker = deck_for(&projects, &state).marker_at(area, Position::new(102, 37));
     assert_eq!(marker, Some(2));
     state.toggle_collapse(marker.unwrap());
 
     assert_eq!(state.collapsed_count(), 1, "worker stays folded");
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
     // Two open previews now split the single fold's 11 freed rows 6/5.
-    assert_eq!(buffer[(100u16, 17u16)].symbol(), "└");
-    assert_eq!(buffer[(100u16, 19u16)].symbol(), "┌");
-    assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    assert_eq!(buffer[(100u16, 19u16)].symbol(), "└");
+    assert_eq!(buffer[(100u16, 21u16)].symbol(), "┌");
+    assert_eq!(buffer[(102u16, 39u16)].symbol(), "▸");
 }
 
 /// Zoom and the narrow fallback hide the stack, so there is no marker.
@@ -710,13 +710,13 @@ fn a_hidden_stack_offers_no_marker() {
     let area = Rect::new(0, 0, 144, 42);
 
     assert_eq!(
-        deck_for(&projects, &state).marker_at(area, Position::new(103, 0)),
+        deck_for(&projects, &state).marker_at(area, Position::new(103, 2)),
         None
     );
 
     let folded = collapsed();
     assert_eq!(
-        deck_for(&projects, &folded).marker_at(Rect::new(0, 0, 84, 24), Position::new(3, 0)),
+        deck_for(&projects, &folded).marker_at(Rect::new(0, 0, 84, 24), Position::new(3, 2)),
         None
     );
 }
@@ -732,7 +732,7 @@ fn split(ratio: f64) -> DeckState {
 /// always fits, so it never draws one.)
 fn divider_column(buffer: &Buffer) -> Option<u16> {
     (0..buffer.area().width).find(|column| {
-        let cell = &buffer[(*column, 20u16)];
+        let cell = &buffer[(*column, 22u16)];
         cell.symbol() == "┃" && matches!(cell.fg, HINT | ACCENT)
     })
 }
@@ -746,19 +746,19 @@ fn the_divider_is_drawn_in_the_gutter_with_a_grip_to_take_hold_of() {
 
     // The master's own border still ends at 97 and the stack's begins at
     // 100: the divider took the gutter, not a column of either pane.
-    assert_eq!(buffer[(97u16, 0u16)].symbol(), "┐");
-    assert_eq!(buffer[(100u16, 0u16)].symbol(), " ", "the folded stack");
-    for row in [0u16, 10, 39] {
+    assert_eq!(buffer[(97u16, 2u16)].symbol(), "┐");
+    assert_eq!(buffer[(100u16, 2u16)].symbol(), " ", "the folded stack");
+    for row in [2u16, 12, 41] {
         assert_eq!(buffer[(98u16, row)].symbol(), "│", "row {row}");
         assert_eq!(buffer[(98u16, row)].fg, SEPARATOR);
     }
     // Three cells at the middle of the body say it can be taken hold of.
-    for row in 19..=21u16 {
+    for row in 21..=23u16 {
         assert_eq!(buffer[(98u16, row)].symbol(), "┃", "row {row}");
         assert_eq!(buffer[(98u16, row)].fg, HINT);
     }
-    // It stops at the body: the blank row and the status row are not it.
-    assert_ne!(buffer[(98u16, 40u16)].symbol(), "│");
+    // It stops at the body: the blank row above it is not the divider.
+    assert_ne!(buffer[(98u16, 1u16)].symbol(), "│");
 }
 
 /// The gutter belongs to no pane, so holding the divider can never be a
@@ -769,21 +769,21 @@ fn the_divider_column_is_the_divider_and_nothing_else() {
     let state = reference_deck(4);
     let view = deck_for(&projects, &state);
 
-    assert!(view.divider_at(SCREEN, Position::new(98, 20)));
-    assert!(view.divider_at(SCREEN, Position::new(98, 0)));
-    assert_eq!(view.position_at(SCREEN, Position::new(98, 20)), None);
-    assert_eq!(view.swap_position_at(SCREEN, Position::new(98, 20)), None);
-    assert_eq!(view.marker_at(SCREEN, Position::new(98, 0)), None);
+    assert!(view.divider_at(SCREEN, Position::new(98, 22)));
+    assert!(view.divider_at(SCREEN, Position::new(98, 2)));
+    assert_eq!(view.position_at(SCREEN, Position::new(98, 22)), None);
+    assert_eq!(view.swap_position_at(SCREEN, Position::new(98, 22)), None);
+    assert_eq!(view.marker_at(SCREEN, Position::new(98, 2)), None);
     // Its neighbours are not it: the master's last column and the scroll
     // track's column both answer for themselves.
-    assert!(!view.divider_at(SCREEN, Position::new(97, 20)));
-    assert!(!view.divider_at(SCREEN, Position::new(99, 20)));
-    assert_eq!(view.position_at(SCREEN, Position::new(97, 20)), Some(0));
+    assert!(!view.divider_at(SCREEN, Position::new(97, 22)));
+    assert!(!view.divider_at(SCREEN, Position::new(99, 22)));
+    assert_eq!(view.position_at(SCREEN, Position::new(97, 22)), Some(0));
     // The wheel over the gutter still pages the list (#34b), because the
     // wheel and the drag are different gestures on the same chrome.
-    assert!(view.stack_scroll_at(SCREEN, Position::new(98, 20)));
+    assert!(view.stack_scroll_at(SCREEN, Position::new(98, 22)));
     // Below the body it is chrome, not the divider.
-    assert!(!view.divider_at(SCREEN, Position::new(98, 41)));
+    assert!(!view.divider_at(SCREEN, Position::new(98, 0)));
 }
 
 /// Dragging leaves the divider under the pointer: the ratio a column maps
@@ -805,7 +805,7 @@ fn dragging_the_divider_puts_the_split_under_the_pointer() {
         assert_eq!(divider_column(&buffer), Some(column), "dragged to {column}");
         // The master ends one column short of the divider, the stack one
         // column past the track: the panes follow the divider exactly.
-        assert_eq!(buffer[(column - 1, 0u16)].symbol(), "┐");
+        assert_eq!(buffer[(column - 1, 2u16)].symbol(), "┐");
     }
 }
 
@@ -857,13 +857,13 @@ fn the_divider_takes_the_accent_while_it_is_held() {
 
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-    assert_eq!(buffer[(98u16, 0u16)].fg, ACCENT);
-    assert_eq!(buffer[(98u16, 20u16)].fg, ACCENT);
-    assert_eq!(buffer[(98u16, 20u16)].symbol(), "┃");
+    assert_eq!(buffer[(98u16, 2u16)].fg, ACCENT);
+    assert_eq!(buffer[(98u16, 22u16)].fg, ACCENT);
+    assert_eq!(buffer[(98u16, 22u16)].symbol(), "┃");
     // Releasing it hands the divider back to its resting colours.
     state.set_resizing(false);
     let (released, _) = render(&fixture::frontend_active(), &state, (144, 42));
-    assert_eq!(released[(98u16, 0u16)].fg, SEPARATOR);
+    assert_eq!(released[(98u16, 2u16)].fg, SEPARATOR);
 }
 
 /// A split that cannot move has no divider to offer: zoom hides the
@@ -873,17 +873,17 @@ fn the_divider_takes_the_accent_while_it_is_held() {
 fn a_stack_that_cannot_be_resized_offers_no_divider() {
     let projects = fixture::projects();
     let zoom = zoomed();
-    assert!(!deck_for(&projects, &zoom).divider_at(SCREEN, Position::new(98, 20)));
+    assert!(!deck_for(&projects, &zoom).divider_at(SCREEN, Position::new(98, 22)));
 
     let state = reference_deck(4);
     let narrow = Rect::new(0, 0, 84, 22);
-    assert!(!deck_for(&projects, &state).divider_at(narrow, Position::new(50, 10)));
+    assert!(!deck_for(&projects, &state).divider_at(narrow, Position::new(50, 12)));
 
     // 110 columns still stacks, but at the export's fixed 34-column
     // stack: there is no ratio to move, so there is no divider.
     let fixed = Rect::new(0, 0, 110, 42);
     assert_eq!(deck_for(&projects, &state).ratio_at(fixed, 74), None);
-    assert!(!deck_for(&projects, &state).divider_at(fixed, Position::new(74, 10)));
+    assert!(!deck_for(&projects, &state).divider_at(fixed, Position::new(74, 12)));
     let (buffer, _) = render(&fixture::frontend_active(), &state, (110, 42));
     assert_eq!(divider_column(&buffer), None, "no divider to mislead with");
 }
@@ -910,8 +910,8 @@ fn a_fresh_run_gives_the_stack_its_minimum_width() {
 
     // 120 columns of master, the 2-column gutter, a 22-column stack.
     assert_eq!(divider_column(&buffer), Some(120));
-    assert_eq!(buffer[(119u16, 0u16)].symbol(), "┐", "the master's border");
-    assert_eq!(buffer[(122u16, 0u16)].symbol(), " ", "the stack's padding");
+    assert_eq!(buffer[(119u16, 2u16)].symbol(), "┐", "the master's border");
+    assert_eq!(buffer[(122u16, 2u16)].symbol(), " ", "the stack's padding");
     // Which is the narrow end of the divider's travel: `^g -` and a drag
     // both open the stack from here, and nothing widens it further.
     let mut wider = state.clone();
@@ -936,7 +936,7 @@ fn a_strip_still_names_itself_at_the_minimum_stack_width() {
     assert!(rendered.contains("▸ 3 app · ✕"), "{rendered}");
     // The close affordance keeps its column whatever the tail does, and
     // the tail gives way to it: at 22 columns there is none left (#84).
-    for (row, strip) in [(0u16, "▸ 2 backend · ●"), (4, "▸ 4 worker · ○")] {
+    for (row, strip) in [(2u16, "▸ 2 backend · ●"), (6, "▸ 4 worker · ○")] {
         let drawn: String = (122..144).map(|c| buffer[(c, row)].symbol()).collect();
         assert_eq!(drawn.trim_end(), format!("  {strip:<16}×"), "row {row}");
     }
@@ -945,8 +945,8 @@ fn a_strip_still_names_itself_at_the_minimum_stack_width() {
     let projects = fixture::projects();
     let state = DeckState::new(4);
     let view = deck_for(&projects, &state);
-    assert_eq!(view.marker_at(SCREEN, Position::new(124, 0)), Some(1));
-    assert_eq!(view.marker_at(SCREEN, Position::new(125, 4)), Some(3));
+    assert_eq!(view.marker_at(SCREEN, Position::new(124, 2)), Some(1));
+    assert_eq!(view.marker_at(SCREEN, Position::new(125, 6)), Some(3));
 }
 
 /// The stack footer gives up its key before it gives up the census, and
@@ -954,7 +954,7 @@ fn a_strip_still_names_itself_at_the_minimum_stack_width() {
 #[test]
 fn the_fold_census_drops_its_key_when_the_column_is_narrow() {
     let (narrow, _) = render(&fixture::frontend_active(), &DeckState::new(4), (144, 42));
-    let footer: String = (122..144).map(|c| narrow[(c, 39u16)].symbol()).collect();
+    let footer: String = (122..144).map(|c| narrow[(c, 41u16)].symbol()).collect();
     assert_eq!(footer.trim(), "3 collapsed", "{footer}");
 
     // The export's own column has room for both, and still states both.
@@ -980,30 +980,71 @@ fn frontend_active_matches_the_reference_canvas() {
     assert_snapshot("frontend-active", &buffer);
 }
 
+/// #101: the canvas opens with the status bar. Every session screen in the
+/// design puts the workspace chip, the census and the keys on row 1, keeps
+/// row 2 blank, and starts the panes on row 3 — the pre-move grid the
+/// export's specification panel still describes (`status row 42`) is what
+/// the screens replaced.
+#[test]
+fn the_status_row_opens_the_canvas_two_rows_above_the_panes() {
+    let (buffer, _) = reference();
+
+    // Row 1 is the bar: it owns the second background value for its whole
+    // width, and it opens with the workspace chip.
+    let bar: String = (0..144u16).map(|x| buffer[(x, 0u16)].symbol()).collect();
+    assert!(bar.trim_start().starts_with("idp "), "{bar}");
+    assert!(bar.trim_end().ends_with("^g q quit"), "{bar}");
+    // The chip is the one thing on the row that takes the accent instead.
+    for column in 0..144u16 {
+        let bg = buffer[(column, 0u16)].bg;
+        assert!(bg == STATUS_BG || bg == ACCENT, "column {column}: {bg:?}");
+    }
+    assert_eq!(buffer[(143u16, 0u16)].bg, STATUS_BG);
+
+    // Row 2 separates the bar from the panes, and carries neither.
+    let blank: String = (0..144u16).map(|x| buffer[(x, 1u16)].symbol()).collect();
+    assert_eq!(blank.trim(), "", "{blank}");
+    assert_eq!(buffer[(0u16, 1u16)].bg, super::CANVAS);
+
+    // The master takes every row from there to the foot of the canvas.
+    assert_eq!(buffer[(0u16, 2u16)].symbol(), "┌");
+    assert_eq!(buffer[(0u16, 41u16)].symbol(), "└");
+
+    // The `+` the pointer opens the add sheet with moved up with the row.
+    let projects = fixture::projects();
+    let state = reference_deck(4);
+    let view = deck_for(&projects, &state);
+    let plus = (0..144u16)
+        .find(|column| buffer[(*column, 0u16)].symbol() == "+")
+        .expect("the add affordance");
+    assert!(view.add_at(SCREEN, Position::new(plus, 0)));
+    assert!(!view.add_at(SCREEN, Position::new(plus, 41)));
+}
+
 #[test]
 fn reference_chrome_carries_the_accepted_palette() {
     let (buffer, cursor) = reference();
 
     // Master border is the accent.
-    assert_eq!(buffer[(0u16, 0u16)].fg, ACCENT);
+    assert_eq!(buffer[(0u16, 2u16)].fg, ACCENT);
     // The status row owns the second background value.
-    assert_eq!(buffer[(0u16, 41u16)].bg, STATUS_BG);
+    assert_eq!(buffer[(0u16, 0u16)].bg, STATUS_BG);
     // The master cursor sits after the last line of engine-owned output.
-    assert_eq!(cursor, Some(Position::new(3, 29)));
+    assert_eq!(cursor, Some(Position::new(3, 31)));
 
     // The preview chrome the export states is a click away since #39, so
     // it is read from an opened stack rather than from the fresh run.
     let (open, _) = render(&fixture::frontend_active(), &expanded(4), (144, 42));
     assert_ne!(open[(100u16, 0u16)].fg, ACCENT, "no preview takes focus");
     // The exited preview's footer rule carries the error colour.
-    assert_eq!(open[(103u16, 22u16)].fg, ERROR);
+    assert_eq!(open[(103u16, 24u16)].fg, ERROR);
 }
 
 #[test]
 fn engine_cell_styles_reach_the_buffer() {
     let (buffer, _) = reference();
 
-    let vite = &buffer[(5u16, 6u16)];
+    let vite = &buffer[(5u16, 8u16)];
     assert_eq!(vite.symbol(), "V");
     assert_eq!(
         vite.fg,
@@ -1063,16 +1104,16 @@ fn the_demoted_pane_holds_its_highlight() {
     let (buffer, _) = render(&fixture::backend_promoted(), &promote(1), (144, 42));
 
     // The top preview is the pane frontend was demoted into.
-    assert_eq!(buffer[(100u16, 0u16)].fg, DEMOTED_BORDER);
-    assert_eq!(buffer[(103u16, 1u16)].bg, DEMOTED_BG);
+    assert_eq!(buffer[(100u16, 2u16)].fg, DEMOTED_BORDER);
+    assert_eq!(buffer[(103u16, 3u16)].bg, DEMOTED_BG);
     // The untouched previews keep the ordinary chrome. They are strips
     // since #39, so the row to read is the first of them.
     // (A strip's own background is the same #101317 the demotion tint
     // uses, so what separates them here is the border and the marker.)
-    assert_eq!(buffer[(102u16, 35u16)].symbol(), "▸");
-    assert_ne!(buffer[(102u16, 35u16)].fg, DEMOTED_BORDER);
+    assert_eq!(buffer[(102u16, 37u16)].symbol(), "▸");
+    assert_ne!(buffer[(102u16, 37u16)].fg, DEMOTED_BORDER);
     assert_eq!(
-        buffer[(100u16, 35u16)].symbol(),
+        buffer[(100u16, 37u16)].symbol(),
         " ",
         "a strip has no border"
     );
@@ -1083,7 +1124,7 @@ fn zoomed_matches_the_reference_canvas() {
     let (buffer, cursor) = render(&fixture::frontend_active(), &zoomed(), (144, 42));
 
     assert_snapshot("zoomed", &buffer);
-    assert_eq!(cursor, Some(Position::new(3, 29)));
+    assert_eq!(cursor, Some(Position::new(3, 31)));
 }
 
 #[test]
@@ -1093,7 +1134,7 @@ fn zoom_gives_the_master_the_full_width_and_hides_the_stack() {
 
     // One pane, spanning every column of the body.
     assert_eq!(screen.matches('┌').count(), 1, "{screen}");
-    assert_eq!(buffer[(143u16, 0u16)].symbol(), "┐");
+    assert_eq!(buffer[(143u16, 2u16)].symbol(), "┐");
     assert!(screen.contains(" ZOOM "), "{screen}");
     // The hidden terminals stay accounted for in the status row.
     assert!(screen.contains("hidden: 2● 3✕ 4○"), "{screen}");
@@ -1194,7 +1235,7 @@ fn scrollback_is_a_mode_of_the_master_pane_only() {
     assert!(screen.contains("SCROLLBACK  ·  line 2217/2431"), "{screen}");
     assert_eq!(screen.matches("2217/2431").count(), 1, "{screen}");
     // The mode tag is warning, not accent, so it does not read as focus.
-    assert_eq!(buffer[(88u16, 0u16)].bg, WARNING);
+    assert_eq!(buffer[(88u16, 2u16)].bg, WARNING);
 }
 
 #[test]
@@ -1209,7 +1250,7 @@ fn leaving_scrollback_returns_to_live_output() {
     let (live, cursor) = render(&fixture::scrolled(), &state, (144, 42));
 
     assert!(!text(&live).contains(" SCROLL "));
-    assert_eq!(cursor, Some(Position::new(3, 29)));
+    assert_eq!(cursor, Some(Position::new(3, 31)));
 }
 
 /// The other half of the declutter pass: dropping `running` did not drop
@@ -1243,9 +1284,9 @@ fn a_starting_terminal_renders_the_warning_ring_alone() {
     assert!(!screen.contains("starting"), "the glyph says it alone");
     // The ring is warning, not the accent a running master takes.
     let ring = (0..144u16)
-        .find(|column| buffer[(*column, 0u16)].symbol() == "○")
+        .find(|column| buffer[(*column, 2u16)].symbol() == "○")
         .expect("the master title carries the starting ring");
-    assert_eq!(buffer[(ring, 0u16)].fg, WARNING);
+    assert_eq!(buffer[(ring, 2u16)].fg, WARNING);
 
     // A preview shows the ring alone: the border resumes right after it.
     let mut engine = fixture::frontend_active();
@@ -1355,7 +1396,7 @@ fn a_title_with_no_room_for_the_command_drops_its_separator_too() {
         })
         .unwrap();
         let title: String = (0..100u16)
-            .map(|x| term.backend().buffer()[(x, 0u16)].symbol())
+            .map(|x| term.backend().buffer()[(x, 2u16)].symbol())
             .collect();
         // Names are elastic before structural title chrome: the glyph
         // and its separator remain whole rather than being cut mid-row.
@@ -1418,13 +1459,13 @@ fn the_help_overlay_takes_the_focus_the_master_gives_up() {
     assert_eq!(buffer[(42u16, 8u16)].fg, ACCENT);
     // Focus is singular: the master border is no longer the accent, and
     // the underlay recedes by foreground alone.
-    assert_eq!(buffer[(0u16, 0u16)].fg, IDLE_BORDER);
-    assert_eq!(buffer[(5u16, 1u16)].fg, UNDER_FG);
-    assert_eq!(buffer[(5u16, 1u16)].bg, super::CANVAS);
+    assert_eq!(buffer[(0u16, 2u16)].fg, IDLE_BORDER);
+    assert_eq!(buffer[(5u16, 3u16)].fg, UNDER_FG);
+    assert_eq!(buffer[(5u16, 3u16)].bg, super::CANVAS);
     // The stack hint row sits between the panes and dims one step further.
-    assert_eq!(buffer[(103u16, 39u16)].fg, UNDER_HINT);
+    assert_eq!(buffer[(103u16, 41u16)].fg, UNDER_HINT);
     // The status row keeps its colours and states the modal's keys.
-    assert_eq!(buffer[(2u16, 41u16)].bg, ACCENT);
+    assert_eq!(buffer[(2u16, 0u16)].bg, ACCENT);
     assert!(
         text(&buffer).contains("^g ? help open  ·  esc close"),
         "{}",
@@ -1514,15 +1555,17 @@ fn below_a_usable_preview_width_the_stack_becomes_a_pane_strip() {
 
     assert_eq!(screen.matches('┌').count(), 1, "{screen}");
     assert!(
-        screen.starts_with("  1 frontend  2 backend · 3 app ✕1 · 4 worker ○"),
+        screen.lines().nth(2).is_some_and(
+            |strip| strip.starts_with("  1 frontend  2 backend · 3 app ✕1 · 4 worker ○")
+        ),
         "{screen}"
     );
     assert!(screen.contains("stack hidden"), "{screen}");
     assert!(screen.contains("^g j/k · N · z · [ · ? · q"), "{screen}");
     // The active chip and the warning both carry their accepted colours.
-    assert_eq!(buffer[(1u16, 0u16)].bg, ACCENT);
-    assert_eq!(buffer[(14u16, 0u16)].bg, CHIP_BG);
-    assert_eq!(buffer[(19u16, 21u16)].fg, WARNING);
+    assert_eq!(buffer[(1u16, 2u16)].bg, ACCENT);
+    assert_eq!(buffer[(14u16, 2u16)].bg, CHIP_BG);
+    assert_eq!(buffer[(19u16, 0u16)].fg, WARNING);
 }
 
 #[test]
@@ -1537,7 +1580,7 @@ fn one_column_above_the_fallback_still_stacks() {
     assert_eq!(text(&narrow).matches('┌').count(), 1);
     // 34 stack columns hold previews, which the export fixes below 120.
     assert!(text(&stacked).matches('┌').count() > 1);
-    assert_eq!(stacked[(63u16, 0u16)].symbol(), "┐");
+    assert_eq!(stacked[(63u16, 2u16)].symbol(), "┐");
 }
 
 /// With zero stacked previews the stack column, its gutter and its
@@ -1552,9 +1595,9 @@ fn an_empty_stack_gives_the_master_the_full_width() {
     let screen = text(&buffer);
 
     // The master's border runs the full canvas width.
-    assert_eq!(buffer[(0u16, 0u16)].symbol(), "┌");
-    assert_eq!(buffer[(143u16, 0u16)].symbol(), "┐");
-    assert_eq!(buffer[(143u16, 39u16)].symbol(), "┘");
+    assert_eq!(buffer[(0u16, 2u16)].symbol(), "┌");
+    assert_eq!(buffer[(143u16, 2u16)].symbol(), "┐");
+    assert_eq!(buffer[(143u16, 41u16)].symbol(), "┘");
     assert_eq!(divider_column(&buffer), None, "no divider without a stack");
     assert!(!screen.contains('▸'), "no folded strips, {screen}");
     assert!(!screen.contains('▾'), "no disclosure markers, {screen}");
@@ -1568,14 +1611,14 @@ fn an_empty_stack_gives_the_master_the_full_width() {
 
     // And there is nothing of the stack left to hit.
     let deck = deck_for(&projects, &state);
-    assert_eq!(deck.position_at(SCREEN, Position::new(10, 10)), Some(0));
-    assert_eq!(deck.position_at(SCREEN, Position::new(130, 10)), Some(0));
-    assert!(!deck.divider_at(SCREEN, Position::new(100, 20)));
+    assert_eq!(deck.position_at(SCREEN, Position::new(10, 12)), Some(0));
+    assert_eq!(deck.position_at(SCREEN, Position::new(130, 12)), Some(0));
+    assert!(!deck.divider_at(SCREEN, Position::new(100, 22)));
     assert_eq!(deck.ratio_at(SCREEN, 100), None);
-    assert_eq!(deck.marker_at(SCREEN, Position::new(100, 0)), None);
+    assert_eq!(deck.marker_at(SCREEN, Position::new(100, 2)), None);
     assert_eq!(deck.stack_window(SCREEN), super::StackWindow::default());
-    assert!(!deck.stack_scroll_at(SCREEN, Position::new(100, 20)));
-    assert_eq!(deck.swap_position_at(SCREEN, Position::new(130, 10)), None);
+    assert!(!deck.stack_scroll_at(SCREEN, Position::new(100, 22)));
+    assert_eq!(deck.swap_position_at(SCREEN, Position::new(130, 12)), None);
 
     // The visible PTY size is the full body, not a split share of it.
     let sizes = deck.terminal_sizes(SCREEN);
@@ -1600,11 +1643,11 @@ fn runtime_add_brings_the_stack_and_its_divider_back() {
     // the divider in column 120. The new preview starts folded, so it
     // answers on its title row.
     assert_eq!(divider_column(&buffer), Some(120));
-    assert_eq!(buffer[(119u16, 0u16)].symbol(), "┐");
+    assert_eq!(buffer[(119u16, 2u16)].symbol(), "┐");
     let deck = deck_for(&projects, &state);
-    assert_eq!(deck.position_at(SCREEN, Position::new(10, 10)), Some(0));
-    assert_eq!(deck.position_at(SCREEN, Position::new(130, 0)), Some(1));
-    assert!(deck.divider_at(SCREEN, Position::new(120, 20)));
+    assert_eq!(deck.position_at(SCREEN, Position::new(10, 12)), Some(0));
+    assert_eq!(deck.position_at(SCREEN, Position::new(130, 2)), Some(1));
+    assert!(deck.divider_at(SCREEN, Position::new(120, 22)));
     assert!(deck.ratio_at(SCREEN, 120).is_some());
 }
 
@@ -1705,7 +1748,7 @@ fn a_list_that_fits_does_not_scroll() {
     state.set_stack_offset(2);
     let buffer = render_long(&projects, &state, (144, 42));
     assert_eq!(
-        buffer[(99u16, 5u16)].symbol(),
+        buffer[(99u16, 7u16)].symbol(),
         " ",
         "no track in the gutter"
     );
@@ -1742,22 +1785,22 @@ fn hit_testing_follows_the_scrolled_window() {
     let view = deck_for(&projects, &state);
 
     // The stack is [1..=7]; the window starts at its third preview.
-    assert_eq!(view.position_at(SCREEN, Position::new(110, 5)), Some(3));
-    assert_eq!(view.position_at(SCREEN, Position::new(110, 18)), Some(4));
-    assert_eq!(view.position_at(SCREEN, Position::new(110, 31)), Some(5));
+    assert_eq!(view.position_at(SCREEN, Position::new(110, 7)), Some(3));
+    assert_eq!(view.position_at(SCREEN, Position::new(110, 20)), Some(4));
+    assert_eq!(view.position_at(SCREEN, Position::new(110, 33)), Some(5));
     assert_eq!(
-        view.swap_position_at(SCREEN, Position::new(110, 5)),
+        view.swap_position_at(SCREEN, Position::new(110, 7)),
         Some(3)
     );
     assert_eq!(
-        view.terminal_at(SCREEN, Position::new(110, 5))
+        view.terminal_at(SCREEN, Position::new(110, 7))
             .map(ToString::to_string)
             .as_deref(),
         Some("t4")
     );
     // The marker cells belong to whichever preview the window put there.
-    assert_eq!(view.marker_at(SCREEN, Position::new(103, 0)), Some(3));
-    assert_eq!(view.marker_at(SCREEN, Position::new(103, 13)), Some(4));
+    assert_eq!(view.marker_at(SCREEN, Position::new(103, 2)), Some(3));
+    assert_eq!(view.marker_at(SCREEN, Position::new(103, 15)), Some(4));
 }
 
 /// Issue #39: the fresh run is a column of strips, and every pointer
@@ -1770,7 +1813,7 @@ fn a_fresh_folded_stack_answers_every_pointer_gesture() {
     let state = reference_deck(4);
     let view = deck_for(&projects, &state);
 
-    for (position, row, terminal) in [(1usize, 0u16, "backend"), (2, 2, "app"), (3, 4, "worker")] {
+    for (position, row, terminal) in [(1usize, 2u16, "backend"), (2, 4, "app"), (3, 6, "worker")] {
         assert_eq!(
             view.position_at(SCREEN, Position::new(120, row)),
             Some(position)
@@ -1795,9 +1838,9 @@ fn a_fresh_folded_stack_answers_every_pointer_gesture() {
         );
     }
     // The blank column the folds leave below them belongs to the list.
-    assert!(view.stack_scroll_at(SCREEN, Position::new(120, 20)));
+    assert!(view.stack_scroll_at(SCREEN, Position::new(120, 22)));
     assert!(
-        !view.stack_scroll_at(SCREEN, Position::new(120, 0)),
+        !view.stack_scroll_at(SCREEN, Position::new(120, 2)),
         "a strip"
     );
     // Three strips are the whole list, so there is nothing to page to.
@@ -1832,22 +1875,22 @@ fn the_stack_chrome_is_where_the_wheel_pages_the_list() {
     let state = expanded(8);
     let view = deck_for(&projects, &state);
 
-    assert!(view.stack_scroll_at(SCREEN, Position::new(99, 5)), "gutter");
-    assert!(view.stack_scroll_at(SCREEN, Position::new(120, 12)), "gap");
+    assert!(view.stack_scroll_at(SCREEN, Position::new(99, 7)), "gutter");
+    assert!(view.stack_scroll_at(SCREEN, Position::new(120, 14)), "gap");
     assert!(
-        view.stack_scroll_at(SCREEN, Position::new(120, 39)),
+        view.stack_scroll_at(SCREEN, Position::new(120, 41)),
         "footer"
     );
     assert!(
-        !view.stack_scroll_at(SCREEN, Position::new(110, 5)),
+        !view.stack_scroll_at(SCREEN, Position::new(110, 7)),
         "preview"
     );
     assert!(
-        !view.stack_scroll_at(SCREEN, Position::new(10, 10)),
+        !view.stack_scroll_at(SCREEN, Position::new(10, 12)),
         "master"
     );
     assert!(
-        !view.stack_scroll_at(SCREEN, Position::new(120, 41)),
+        !view.stack_scroll_at(SCREEN, Position::new(120, 0)),
         "the status row is not the stack"
     );
 }
@@ -1870,10 +1913,10 @@ fn folding_inside_a_long_list_lets_more_previews_into_the_window() {
     assert!(rendered.contains("▸ 3 t3"));
     assert!(rendered.contains("▾ 4 t4"));
     // Two strips and two open previews, and the footer still on row 39.
-    assert_eq!(buffer[(100u16, 0u16)].symbol(), " ");
-    assert_eq!(buffer[(102u16, 0u16)].symbol(), "▸");
+    assert_eq!(buffer[(100u16, 2u16)].symbol(), " ");
     assert_eq!(buffer[(102u16, 2u16)].symbol(), "▸");
-    assert_eq!(buffer[(100u16, 4u16)].symbol(), "┌");
+    assert_eq!(buffer[(102u16, 4u16)].symbol(), "▸");
+    assert_eq!(buffer[(100u16, 6u16)].symbol(), "┌");
 }
 
 /// The column never overruns its footer row, whatever the mix of folds and
@@ -1890,9 +1933,9 @@ fn a_scrolled_column_never_overruns_its_footer() {
             state.set_stack_offset(offset);
             let buffer = render_long(&projects, &state, (144, 42));
             assert_eq!(
-                buffer[(102u16, 38u16)].symbol(),
+                buffer[(102u16, 40u16)].symbol(),
                 " ",
-                "row 38 stays blank at offset {offset} with {step} folded"
+                "row 40 stays blank at offset {offset} with {step} folded"
             );
         }
         if step < 8 {
@@ -1959,26 +2002,26 @@ fn the_gutter_carries_a_track_while_the_list_is_longer_than_the_column() {
 
     let head = render_long(&projects, &state, (144, 42));
     let track = |buffer: &Buffer| {
-        (0..39u16)
+        (2..41u16)
             .map(|row| buffer[(99u16, row)].symbol().to_owned())
             .collect::<String>()
     };
     let thumb = |buffer: &Buffer| {
-        let rows: Vec<u16> = (0..39u16)
+        let rows: Vec<u16> = (2..41u16)
             .filter(|row| buffer[(99u16, *row)].symbol() == "┃")
             .collect();
         (rows[0], rows[rows.len() - 1])
     };
     assert_eq!(track(&head).matches('┃').count(), 17, "3 of 7 previews");
-    assert_eq!(thumb(&head).0, 0, "the window is at the head of the list");
-    assert_eq!(head[(99u16, 0u16)].fg, HINT);
-    assert_eq!(head[(99u16, 38u16)].fg, IDLE_BORDER);
+    assert_eq!(thumb(&head).0, 2, "the window is at the head of the list");
+    assert_eq!(head[(99u16, 2u16)].fg, HINT);
+    assert_eq!(head[(99u16, 40u16)].fg, IDLE_BORDER);
     // The pane beside it keeps every column it had.
-    assert_eq!(head[(100u16, 0u16)].symbol(), "┌");
+    assert_eq!(head[(100u16, 2u16)].symbol(), "┌");
 
     state.set_stack_offset(4);
     let tail = render_long(&projects, &state, (144, 42));
-    assert_eq!(thumb(&tail).1, 38, "the window is at the end of the list");
+    assert_eq!(thumb(&tail).1, 40, "the window is at the end of the list");
 }
 
 #[test]
@@ -2058,8 +2101,8 @@ fn a_notified_pane_flashes_in_the_demotion_idiom_and_then_settles() {
     let (two, _) = render_at(&engine, &collapsed(), &notifies, at(2_000), (144, 42));
     // The open preview takes the warning border on the demotion's lifted
     // background: the same idiom, saying "answer me" rather than "settled".
-    assert_eq!(two[(100u16, 0u16)].fg, WARNING);
-    assert_eq!(two[(103u16, 1u16)].bg, DEMOTED_BG);
+    assert_eq!(two[(100u16, 2u16)].fg, WARNING);
+    assert_eq!(two[(103u16, 3u16)].bg, DEMOTED_BG);
     // A strip cannot lift a background it already sits on, so it inverts.
     let strip = text(&two)
         .lines()
@@ -2077,12 +2120,37 @@ fn a_notified_pane_flashes_in_the_demotion_idiom_and_then_settles() {
     // younger message is still flashing.
     let (four, _) = render_at(&engine, &collapsed(), &notifies, at(4_000), (144, 42));
     assert_eq!(four[(102u16, strip)].bg, DEMOTED_BG);
-    assert_eq!(four[(100u16, 0u16)].fg, WARNING, "the message is younger");
+    assert_eq!(four[(100u16, 2u16)].fg, WARNING, "the message is younger");
 
     // t=6s: everything has settled, and the canvas is the one the deck drew
     // before any of it — a flash leaves nothing behind on a drawn pane.
     let (six, _) = render_at(&engine, &collapsed(), &notifies, at(6_000), (144, 42));
     assert_eq!(text(&six), text(&quiet_frame));
+}
+
+/// #101: the canvas spends a flashing pane's right slot on what it is
+/// asking about, and leaves the status dot alone — the slot says in words
+/// what the border says in colour, so the mark the censuses use is only
+/// needed where there is no slot to say it in.
+#[test]
+fn a_flashing_pane_names_its_notification_where_its_meter_was() {
+    let notifies = notified();
+    let engine = fixture::frontend_active();
+
+    let (two, _) = render_at(&engine, &collapsed(), &notifies, at(2_000), (144, 42));
+    let title: String = (100..144u16).map(|x| two[(x, 2u16)].symbol()).collect();
+    assert!(title.contains("▾ 2 backend · ●"), "{title}");
+    assert!(title.contains("tests passed"), "{title}");
+    assert!(
+        !title.contains("[##····]"),
+        "the meter gave up the slot: {title}"
+    );
+
+    // Once the flash settles the meter has its slot back.
+    let (six, _) = render_at(&engine, &collapsed(), &notifies, at(6_000), (144, 42));
+    let settled: String = (100..144u16).map(|x| six[(x, 2u16)].symbol()).collect();
+    assert!(settled.contains("[##····]"), "{settled}");
+    assert!(!settled.contains("tests passed"), "{settled}");
 }
 
 /// A notification for a pane the layout does not draw has nowhere to flash,
@@ -2123,9 +2191,9 @@ fn a_hidden_pane_notifies_through_a_toast_that_takes_no_focus() {
     assert!(backend < worker, "{screen}");
     // The master pane behind it keeps its cursor and its colours: a toast
     // never takes the focus a modal does.
-    assert_eq!(cursor, Some(Position::new(3, 29)));
-    assert_eq!(buffer[(0u16, 0u16)].fg, ACCENT);
-    assert_eq!(buffer[(5u16, 1u16)].fg, super::MASTER_FG);
+    assert_eq!(cursor, Some(Position::new(3, 31)));
+    assert_eq!(buffer[(0u16, 2u16)].fg, ACCENT);
+    assert_eq!(buffer[(5u16, 3u16)].fg, super::MASTER_FG);
 }
 
 /// The batch is a list, not a queue: four newest and a count of the rest.
@@ -2195,10 +2263,10 @@ fn the_censuses_keep_a_dismissed_notification_honest() {
     // the only census it has.
     let (narrow, _) = render_at(&engine, &reference_deck(4), &notifies, at(2_000), (84, 22));
     let strip: String = (0..84)
-        .map(|column| narrow[(column, 0u16)].symbol())
+        .map(|column| narrow[(column, 2u16)].symbol())
         .collect();
     assert!(strip.contains("2 backend !"), "{strip}");
-    assert_eq!(narrow[(14u16, 0u16)].fg, WARNING);
+    assert_eq!(narrow[(14u16, 2u16)].fg, WARNING);
 
     // Being seen is what clears it: promoting the pane takes the mark.
     notifies.clear(&TerminalId::new("backend"));
