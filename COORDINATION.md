@@ -275,3 +275,11 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   per-pane × live; last-pane close via quit-confirm). #87 merged earlier
   (PR #88). 2026-09-04 session: #81/#82/#84/#87 all shipped, critic-passed.
   All workers idle. Open/parked only: #33, #71, #72.
+- 2026-09-04: RESEARCHER ROLE ADDED (user). New skill
+  coordinator/references/research-protocol.md + researcher/SKILL.md + boot
+  (muse-spark-1.3, researcher-skill ONLY, window 4 in the canonical env,
+  single-line study pointers, brief at a deliverable path, finish ping).
+  Research-first: parked/design items (#33/#71/#72) go to the researcher
+  BEFORE implementation; user decides from the brief. My #72 hand-brief
+  (docs/design/termdeck/agent-api-design-brief.md) may be pressure-tested by
+  an independent researcher study.
