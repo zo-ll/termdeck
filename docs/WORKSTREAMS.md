@@ -14,7 +14,8 @@ in-memory fake terminal engine.
 Acceptance:
 
 - Shared types expose no Ratatui, Alacritty, Crossterm, or PTY types.
-- The Horizon example validates and lists projects with actionable errors.
+- The shipped example configuration validates and lists projects with
+  actionable errors.
 - The fake engine produces deterministic frames and status transitions.
 - Focused config and state tests pass.
 - No real PTY, terminal emulator, production UI, daemon, or speculative
@@ -58,7 +59,7 @@ Blocked by workstream 1.
 ## 4. Production integration
 
 Connect the reviewed native engine and reviewed interface at the composition
-root and make the configured Horizon example usable in WSL.
+root and make the shipped example configuration usable in WSL.
 
 Acceptance:
 

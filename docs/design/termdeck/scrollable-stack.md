@@ -98,16 +98,17 @@ fits renders byte for byte as screens 01–05 do.
 Footer precedence (extending `collapse-stack.md` §3.6), most specific first:
 
 1. scrollback — `scrollback · esc returns to live`
-2. demotion, for its 1.5s window — `promoted backend · ^g 1 back`
-3. hidden previews — `↑ 2 more · ↓ 3 more · ^g pgup/pgdn`
-4. folds — `{c} collapsed · ^g c expand all`
-5. default — `ctrl+g 1-4 promote · j/k cycle`
+2. hidden previews — `↑ 2 more · ↓ 3 more · ^g pgup/pgdn`
+3. otherwise the row is blank.
 
-**Chosen, not in the export:** hidden outranks folded. A fold declares itself
-three times over — its own strip, its marker, and the status row's census —
-while a preview the window has scrolled past says nothing about itself anywhere
-else. The status row is unchanged, so the fold census is still stated while the
-footer is naming the window.
+The reasoning that put hidden above folded is now what empties the rest of the
+row: a fold declares itself three times over — its own strip, its marker, and
+the status row's census — while a preview the window has scrolled past says
+nothing about itself anywhere else. The updated canvas drew the conclusion and
+deleted the fold census from the column outright (#103), and the declutter pass
+had already taken the promotion keys and the demotion line. The status row —
+row 0 since #101, at the **top** of the frame, not the bottom — still states
+the fold census while the footer names the window.
 
 ## 4. Ambiguities
 
@@ -117,17 +118,16 @@ footer is naming the window.
 | B2 | §1.3 redistribution assumes the list fits. | `min(freed, slack)` — identical when it fits, bounded by the window when it does not. |
 | B3 | The export has no scrollbar or overflow vocabulary. | Gutter track plus a footer count, both drawn only on overflow, both from existing tokens. |
 | B4 | Wheel over the stack could mean two things. | Preview → that preview (#25). Stack chrome → the list. Strip → nothing (A10). |
-| B5 | Promotion can demote a pane into a slot the window is not showing. | The window does not chase it. Promotion is announced by the footer and the status row, and `^g 1-9` reaches any preview whether or not it is drawn. |
+| B5 | Promotion can demote a pane into a slot the window is not showing. | The window does not chase it. Promotion is announced by the demoted pane's own highlight and by the status row's `>` pointer, and `^g N` reaches any preview whether or not it is drawn. |
 
 ## 5. Known follow-ups
 
-- The status bar still advertises `^g 1-4 select` and the stack footer
-  `ctrl+g 1-4 promote`. That is the export's literal text, and it was correct
-  for every deck the configuration could build before #34a. Now that the cap is
-  lifted it under-states a longer deck: `^g 1-9` all promote, and the labels
-  want the deck's own count. Left alone here because changing them moves the
-  committed screens 01–05, which is a design call rather than an integration
-  one.
+- ~~The status bar still advertises `^g 1-4 select` and the stack footer
+  `ctrl+g 1-4 promote`.~~ **Settled.** The design call was made: the declutter
+  pass took `^g N select` out of the status bar's key row and the promotion
+  keys out of the footer altogether, and what remains — the help overlay and
+  the narrow collapsed row — names the key as `^g N`, not a range. Nothing now
+  under-states a deck longer than four.
 - Auto-collapse at the `MIN_OPEN` floor (`collapse-stack.md` §1.4, R3) is still
   not implemented. It is now less pressing: a column too short for its previews
   scrolls rather than dropping them.

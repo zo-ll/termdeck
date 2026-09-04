@@ -14,10 +14,9 @@ The original project is available through Claude Design at:
 https://claude.ai/design/p/8aa66d51-e314-4df7-8b93-fcfadbb60c36?file=Termdeck+TUI.dc.html
 ```
 
-Claude Code may inspect that project with the built-in `DesignSync` tool after
-authorising design access with `/design-login`. The committed export remains
-authoritative for review and must not be regenerated from an older prose
-prompt.
+Claude Code may inspect that project after authorising design access with
+`/design-login`. The committed export remains authoritative for review and must
+not be regenerated from an older prose prompt.
 
 ### Remote access
 
@@ -27,8 +26,12 @@ using the same claude.ai account. The grant is stored per machine in
 repository and does not travel with a clone. It persists across sessions on
 that machine and refreshes automatically, so repeated logins are not needed.
 
-No MCP server registration is required. Access is provided by the built-in
-`DesignSync` tool, which `/design-login` unlocks.
+The grant unlocks two ways in, and either is legitimate: the built-in
+`DesignSync` tool, and the `claude_design` MCP tools (`get_project`,
+`list_files`, `read_file`, `render_preview`, …). The #101 worker read the
+canvas through the latter. What is *not* required is registering an MCP server
+of your own — there is no `.mcp.json` in this repository and none is needed;
+the tools arrive with the login.
 
 The project is a plain design project, not a design-system project, so
 `list_projects` does not return it. Address it directly by the project ID
@@ -45,9 +48,17 @@ canvas without coordinator approval.
 ## Layout
 
 - Design canvas: 144 columns by 42 rows.
+- **Row order: the status row first, then one blank row, then the body.** At
+  the reference size that is status row 0, blank row 1, body rows 2–41 (40
+  rows), in every layout — stacked, zoom, single and narrow alike. The canvas
+  puts the bar on row 1 in all of its screens; the export's specification
+  panel still reads `Content rows 40, blank row 41, status row 42`, which is
+  the pre-#101 order and is superseded (see below).
 - Master terminal: left side, 70% width.
 - Preview stack: right side, 30% width, equal-height live previews.
-- Preview selection promotes that terminal to master.
+- Preview selection promotes that terminal to master. The key is `^g N`, one
+  or two digits — the deck is not capped at the canvas's four terminals, and
+  `^g 1 6` reaches terminal 16.
 - Zoom mode hides the preview stack.
 - Narrow mode shows only the master plus a compact terminal status line.
 
@@ -92,7 +103,8 @@ Removed:
 - The stack footer's `ctrl+g N promote · j/k cycle` and its
   `promoted {name} · ^g 1 back` demotion line. The demoted pane's own 1.5s
   highlight reports the swap, and the keys live in the help overlay. The footer
-  keeps the two censuses it earns: hidden previews, then folds.
+  kept the two censuses it earned — hidden previews, then folds — until the
+  2026-09-04 update took the fold census as well (below).
 - The `{n} stacked` census in the status bar, which the `{n} terminals` count
   beside it already implies. The exit summary that followed it stays.
 - `^g N select` and `^g [ scroll` from the status bar's key row. Both stay
@@ -109,6 +121,46 @@ is stale mockup decoration, not a second title format: the sheet is composited
 over a live render of the ordinary deck (`Deck::render`, then `Sheet::render`
 on top, `src/session.rs`), so what actually sits behind the sheet is the
 decluttered title. No pane in the running program draws a working directory.
+
+### Canvas update (2026-09-04)
+
+The user edited the canvas again and the export under `reference/` was swapped
+for the new one. Two of its changes are behaviour, and both have landed:
+
+- **The status row moved to the top** (#101). Every screen — stacked, zoom,
+  narrow, picker, runtime sheet — now opens with the bar on row 1, followed by
+  a blank row. The row order in **Layout** above is the authoritative
+  statement of it.
+- **The stack's fold census is gone** (#103). Screen 05 no longer draws
+  `{c} collapsed · ^g c expand all` in the stack column. The row is still
+  reserved, but it states only what nothing else states: scrollback, and the
+  `↑ N more / ↓ N more` window count. A fold is already declared by its own
+  strip, its `▸` marker, and the status row's `{c} collapsed` beside an
+  accented `^g c`, so the column was saying it twice.
+
+Three further places in the updated canvas are illustration rather than
+instruction. Where the canvas and this document conflict the canvas wins, but
+these three are what the canvas *cannot* mean, and the reading below is
+binding:
+
+- **The specification panel's grid.** It still reads `Grid 144×42. … Content
+  rows 40, blank row 41, status row 42`, the pre-#101 order. The panel was not
+  edited with the screens — the same way it was not edited in the declutter
+  pass — and the screens govern. See **Layout**.
+- **Screen 03's zoom corner card.** The hidden pane's notification is drawn as
+  a bordered amber card floating *above* the frame, outside the 144×42 grid. A
+  TUI has no cells there. It ships as the centred notification toast (#97),
+  and the part of the card that does translate is the census: a pane with a
+  pending notification is marked in the status row's `hidden:` summary in the
+  warning colour, which is what screen 03's amber `4●` beside the green
+  `2● 3●` is stating.
+- **Screen 04's two status bars.** The narrow screen draws the full session
+  bar on row 1 *and* the compact `84×22  stack hidden` bar along the bottom.
+  That is the row-1 edit applied without removing the bar it replaced. The
+  narrow layout has exactly one bar, on row 1, in the compact form; the pane
+  strip follows it after the blank row, which is also why the RESPONSIVE
+  board's `one-line pane strip on row 1` now means the row below the blank
+  one.
 
 ## Required reference states
 

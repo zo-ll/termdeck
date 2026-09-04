@@ -3,9 +3,9 @@
 ## Product
 
 Termdeck is an external, generic Rust TUI for opening the host terminals that
-belong to one logical workspace. A Horizon workspace can contain frontend,
-backend, and optional app repositories, but Horizon knowledge lives only in
-user configuration.
+belong to one logical workspace. A workspace can contain frontend, backend,
+and optional app repositories, but knowledge of any particular workspace lives
+only in user configuration.
 
 V1 targets Linux and WSL2 x86-64. It does not manage Docker, discover projects,
 forward mouse input, persist sessions, or create panes dynamically.

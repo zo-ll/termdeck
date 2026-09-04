@@ -4,8 +4,9 @@ Termdeck is a standalone, configurable terminal workspace. One interactive
 terminal occupies the master area while related terminals remain visible as a
 stack of live previews.
 
-The application is generic. Horizon support is provided through configuration,
-not through Horizon-specific source code or changes to the Horizon CLI.
+The application is generic. Support for any particular workspace is provided
+through configuration, not through workspace-specific source code or changes to
+the tools that workspace runs.
 
 ## Status
 
@@ -37,12 +38,12 @@ appears before `/usr/bin` in `PATH` so the rustup-managed toolchain is selected.
 
 ## Configuration commands
 
-The included Horizon example can be validated and listed without starting any
-terminals:
+The example configurations under `examples/` can be validated and listed
+without starting any terminals:
 
 ```bash
-cargo run -- --config examples/horizon.yaml check
-cargo run -- --config examples/horizon.yaml list
+cargo run -- --config examples/<example>.yaml check
+cargo run -- --config examples/<example>.yaml list
 ```
 
 The command shape is `termdeck [--config PATH] [WORKSPACE|check|list]`. Without
