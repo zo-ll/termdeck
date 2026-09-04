@@ -383,3 +383,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   pass; docs-only; main 312 tests). Horizon = 0 in docs/README except the
   fidelity-pinned canvas reference export + a draft (20 hits) — USER CALL:
   re-export canvas or leave.
+- 2026-09-04: SHELL INTEGRATION direction approved (auto-notify on command
+  completion). Research dispatched (#107-branch study): when-to-notify rules,
+  mechanism (BEL vs private sequence via the OSC seam), install via PTY env,
+  coverage/security/determinism. Researcher window on-demand.
