@@ -28,6 +28,7 @@ PROMPT_COMMAND="__td_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __td_prompt_end
 
 const ZSH_RC: &str = r#"[ -r "${TERMDECK_USER_ZDOTDIR:-$HOME}/.zshrc" ] && . "${TERMDECK_USER_ZDOTDIR:-$HOME}/.zshrc"
 [[ -o interactive ]] || return
+zmodload zsh/datetime
 if [[ -n ${TERMDECK_SHELL_HOOK-} || -z ${TERMDECK_SOCK-} || -z ${TERMDECK_PANE-} ]]; then return; fi
 export TERMDECK_SHELL_HOOK=1
 typeset -g __td_start= __td_cmd=
