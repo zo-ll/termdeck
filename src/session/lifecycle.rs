@@ -163,6 +163,8 @@ pub(super) fn terminal_sizes(
         workspace: "",
         projects,
         state: deck,
+        // Geometry only: what is pending changes no pane's dimensions.
+        notifies: &crate::ui::Notifications::new(),
         master_ratio: deck.master_ratio(),
         now: now(),
     }

@@ -217,6 +217,17 @@ pub(super) fn last_line(frame: &TerminalFrame) -> String {
         .unwrap_or_default()
 }
 
+/// What one notification says in a single line: the message a caller sent,
+/// or the bare fact that a bell rang (#97).
+pub(super) fn notify_text(kind: &NotifyKind) -> String {
+    match kind {
+        NotifyKind::Attention => "attention".to_owned(),
+        NotifyKind::Message { title, body } if title.is_empty() => body.clone(),
+        NotifyKind::Message { title, body } if body.is_empty() => title.clone(),
+        NotifyKind::Message { title, body } => format!("{title} · {body}"),
+    }
+}
+
 pub(super) fn plural(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
 }

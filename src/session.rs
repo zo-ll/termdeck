@@ -41,8 +41,8 @@ use crate::{
     },
     engine::NativeEngine,
     ui::{
-        Browse, Deck, DeckState, FsBrowse, Input, Key, Picker, PickerReaction, PickerState,
-        Reaction, Sheet, SheetState, picker,
+        Browse, Deck, DeckState, FsBrowse, Input, Key, Notifications, Picker, PickerReaction,
+        PickerState, Reaction, Sheet, SheetState, picker,
     },
 };
 
@@ -240,6 +240,7 @@ fn dispatch_control(
     projects: &mut Vec<Project>,
     deck: &mut DeckState,
     engine: &mut NativeEngine,
+    notifies: &mut Notifications,
     size: ScreenSize,
     sheet_open: bool,
     socket: &std::path::Path,
@@ -262,6 +263,9 @@ fn dispatch_control(
                     engine,
                     size,
                     sheet_open,
+                    notifies,
+                    caller,
+                    now: now(),
                 },
             );
         }
@@ -403,6 +407,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut projects = workspace.projects.clone();
     // The configuration seeds the split; the divider owns it from there.
     let mut deck = DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get());
+    // What the terminals have asked for and the user has not seen (#97). It
+    // lives beside the deck because it outlives every one of them: a bell is
+    // still pending after the promotion, the resize and the fold that follow.
+    let mut notifies = Notifications::new();
     #[cfg(unix)]
     let mut engine = spawn_terminals_with_socket(&projects, &deck, size, control.path())
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
@@ -437,8 +445,19 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             terminal.autoresize()?;
             dirty = true;
         }
-        dirty |= !engine.drain_events().is_empty();
+        for event in engine.drain_events() {
+            dirty = true;
+            // A bell is the untaught tool's notification (#97). The master
+            // frame is on screen in every layout, so `record` drops its own.
+            if let crate::contracts::EngineEvent::Notify { terminal, kind } = event {
+                notifies.record(&terminal, master_terminal(&deck, &projects), kind, now());
+            }
+        }
         dirty |= input.expire(&mut deck, &projects, now());
+        // A flash and a toast end by themselves, so while either is open the
+        // loop keeps drawing: without this the last frame of a notification
+        // would sit there until the next keystroke redrew it (#97).
+        dirty |= notifies.settling(now());
         #[cfg(unix)]
         {
             let mut quit = false;
@@ -451,6 +470,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     &mut projects,
                     &mut deck,
                     &mut engine,
+                    &mut notifies,
                     size,
                     sheet.is_some(),
                     &socket,
@@ -555,6 +575,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             ScrollCommand::Bottom,
                         );
                     }
+                    // Esc and any outer-interface command clear the batch;
+                    // typing into the master does not, because the toast is
+                    // not in the way of it and settles by itself (#97).
+                    if key == Key::Escape || !matches!(reaction, Some(Reaction::Send(_))) {
+                        notifies.dismiss(now());
+                    }
                     match reaction {
                         Some(Reaction::Send(UserCommand::Input(command))) => {
                             if let Some(active) = deck.active() {
@@ -589,6 +615,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     workspace: &workspace.name,
                                     projects: &projects,
                                     state: &deck,
+                                    notifies: &notifies,
                                     master_ratio: deck.master_ratio(),
                                     now: now(),
                                 }
@@ -630,6 +657,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             workspace: &workspace.name,
                             projects: &projects,
                             state: &deck,
+                            notifies: &notifies,
                             master_ratio: deck.master_ratio(),
                             now: now(),
                         };
@@ -699,6 +727,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     mouse_action(&mut deck, None, action, now(), &mut last_click);
                 }
                 InputEvent::Mouse { pointer, action } => {
+                    // A click anywhere is the batch read and answered.
+                    if action == MouseAction::Up {
+                        notifies.dismiss(now());
+                    }
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
                         let (marker, close, divider, split, position) = {
@@ -706,6 +738,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 workspace: &workspace.name,
                                 projects: &projects,
                                 state: &deck,
+                                notifies: &notifies,
                                 master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
@@ -729,6 +762,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 workspace: &workspace.name,
                                 projects: &projects,
                                 state: &deck,
+                                notifies: &notifies,
                                 master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
@@ -831,6 +865,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+        // The master frame is the pane the user is looking at, so whatever it
+        // was asking for has been seen. Every road to promotion passes here,
+        // and none of them needs a clock (#97).
+        if let Some(terminal) = master_terminal(&deck, &projects) {
+            dirty |= notifies.clear(terminal);
+        }
         dirty |= resize_terminals(&mut engine, &projects, &deck, size);
         if dirty {
             terminal.draw(|frame| {
@@ -838,6 +878,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     workspace: &workspace.name,
                     projects: &projects,
                     state: &deck,
+                    notifies: &notifies,
                     master_ratio: deck.master_ratio(),
                     now: now(),
                 }
@@ -865,6 +906,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     drop(outer);
     engine.dispatch(EngineCommand::Shutdown);
     Ok(())
+}
+
+/// The terminal holding the master frame, which every layout draws.
+fn master_terminal<'a>(deck: &DeckState, projects: &'a [Project]) -> Option<&'a TerminalId> {
+    deck.active()
+        .and_then(|position| projects.get(position))
+        .map(|project| &project.terminal)
 }
 
 fn now() -> Timestamp {

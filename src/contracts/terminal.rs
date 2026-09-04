@@ -25,6 +25,17 @@ pub enum TerminalStatus {
     Failed { message: String },
 }
 
+/// What a terminal is asking for when it notifies (#97).
+///
+/// A BEL carries no text, so it can only ask for attention. An explicit
+/// `ctl notify` carries a message the interface can show, and outranks a
+/// bell: the message says what happened, the bell only that something did.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NotifyKind {
+    Attention,
+    Message { title: String, body: String },
+}
+
 /// A wall-clock time represented as milliseconds since the Unix epoch.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Timestamp {

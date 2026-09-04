@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::contracts::{
-    Elapsed, EngineCommand, EngineEvent, ScreenSize, ScrollCommand, TerminalEngine, TerminalFrame,
-    TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
+    Elapsed, EngineCommand, EngineEvent, NotifyKind, ScreenSize, ScrollCommand, TerminalEngine,
+    TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
 };
 
 #[derive(Debug)]
@@ -88,6 +88,19 @@ impl FakeEngine {
             terminal: terminal.clone(),
             metadata,
         })
+    }
+
+    /// Rings a terminal's bell, as a BEL in real PTY output does (#97).
+    /// Nothing is queued: the caller hands the event straight on, the way the
+    /// session hands on what `drain_events` gives it.
+    pub fn bell(&mut self, terminal: &TerminalId) -> Vec<EngineEvent> {
+        if !self.terminals.contains_key(terminal) {
+            return Vec::new();
+        }
+        vec![EngineEvent::Notify {
+            terminal: terminal.clone(),
+            kind: NotifyKind::Attention,
+        }]
     }
 
     /// Records output without pretending to emulate terminal parsing.

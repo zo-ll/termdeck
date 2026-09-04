@@ -36,10 +36,13 @@ pub use picker::{
     Browse, Entry, EntryKind, FsBrowse, Hit, Instance, Listing, Open, Picker, PickerReaction,
     PickerState, Sheet, SheetHit, SheetState,
 };
-pub use state::{DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal};
+pub use state::{
+    DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal, NOTIFY_WINDOW,
+    Notifications, Notify, TOAST_WINDOW,
+};
 
 use crate::contracts::{
-    CellContent, CellStyle, Cursor, Elapsed, Project, Rgb, ScreenSize, TerminalEngine,
+    CellContent, CellStyle, Cursor, Elapsed, NotifyKind, Project, Rgb, ScreenSize, TerminalEngine,
     TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
 };
 
@@ -105,6 +108,12 @@ const METER_CELLS: u64 = 6;
 const HELP_SIZE: (u16, u16) = (60, 26);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
+/// The notification toast (#97) borrows the quit confirmation's size language
+/// and nothing else: it is drawn without dimming the interface and captures
+/// no key, because a background completion must never interrupt typing.
+const TOAST_SIZE: (u16, u16) = (52, 10);
+/// How many notifications the toast lists before it starts counting them.
+const TOAST_ROWS: usize = 4;
 /// Column the help overlay's descriptions start at.
 const HELP_KEYS: usize = 17;
 /// The keys that page the preview list, as the stack footer states them.
@@ -120,6 +129,10 @@ const ADD_AFFORDANCE: &str = "+";
 /// against the status dot's [`ERROR`], and the pane's right edge against the
 /// title's left.
 const CLOSE_AFFORDANCE: &str = "×";
+/// The mark a pane asking for attention wears (#97): in the toast's stead on
+/// a flashing strip, and in the censuses that keep hidden panes accounted for
+/// once the toast has been dismissed.
+const NOTIFY_MARK: &str = "!";
 
 /// How a single pane is dressed. Every pane draws the same chrome; the kind
 /// selects the colours and how much of the title the pane has room to say.
@@ -134,6 +147,10 @@ enum Pane {
     Preview,
     /// The preview that the most recent promotion demoted.
     Demoted,
+    /// A preview whose terminal has asked for attention (#97): the demotion
+    /// idiom's lifted background, with the warning border a held pane wears,
+    /// because this one is asking rather than settling.
+    Notify,
     DragMasterSource,
     DragMasterTarget,
     DragPreviewSource,
@@ -254,6 +271,9 @@ pub struct Deck<'a> {
     pub projects: &'a [Project],
     /// Which terminal is master, how the rest stack, and whether zoom is on.
     pub state: &'a DeckState,
+    /// What the terminals have asked for and has not been seen (#97). Read
+    /// only: the renderer flashes, lists and marks, and changes nothing.
+    pub notifies: &'a Notifications,
     /// Share of the width given to the master pane.
     pub master_ratio: f64,
     /// Wall clock used to age exit timestamps and the demotion highlight.

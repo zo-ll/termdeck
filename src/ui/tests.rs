@@ -7,25 +7,45 @@ use ratatui::{
 
 use super::{
     ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, HINT, IDLE_BORDER,
-    SEPARATOR, STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
+    Notifications, SEPARATOR, STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
 };
 use crate::{
     contracts::{
-        ActionCommand, Project, ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata,
-        TerminalStatus,
+        ActionCommand, NotifyKind, Project, ScrollbackPosition, TerminalEngine, TerminalId,
+        TerminalMetadata, TerminalStatus, Timestamp,
     },
     engine::FakeEngine,
 };
 
+/// A deck with nothing pending: what every canvas that predates #97 draws.
+fn quiet() -> &'static Notifications {
+    static QUIET: std::sync::OnceLock<Notifications> = std::sync::OnceLock::new();
+    QUIET.get_or_init(Notifications::new)
+}
+
 /// Renders one reference canvas at the given size.
 fn render(engine: &FakeEngine, state: &DeckState, size: (u16, u16)) -> (Buffer, Option<Position>) {
+    render_at(engine, state, quiet(), fixture::NOW, size)
+}
+
+/// The same canvas with notifications pending, at a chosen frame of their
+/// windows (#97). Time is an input here exactly as it is in the deck: every
+/// keyframe below is one call with a different `now`.
+fn render_at(
+    engine: &FakeEngine,
+    state: &DeckState,
+    notifies: &Notifications,
+    now: Timestamp,
+    size: (u16, u16),
+) -> (Buffer, Option<Position>) {
     let projects = fixture::projects();
     let deck = Deck {
         workspace: "idp",
         projects: &projects,
         state,
+        notifies,
         master_ratio: state.master_ratio(),
-        now: fixture::NOW,
+        now,
     };
     let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
     terminal
@@ -50,6 +70,7 @@ fn pane_hit_testing_follows_the_rendered_layout() {
         workspace: "idp",
         projects: &projects,
         state,
+        notifies: quiet(),
         master_ratio: state.master_ratio(),
         now: fixture::NOW,
     };
@@ -89,6 +110,7 @@ fn pane_cell_measures_from_the_viewport_origin() {
             workspace: "idp",
             projects,
             state,
+            notifies: quiet(),
             master_ratio: state.master_ratio(),
             now: fixture::NOW,
         }
@@ -427,6 +449,7 @@ fn a_folded_strip_is_hit_tested_but_has_nothing_to_scroll() {
         workspace: "idp",
         projects: &projects,
         state: &state,
+        notifies: quiet(),
         master_ratio: state.master_ratio(),
         now: fixture::NOW,
     };
@@ -445,6 +468,7 @@ fn deck_for<'a>(projects: &'a [Project], state: &'a DeckState) -> Deck<'a> {
         workspace: "idp",
         projects,
         state,
+        notifies: quiet(),
         master_ratio: state.master_ratio(),
         now: fixture::NOW,
     }
@@ -1323,6 +1347,7 @@ fn a_title_with_no_room_for_the_command_drops_its_separator_too() {
                 workspace: "w",
                 projects: &projects,
                 state: &DeckState::new(1),
+                notifies: quiet(),
                 master_ratio: super::DEFAULT_MASTER_RATIO,
                 now: fixture::NOW,
             }
@@ -1603,6 +1628,13 @@ fn zoom_and_an_empty_stack_agree_on_the_master() {
     assert!(!screen.contains("hidden:"), "{screen}");
     assert!(!screen.contains("ZOOM"), "{screen}");
     assert_eq!(divider_column(&zoomed_buffer), None);
+}
+
+/// A zoomed deck of `count` synthetic terminals.
+fn zoomed_long(count: usize) -> DeckState {
+    let mut state = reference_deck(count);
+    state.apply(&ActionCommand::ToggleZoom, &synthetic(count), fixture::NOW);
+    state
 }
 
 /// A synthetic workspace of `count` terminals.
@@ -1960,4 +1992,246 @@ fn too_few_rows_for_a_preview_also_falls_back() {
 
     assert_eq!(text(&short).matches('┌').count(), 1);
     assert_eq!(text(&tall).matches('┌').count(), 2);
+}
+
+// #97 — terminal notifications.
+//
+// Every frame below is one render at a chosen `now`, so the flash is pinned
+// by keyframes rather than by waiting: nothing here reads a clock.
+
+/// Milliseconds after the reference canvas's own wall clock.
+fn at(millis: u64) -> Timestamp {
+    Timestamp {
+        unix_millis: fixture::NOW.unix_millis + millis,
+    }
+}
+
+fn message(body: &str) -> NotifyKind {
+    NotifyKind::Message {
+        title: String::new(),
+        body: body.to_owned(),
+    }
+}
+
+/// The bell rings in app's folded strip at t=0; backend, the one open
+/// preview, is sent an explicit message two seconds later. Nothing is the
+/// master, so nothing is dropped.
+fn notified() -> Notifications {
+    let mut notifies = Notifications::new();
+    assert!(notifies.record(&TerminalId::new("app"), None, NotifyKind::Attention, at(0)));
+    assert!(notifies.record(
+        &TerminalId::new("backend"),
+        None,
+        message("tests passed"),
+        at(2_000)
+    ));
+    notifies
+}
+
+#[test]
+fn notify_keyframes_match_the_reference_canvases() {
+    let notifies = notified();
+    let engine = fixture::frontend_active();
+
+    // t=0: the bell alone, on the folded strip it rang in.
+    let (zero, _) = render_at(&engine, &collapsed(), &notifies, at(0), (144, 42));
+    assert_snapshot("notify-flash-t0", &zero);
+
+    // t=2s: the strip is still flashing and the message has just armed the
+    // open preview beside it.
+    let (two, _) = render_at(&engine, &collapsed(), &notifies, at(2_000), (144, 42));
+    assert_snapshot("notify-flash-t2", &two);
+
+    // t=4s: the bell's window has passed and the strip has settled; the
+    // message, two seconds younger, is still asking.
+    let (four, _) = render_at(&engine, &collapsed(), &notifies, at(4_000), (144, 42));
+    assert_snapshot("notify-flash-t4", &four);
+}
+
+/// The chrome the keyframes above draw, read as colours rather than glyphs.
+#[test]
+fn a_notified_pane_flashes_in_the_demotion_idiom_and_then_settles() {
+    let notifies = notified();
+    let engine = fixture::frontend_active();
+    let quiet_frame = render(&engine, &collapsed(), (144, 42)).0;
+
+    let (two, _) = render_at(&engine, &collapsed(), &notifies, at(2_000), (144, 42));
+    // The open preview takes the warning border on the demotion's lifted
+    // background: the same idiom, saying "answer me" rather than "settled".
+    assert_eq!(two[(100u16, 0u16)].fg, WARNING);
+    assert_eq!(two[(103u16, 1u16)].bg, DEMOTED_BG);
+    // A strip cannot lift a background it already sits on, so it inverts.
+    let strip = text(&two)
+        .lines()
+        .position(|line| line.contains("3 app"))
+        .expect("app's strip") as u16;
+    assert_eq!(two[(102u16, strip)].bg, WARNING);
+    assert_eq!(two[(102u16, strip)].fg, super::CANVAS);
+    assert!(
+        text(&two).contains("▸ 3 app · ! · attention"),
+        "{}",
+        text(&two)
+    );
+
+    // t=4s: the bell has settled back into an ordinary strip, and only the
+    // younger message is still flashing.
+    let (four, _) = render_at(&engine, &collapsed(), &notifies, at(4_000), (144, 42));
+    assert_eq!(four[(102u16, strip)].bg, DEMOTED_BG);
+    assert_eq!(four[(100u16, 0u16)].fg, WARNING, "the message is younger");
+
+    // t=6s: everything has settled, and the canvas is the one the deck drew
+    // before any of it — a flash leaves nothing behind on a drawn pane.
+    let (six, _) = render_at(&engine, &collapsed(), &notifies, at(6_000), (144, 42));
+    assert_eq!(text(&six), text(&quiet_frame));
+}
+
+/// A notification for a pane the layout does not draw has nowhere to flash,
+/// so it goes to the toast: the quit confirmation's shape without its
+/// authority. The master keeps its cursor and the deck is not dimmed.
+#[test]
+fn a_hidden_pane_notifies_through_a_toast_that_takes_no_focus() {
+    let mut notifies = Notifications::new();
+    notifies.record(
+        &TerminalId::new("worker"),
+        None,
+        NotifyKind::Attention,
+        at(0),
+    );
+    notifies.record(
+        &TerminalId::new("backend"),
+        None,
+        message("build failed"),
+        at(2_000),
+    );
+    let engine = fixture::frontend_active();
+
+    let (buffer, cursor) = render_at(&engine, &zoomed(), &notifies, at(3_000), (144, 42));
+
+    assert_snapshot("notify-toast", &buffer);
+    let screen = text(&buffer);
+    // The quit confirmation's 52 columns, centred like it, and as tall as
+    // the batch it is listing: two notifications, so rows 18..23.
+    assert_eq!(buffer[(46u16, 18u16)].symbol(), "┌");
+    assert_eq!(buffer[(97u16, 23u16)].symbol(), "┘");
+    assert_eq!(buffer[(46u16, 18u16)].fg, WARNING, "it is not the focus");
+    assert!(screen.contains("2 notifications"), "{screen}");
+    // Newest first, each with its own age off the injected clock.
+    let backend = screen
+        .find("2 backend · build failed · 1s")
+        .expect("the message");
+    let worker = screen.find("4 worker · attention · 3s").expect("the bell");
+    assert!(backend < worker, "{screen}");
+    // The master pane behind it keeps its cursor and its colours: a toast
+    // never takes the focus a modal does.
+    assert_eq!(cursor, Some(Position::new(3, 29)));
+    assert_eq!(buffer[(0u16, 0u16)].fg, ACCENT);
+    assert_eq!(buffer[(5u16, 1u16)].fg, super::MASTER_FG);
+}
+
+/// The batch is a list, not a queue: four newest and a count of the rest.
+#[test]
+fn the_toast_lists_four_and_counts_the_rest() {
+    let projects = synthetic(8);
+    let mut notifies = Notifications::new();
+    for (index, project) in projects.iter().enumerate().skip(1) {
+        notifies.record(
+            &project.terminal,
+            None,
+            message("done"),
+            at(index as u64 * 100),
+        );
+    }
+    let state = zoomed_long(8);
+    let engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    let deck = Deck {
+        workspace: "idp",
+        projects: &projects,
+        state: &state,
+        notifies: &notifies,
+        master_ratio: state.master_ratio(),
+        now: at(1_000),
+    };
+    let mut terminal = Terminal::new(TestBackend::new(144, 42)).unwrap();
+    terminal
+        .draw(|frame| deck.render(&engine as &dyn TerminalEngine, frame))
+        .unwrap();
+    let screen = text(terminal.backend().buffer());
+
+    assert!(screen.contains("7 notifications"), "{screen}");
+    // Newest first: t8 down to t5, then the count.
+    for listed in ["8 t8 · done", "7 t7 · done", "6 t6 · done", "5 t5 · done"] {
+        assert!(screen.contains(listed), "{listed} missing from {screen}");
+    }
+    assert!(!screen.contains("4 t4 · done"), "{screen}");
+    assert!(screen.contains("+3 more"), "{screen}");
+}
+
+/// The toast is dismissible and the flash settles, so the censuses are what
+/// keeps a hidden pane accounted for afterwards: `3!` among the zoom dots,
+/// and a marked chip in the narrow fallback's pane strip.
+#[test]
+fn the_censuses_keep_a_dismissed_notification_honest() {
+    let mut notifies = Notifications::new();
+    notifies.record(
+        &TerminalId::new("backend"),
+        None,
+        message("tests passed"),
+        at(0),
+    );
+    let engine = fixture::frontend_active();
+
+    let (zoom, _) = render_at(&engine, &zoomed(), &notifies, at(0), (144, 42));
+    assert!(text(&zoom).contains("hidden: 2! 3✕ 4○"), "{}", text(&zoom));
+
+    // Dismissed: the toast goes, the mark stays, and the deck behind it is
+    // otherwise the canvas it always was.
+    notifies.dismiss(at(1_000));
+    let (dismissed, _) = render_at(&engine, &zoomed(), &notifies, at(2_000), (144, 42));
+    let screen = text(&dismissed);
+    assert!(!screen.contains("notification"), "{screen}");
+    assert!(screen.contains("hidden: 2! 3✕ 4○"), "{screen}");
+
+    // The narrow fallback hides every pane but the master, so its chips are
+    // the only census it has.
+    let (narrow, _) = render_at(&engine, &reference_deck(4), &notifies, at(2_000), (84, 22));
+    let strip: String = (0..84)
+        .map(|column| narrow[(column, 0u16)].symbol())
+        .collect();
+    assert!(strip.contains("2 backend !"), "{strip}");
+    assert_eq!(narrow[(14u16, 0u16)].fg, WARNING);
+
+    // Being seen is what clears it: promoting the pane takes the mark.
+    notifies.clear(&TerminalId::new("backend"));
+    let (seen, _) = render_at(&engine, &zoomed(), &notifies, at(2_000), (144, 42));
+    assert!(text(&seen).contains("hidden: 2● 3✕ 4○"), "{}", text(&seen));
+}
+
+/// A preview the stack column has scrolled past is as hidden as a zoomed one.
+#[test]
+fn a_preview_outside_the_stack_window_notifies_through_the_toast() {
+    let projects = synthetic(8);
+    let state = expanded(8);
+    let mut notifies = Notifications::new();
+    // The column holds three open previews, so t8 is well past its end.
+    notifies.record(&projects[7].terminal, None, message("done"), at(0));
+    let engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    let deck = Deck {
+        workspace: "idp",
+        projects: &projects,
+        state: &state,
+        notifies: &notifies,
+        master_ratio: state.master_ratio(),
+        now: at(0),
+    };
+    assert_eq!(deck.stack_window(SCREEN).visible, 3);
+    let mut terminal = Terminal::new(TestBackend::new(144, 42)).unwrap();
+    terminal
+        .draw(|frame| deck.render(&engine as &dyn TerminalEngine, frame))
+        .unwrap();
+
+    assert!(
+        text(terminal.backend().buffer()).contains("8 t8 · done"),
+        "{}",
+        text(terminal.backend().buffer())
+    );
 }

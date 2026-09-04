@@ -1,4 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use alacritty_terminal::{
     event::{Event, EventListener},
@@ -19,19 +22,29 @@ pub struct VtFrameAdapter {
     term: Term<PtyReplyListener>,
     parser: Processor,
     replies: Rc<RefCell<Vec<u8>>>,
+    bells: Rc<Cell<u32>>,
     revision: u64,
 }
 
 /// Alacritty asks its listener to return answers to terminal queries such as
 /// DSR (`CSI 6 n`). Those bytes belong on this terminal's PTY, not the outer
 /// UI terminal.
+///
+/// It also counts BEL, which the emulator already decodes for us: a bell is
+/// the one notification an untaught tool sends for free (#97), and counting
+/// it here needs no parser of our own.
 #[derive(Clone)]
-struct PtyReplyListener(Rc<RefCell<Vec<u8>>>);
+struct PtyReplyListener {
+    replies: Rc<RefCell<Vec<u8>>>,
+    bells: Rc<Cell<u32>>,
+}
 
 impl EventListener for PtyReplyListener {
     fn send_event(&self, event: Event) {
-        if let Event::PtyWrite(reply) = event {
-            self.0.borrow_mut().extend(reply.bytes());
+        match event {
+            Event::PtyWrite(reply) => self.replies.borrow_mut().extend(reply.bytes()),
+            Event::Bell => self.bells.set(self.bells.get().saturating_add(1)),
+            _ => {}
         }
     }
 }
@@ -40,6 +53,7 @@ impl VtFrameAdapter {
     pub fn new(terminal: TerminalId, size: ScreenSize) -> Self {
         let dimensions = VtSize::from(size);
         let replies = Rc::new(RefCell::new(Vec::new()));
+        let bells = Rc::new(Cell::new(0));
         Self {
             terminal,
             term: Term::new(
@@ -48,10 +62,14 @@ impl VtFrameAdapter {
                     ..Config::default()
                 },
                 &dimensions,
-                PtyReplyListener(Rc::clone(&replies)),
+                PtyReplyListener {
+                    replies: Rc::clone(&replies),
+                    bells: Rc::clone(&bells),
+                },
             ),
             parser: Processor::new(),
             replies,
+            bells,
             revision: 0,
         }
     }
@@ -67,6 +85,13 @@ impl VtFrameAdapter {
     /// queries, ready to be written to the same child PTY.
     pub fn take_pty_replies(&self) -> Vec<u8> {
         std::mem::take(&mut *self.replies.borrow_mut())
+    }
+
+    /// Takes the bells the child rang since the last call (#97). The count is
+    /// taken rather than read so one drain raises one notification, however
+    /// many bells a single burst of output carried.
+    pub fn take_bells(&self) -> u32 {
+        self.bells.replace(0)
     }
 
     pub fn resize(&mut self, size: ScreenSize) -> TerminalFrame {
@@ -323,6 +348,26 @@ mod tests {
 
     fn adapter(size: ScreenSize) -> VtFrameAdapter {
         VtFrameAdapter::new(TerminalId::new("recording"), size)
+    }
+
+    /// #97: BEL is the one notification an untaught tool sends for free, and
+    /// the emulator already decodes it. The count is taken, so one drain
+    /// raises one notification however many bells the burst carried, and the
+    /// bell itself leaves no cell behind.
+    #[test]
+    fn bells_are_counted_and_taken_rather_than_drawn() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+
+        let frame = adapter.feed(b"hi\x07\x07");
+
+        assert_eq!(adapter.take_bells(), 2);
+        assert_eq!(adapter.take_bells(), 0, "taken, not read");
+        assert!(matches!(
+            frame.cell(2, 0).unwrap().content,
+            CellContent::Empty
+        ));
+        adapter.feed(b"quiet");
+        assert_eq!(adapter.take_bells(), 0, "output alone rings nothing");
     }
 
     #[test]
