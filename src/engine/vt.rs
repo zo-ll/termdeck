@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use alacritty_terminal::{
     event::{Event, EventListener},
     grid::{Dimensions, Scroll},
+    index::Line,
     term::{Config, Term, TermMode, cell::Flags, color::Colors},
     vte::ansi::{Color, NamedColor, Processor},
 };
@@ -144,6 +145,28 @@ impl VtFrameAdapter {
     /// wheel as SGR mouse reports, without it as cursor keys (#74).
     pub fn mouse_reporting(&self) -> bool {
         self.term.mode().intersects(TermMode::MOUSE_MODE)
+    }
+
+    /// The retained primary-screen lines, oldest to newest.
+    pub fn history_lines(&self, max: usize) -> Vec<String> {
+        if self.alt_screen() || max == 0 {
+            return Vec::new();
+        }
+        let grid = self.term.grid();
+        let history = grid.history_size();
+        let start = grid.total_lines().saturating_sub(max);
+        (start..grid.total_lines())
+            .map(|line| {
+                let mut text = String::new();
+                for cell in &grid[Line(line as i32 - history as i32)] {
+                    if !cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                        text.push(cell.c);
+                        text.extend(cell.zerowidth().unwrap_or_default());
+                    }
+                }
+                text.trim_end().to_owned()
+            })
+            .collect()
     }
 }
 
@@ -382,6 +405,23 @@ mod tests {
         assert_eq!(adapter.scrollback_position().lines_below, 0);
         adapter.scroll(ScrollCommand::Up(1));
         assert_eq!(adapter.scrollback_position().lines_below, 1);
+    }
+
+    #[test]
+    fn history_lines_include_retained_output_beyond_the_viewport() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+        adapter.feed(b"zero\r\none\r\ntwo\r\nthree\r\n");
+
+        let history = adapter.history_lines(16);
+        assert!(history.len() > 2, "history: {history:?}");
+        assert!(
+            history.iter().any(|line| line.contains("zero")),
+            "history: {history:?}"
+        );
+        assert_eq!(
+            adapter.history_lines(1),
+            vec![history.last().unwrap().clone()]
+        );
     }
 
     /// REPRO (#74): a full-screen app owns the grid, so termdeck's own

@@ -230,12 +230,21 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let _panic = PanicGuard::install();
     let _signals = SignalGuard::install()?;
     let outer = OuterTerminal::enter()?;
+    // Bind after the outer terminal is active, then pass this inner-session
+    // rendezvous to every child PTY.  Explicit CommandBuilder values replace
+    // any outer TERMDECK_* values for nested sessions.
+    #[cfg(unix)]
+    let mut control = crate::ctl::Listener::bind()?;
     let mut size = screen_size()?;
     // The workspace opened this list; `^g a` can lengthen it, so the session
     // owns it from here (#50 A3).
     let mut projects = workspace.projects.clone();
     // The configuration seeds the split; the divider owns it from there.
     let mut deck = DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get());
+    #[cfg(unix)]
+    let mut engine = spawn_terminals_with_socket(&projects, &deck, size, control.path())
+        .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
+    #[cfg(not(unix))]
     let mut engine = spawn_terminals(&projects, &deck, size)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
@@ -266,6 +275,17 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         }
         dirty |= !engine.drain_events().is_empty();
         dirty |= input.expire(&mut deck, &projects, now());
+        #[cfg(unix)]
+        {
+            dirty |= control.poll(crate::ctl::State {
+                workspace,
+                projects: &projects,
+                deck: &deck,
+                engine: &engine,
+                size,
+                sheet_open: sheet.is_some(),
+            })?;
+        }
 
         for event in keys.read(POLL_INTERVAL)? {
             dirty = true;
@@ -309,8 +329,19 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 match reaction {
                     Some(PickerReaction::Launch) => {
                         for project in chosen(open_sheet, &projects) {
-                            match add_terminal(&mut engine, project.clone(), &projects, &deck, size)
-                            {
+                            #[cfg(unix)]
+                            let result = add_terminal_with_socket(
+                                &mut engine,
+                                project.clone(),
+                                &projects,
+                                &deck,
+                                size,
+                                control.path(),
+                            );
+                            #[cfg(not(unix))]
+                            let result =
+                                add_terminal(&mut engine, project.clone(), &projects, &deck, size);
+                            match result {
                                 Ok(()) => {
                                     projects.push(project);
                                     deck.push_terminal();

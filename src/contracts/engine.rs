@@ -55,4 +55,8 @@ pub trait TerminalEngine {
     fn frame(&self, terminal: &TerminalId) -> Option<&TerminalFrame>;
     fn status(&self, terminal: &TerminalId) -> Option<&TerminalStatus>;
     fn metadata(&self, terminal: &TerminalId) -> Option<&TerminalMetadata>;
+    /// Returns up to `max` retained scrollback lines, oldest to newest.
+    fn history_lines(&self, _terminal: &TerminalId, _max: usize) -> Option<Vec<String>> {
+        None
+    }
 }
