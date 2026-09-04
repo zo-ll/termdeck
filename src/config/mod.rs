@@ -222,6 +222,7 @@ fn validate(raw: RawConfig, source: &Path) -> Result<Config, ConfigError> {
                     path.display()
                 )));
             }
+            let shell_hook = project.command.is_none();
             let command = project
                 .command
                 .unwrap_or_else(|| raw.defaults.command.clone());
@@ -234,6 +235,7 @@ fn validate(raw: RawConfig, source: &Path) -> Result<Config, ConfigError> {
                 terminal: TerminalId::new(project.name),
                 path,
                 command,
+                shell_hook,
             });
         }
         if projects.is_empty() {
@@ -371,6 +373,22 @@ mod tests {
         let workspace = &loaded.workspaces["test"];
         assert_eq!(workspace.projects.len(), 1);
         assert_eq!(workspace.projects[0].path, root.join("frontend"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_default_commands_are_eligible_for_the_shell_hook() {
+        let root = test_root();
+        fs::create_dir_all(root.join("default")).unwrap();
+        fs::create_dir_all(root.join("custom")).unwrap();
+        let config = write_config(
+            &root,
+            "      - name: default\n        cwd: default\n      - name: custom\n        cwd: custom\n        command: [bash]\n",
+        );
+
+        let projects = &load(config).unwrap().workspaces["test"].projects;
+        assert!(projects[0].shell_hook);
+        assert!(!projects[1].shell_hook);
         fs::remove_dir_all(root).unwrap();
     }
 

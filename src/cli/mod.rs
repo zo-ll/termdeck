@@ -271,6 +271,7 @@ fn project(path: &Path, prefix: &str) -> Project {
         terminal: TerminalId::new(name),
         path: path.to_path_buf(),
         command: vec!["bash".to_owned(), "-l".to_owned()],
+        shell_hook: true,
     }
 }
 

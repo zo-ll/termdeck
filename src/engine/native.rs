@@ -13,6 +13,102 @@ use crate::{
 };
 
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+const NOTIFY_PREFIX: &[u8] = b"\x1b]7777;termdeck;finished;";
+const NOTIFY_PAYLOAD_CAP: usize = 512;
+
+/// Removes complete private completion OSCs while preserving every other byte.
+fn scan_notify(bytes: &[u8]) -> (Vec<NotifyKind>, Vec<u8>) {
+    let mut notifies = Vec::new();
+    let mut passthrough = Vec::with_capacity(bytes.len());
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let Some(relative) = bytes[cursor..]
+            .windows(NOTIFY_PREFIX.len())
+            .position(|window| window == NOTIFY_PREFIX)
+        else {
+            passthrough.extend_from_slice(&bytes[cursor..]);
+            break;
+        };
+        let start = cursor + relative;
+        passthrough.extend_from_slice(&bytes[cursor..start]);
+        let payload_start = start + NOTIFY_PREFIX.len();
+        let limit = (payload_start + NOTIFY_PAYLOAD_CAP + 2).min(bytes.len());
+        let mut end = None;
+        let mut next = payload_start;
+        while next < limit {
+            if bytes[next] == b'\x07' {
+                end = Some((next, next + 1));
+                break;
+            }
+            if bytes[next] == b'\x1b' && bytes.get(next + 1) == Some(&b'\\') {
+                end = Some((next, next + 2));
+                break;
+            }
+            next += 1;
+        }
+        let Some((payload_end, after)) = end else {
+            passthrough.extend_from_slice(&bytes[start..]);
+            break;
+        };
+        if let Some(kind) = parse_notify(&bytes[payload_start..payload_end]) {
+            notifies.push(kind);
+        } else {
+            passthrough.extend_from_slice(&bytes[start..after]);
+        }
+        cursor = after;
+    }
+    (notifies, passthrough)
+}
+
+fn scan_notify_chunk(carry: &mut Vec<u8>, bytes: &[u8]) -> (Vec<NotifyKind>, Vec<u8>) {
+    carry.extend_from_slice(bytes);
+    let split = notify_partial_start(carry).unwrap_or(carry.len());
+    let tail = carry.split_off(split);
+    let (notifies, passthrough) = scan_notify(carry);
+    *carry = tail;
+    (notifies, passthrough)
+}
+
+/// Holds only a suffix which could still be our OSC. Once it exceeds the
+/// bounded payload it is passed through unchanged on the next scan.
+fn notify_partial_start(bytes: &[u8]) -> Option<usize> {
+    if let Some(start) = bytes
+        .windows(NOTIFY_PREFIX.len())
+        .rposition(|window| window == NOTIFY_PREFIX)
+    {
+        let tail = &bytes[start..];
+        if tail.len() <= NOTIFY_PREFIX.len() + NOTIFY_PAYLOAD_CAP + 1
+            && !tail.windows(2).any(|pair| pair == b"\x1b\\")
+            && !tail.contains(&b'\x07')
+        {
+            return Some(start);
+        }
+    }
+    let start = bytes.iter().rposition(|byte| *byte == b'\x1b')?;
+    NOTIFY_PREFIX.starts_with(&bytes[start..]).then_some(start)
+}
+
+fn parse_notify(payload: &[u8]) -> Option<NotifyKind> {
+    let payload = std::str::from_utf8(payload).ok()?;
+    let code = payload.strip_prefix("code=")?;
+    let (code, payload) = code.split_once(";secs=")?;
+    let (secs, cmd) = payload.split_once(";cmd=")?;
+    let code = code.parse::<i32>().ok()?;
+    let secs = secs.parse::<u64>().ok()?;
+    let title: String = cmd
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(48)
+        .collect();
+    Some(NotifyKind::Message {
+        title,
+        body: if code == 0 {
+            format!("done · {secs}s")
+        } else {
+            format!("exit {code} · {secs}s")
+        },
+    })
+}
 
 struct NativeTerminal {
     project: Project,
@@ -24,6 +120,7 @@ struct NativeTerminal {
     metadata: TerminalMetadata,
     started: Instant,
     last_output: Option<Instant>,
+    notify_carry: Vec<u8>,
 }
 
 impl NativeTerminal {
@@ -48,6 +145,7 @@ impl NativeTerminal {
             status: TerminalStatus::Running,
             started: Instant::now(),
             last_output: None,
+            notify_carry: Vec::new(),
         })
     }
 
@@ -94,18 +192,32 @@ impl NativeTerminal {
         ]
     }
 
+    fn flush_notify_carry(&mut self, events: &mut Vec<EngineEvent>) {
+        if self.notify_carry.is_empty() {
+            return;
+        }
+        let bytes = std::mem::take(&mut self.notify_carry);
+        self.frame = self.adapter.feed(&bytes);
+        self.refresh_viewport();
+        events.push(EngineEvent::FrameReady(self.frame.clone()));
+        events.push(EngineEvent::MetadataChanged {
+            terminal: self.frame.terminal.clone(),
+            metadata: self.metadata.clone(),
+        });
+    }
+
     fn handle_pty_event(&mut self, event: PtyEvent, events: &mut Vec<EngineEvent>) {
         match event {
             PtyEvent::Output { terminal, bytes } if self.owns(&terminal) => {
+                let raw_len = bytes.len();
+                let (notifies, bytes) = scan_notify_chunk(&mut self.notify_carry, &bytes);
                 // Feeding at Alacritty's tail follows output itself; a
                 // deliberate history offset remains untouched. Metadata still
                 // refreshes below even when the visible cells do not change.
                 self.frame = self.adapter.feed(&bytes);
                 self.refresh_viewport();
-                self.metadata.bytes_written = self
-                    .metadata
-                    .bytes_written
-                    .saturating_add(bytes.len() as u64);
+                self.metadata.bytes_written =
+                    self.metadata.bytes_written.saturating_add(raw_len as u64);
                 self.last_output = Some(Instant::now());
                 self.refresh_timing();
                 events.push(EngineEvent::FrameReady(self.frame.clone()));
@@ -122,6 +234,10 @@ impl NativeTerminal {
                         kind: NotifyKind::Attention,
                     });
                 }
+                events.extend(notifies.into_iter().map(|kind| EngineEvent::Notify {
+                    terminal: terminal.clone(),
+                    kind,
+                }));
                 let replies = self.adapter.take_pty_replies();
                 if !replies.is_empty()
                     && let Some(transport) = self.transport.as_mut()
@@ -131,6 +247,7 @@ impl NativeTerminal {
                 }
             }
             PtyEvent::StatusChanged { terminal, status } if self.owns(&terminal) => {
+                self.flush_notify_carry(events);
                 events.extend(self.status_changed(status));
             }
             _ => {}
@@ -168,6 +285,7 @@ impl NativeTerminal {
         self.transport = Some(transport);
         self.started = Instant::now();
         self.last_output = None;
+        self.notify_carry.clear();
 
         Ok(vec![
             EngineEvent::StatusChanged {
@@ -513,7 +631,55 @@ mod tests {
         TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
     };
 
-    use super::{NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter};
+    use super::{
+        NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter, scan_notify,
+        scan_notify_chunk,
+    };
+
+    #[test]
+    fn private_notify_osc_is_consumed_and_sanitized() {
+        let bytes = b"left\x1b]7777;termdeck;finished;code=1;secs=12;cmd=bad\x1btitle\x07right";
+        let (notifies, passthrough) = scan_notify(bytes);
+        assert_eq!(passthrough, b"leftright");
+        assert_eq!(
+            notifies,
+            [NotifyKind::Message {
+                title: "badtitle".to_owned(),
+                body: "exit 1 · 12s".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn notify_scanner_reassembles_every_split_without_eating_hostile_output() {
+        let valid = b"\x1b]7777;termdeck;finished;code=0;secs=3;cmd=build\x1b\\";
+        let hostile = b"\x1b]7777;termdeck;finished;nope\x07";
+        let mut source = b"one".to_vec();
+        source.extend_from_slice(valid);
+        source.extend_from_slice(hostile);
+        source.extend_from_slice(b"two\x1b]777;notify;x\x07three");
+        for split in 1..source.len() {
+            let mut carry = Vec::new();
+            let (mut notifies, mut output) = scan_notify_chunk(&mut carry, &source[..split]);
+            let (later, rest) = scan_notify_chunk(&mut carry, &source[split..]);
+            notifies.extend(later);
+            output.extend(rest);
+            output.extend(carry);
+            assert_eq!(
+                notifies,
+                [NotifyKind::Message {
+                    title: "build".to_owned(),
+                    body: "done · 3s".to_owned(),
+                }],
+                "split {split}"
+            );
+            assert_eq!(
+                output,
+                [b"one".as_slice(), hostile, b"two\x1b]777;notify;x\x07three"].concat(),
+                "split {split}"
+            );
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -618,6 +784,7 @@ mod tests {
             terminal: terminal.clone(),
             path: PathBuf::from("/"),
             command: vec!["/bin/sh".to_owned()],
+            shell_hook: false,
         }];
         let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
         engine.dispatch(EngineCommand::Input {
@@ -819,6 +986,121 @@ mod tests {
         engine.dispatch(EngineCommand::Shutdown);
     }
 
+    /// The generated startup file is the whole feature boundary: this uses a
+    /// real interactive bash, not a synthetic OSC writer.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn bash_hook_reports_errors_and_long_completions() {
+        let terminal = TerminalId::new("bash-hook");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec!["/usr/bin/bash".to_owned()],
+            shell_hook: true,
+        }];
+        let mut engine = NativeEngine::spawn_sized_with_socket(
+            &projects,
+            &[ScreenSize::new(80, 4)],
+            std::path::Path::new("/tmp/termdeck-hook-test.sock"),
+        )
+        .unwrap();
+        engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: b"false\nTERMDECK_NOTIFY_LONG_SECS=0\nsleep 0.01\n".to_vec(),
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut messages = Vec::new();
+        while Instant::now() < deadline && messages.len() < 3 {
+            messages.extend(
+                engine
+                    .drain_events()
+                    .into_iter()
+                    .filter_map(|event| match event {
+                        EngineEvent::Notify {
+                            terminal: rung,
+                            kind: NotifyKind::Message { title, body },
+                        } if rung == terminal => Some((title, body)),
+                        _ => None,
+                    }),
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let frame = frame_text(engine.frame(&terminal).unwrap());
+        assert!(
+            messages
+                .iter()
+                .any(|(title, body)| title == "false" && body.starts_with("exit 1 · ")),
+            "{messages:?}; {frame:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|(title, body)| title == "sleep 0.01" && body.starts_with("done · ")),
+            "{messages:?}; {frame:?}"
+        );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn zsh_hook_reports_errors_when_zsh_is_available() {
+        if std::process::Command::new("zsh")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return;
+        }
+        let terminal = TerminalId::new("zsh-hook");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec!["zsh".to_owned()],
+            shell_hook: true,
+        }];
+        let mut engine = NativeEngine::spawn_sized_with_socket(
+            &projects,
+            &[ScreenSize::new(80, 4)],
+            std::path::Path::new("/tmp/termdeck-hook-test.sock"),
+        )
+        .unwrap();
+        engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: b"false\nTERMDECK_NOTIFY_LONG_SECS=0\nsleep 0.01\n".to_vec(),
+        });
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut messages = Vec::new();
+        while Instant::now() < deadline && messages.len() < 3 {
+            messages.extend(
+                engine
+                    .drain_events()
+                    .into_iter()
+                    .filter_map(|event| match event {
+                        EngineEvent::Notify {
+                            terminal: rung,
+                            kind: NotifyKind::Message { title, body },
+                        } if rung == terminal => Some((title, body)),
+                        _ => None,
+                    }),
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            messages
+                .iter()
+                .any(|(title, body)| title == "false" && body.starts_with("exit 1 · ")),
+            "{messages:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|(title, body)| title == "sleep 0.01" && body.starts_with("done · ")),
+            "{messages:?}"
+        );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
     #[test]
     fn requires_at_least_one_terminal() {
         assert_eq!(
@@ -841,6 +1123,7 @@ mod tests {
             terminal: terminal.clone(),
             path: PathBuf::from("/"),
             command: Vec::new(),
+            shell_hook: false,
         };
         let mut adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(80, 24));
         adapter.feed(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h");
@@ -856,6 +1139,7 @@ mod tests {
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
                 last_output: None,
+                notify_carry: Vec::new(),
             }],
         };
         engine.dispatch(EngineCommand::Scroll {
@@ -924,6 +1208,7 @@ mod tests {
             terminal: terminal.clone(),
             path: PathBuf::from("/"),
             command: Vec::new(),
+            shell_hook: false,
         };
         let mut adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(4, 2));
         let frame = adapter.feed(b"0\r\n1\r\n2\r\n3\r\n");
@@ -938,6 +1223,7 @@ mod tests {
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
                 last_output: None,
+                notify_carry: Vec::new(),
             }],
         };
         engine.dispatch(EngineCommand::Scroll {
@@ -967,6 +1253,7 @@ mod tests {
             terminal,
             path: PathBuf::from("/"),
             command: vec!["/bin/sh".to_owned(), "-c".to_owned(), script.to_owned()],
+            shell_hook: false,
         }
     }
 

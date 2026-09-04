@@ -103,6 +103,26 @@ impl FakeEngine {
         }]
     }
 
+    /// Raises a rich completion message without teaching fixtures about PTY
+    /// escape sequences, just as [`Self::bell`] stands in for BEL output.
+    pub fn message(
+        &mut self,
+        terminal: &TerminalId,
+        title: impl Into<String>,
+        body: impl Into<String>,
+    ) -> Vec<EngineEvent> {
+        if !self.terminals.contains_key(terminal) {
+            return Vec::new();
+        }
+        vec![EngineEvent::Notify {
+            terminal: terminal.clone(),
+            kind: NotifyKind::Message {
+                title: title.into(),
+                body: body.into(),
+            },
+        }]
+    }
+
     /// Records output without pretending to emulate terminal parsing.
     pub fn record_output(&mut self, terminal: &TerminalId, bytes: usize) -> Option<EngineEvent> {
         let state = self.terminals.get_mut(terminal)?;
@@ -280,6 +300,17 @@ mod tests {
     };
 
     use super::FakeEngine;
+
+    #[test]
+    fn rich_message_mirrors_the_native_notify_seam() {
+        let terminal = TerminalId::new("worker");
+        let mut engine = FakeEngine::new([terminal.clone()]);
+        assert!(matches!(
+            engine.message(&terminal, "build", "done · 3s").as_slice(),
+            [EngineEvent::Notify { terminal: rung, kind: crate::contracts::NotifyKind::Message { title, body } }]
+                if rung == &terminal && title == "build" && body == "done · 3s"
+        ));
+    }
 
     #[test]
     fn respawn_resets_the_frame_and_status() {

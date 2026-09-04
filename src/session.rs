@@ -197,6 +197,7 @@ fn chosen(sheet: &SheetState, projects: &[Project]) -> Vec<Project> {
             terminal: TerminalId::new(name),
             path: instance.path.clone(),
             command: vec!["bash".to_owned(), "-l".to_owned()],
+            shell_hook: true,
         });
     }
     added
@@ -228,6 +229,7 @@ fn opened(path: &str, projects: &[Project]) -> Result<Project, crate::ctl::Respo
         terminal: TerminalId::new(picker::unique_name(&names, &base)),
         path,
         command: vec!["bash".to_owned(), "-l".to_owned()],
+        shell_hook: true,
     })
 }
 
@@ -375,6 +377,7 @@ fn workspace_of(state: &PickerState) -> Workspace {
             terminal: TerminalId::new(name),
             path,
             command: vec!["bash".to_owned(), "-l".to_owned()],
+            shell_hook: true,
         })
         .collect();
     let root = projects

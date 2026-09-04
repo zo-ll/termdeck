@@ -104,6 +104,7 @@ pub fn projects() -> Vec<Project> {
         terminal: TerminalId::new(name),
         path: PathBuf::from(HOME).join(path),
         command: command.iter().map(|part| (*part).to_owned()).collect(),
+        shell_hook: false,
     })
     .collect()
 }

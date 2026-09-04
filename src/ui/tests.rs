@@ -1374,6 +1374,7 @@ fn a_title_with_no_room_for_the_command_drops_its_separator_too() {
             terminal: TerminalId::new("a".repeat(len)),
             path: std::path::PathBuf::from("/tmp/x"),
             command: vec!["pnpm".into(), "dev".into()],
+            shell_hook: false,
         }];
         let backend = ratatui::backend::TestBackend::new(100, 30);
         let mut term = ratatui::Terminal::new(backend).unwrap();
@@ -1685,6 +1686,7 @@ fn synthetic(count: usize) -> Vec<Project> {
             terminal: TerminalId::new(format!("t{number}")),
             path: std::path::PathBuf::from(fixture::HOME).join(format!("idp/t{number}")),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         })
         .collect()
 }

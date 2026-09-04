@@ -3,6 +3,7 @@
 mod fake;
 mod native;
 pub(crate) mod pty;
+mod shell_hook;
 mod vt;
 
 pub use fake::FakeEngine;
