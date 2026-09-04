@@ -8,7 +8,10 @@ use std::{
 
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
-use crate::contracts::{Project, ScreenSize, TerminalId, TerminalStatus};
+use crate::{
+    contracts::{Project, ScreenSize, TerminalId, TerminalStatus},
+    engine::shell_hook::ShellHook,
+};
 
 const EVENT_CAPACITY: usize = 16;
 const READ_BUFFER_SIZE: usize = 4096;
@@ -36,6 +39,7 @@ pub struct PtyTransport {
     events: Option<Receiver<PtyEvent>>,
     reader: Option<JoinHandle<()>>,
     waiter: Option<JoinHandle<()>>,
+    _shell_hook: Option<ShellHook>,
 }
 
 impl PtyTransport {
@@ -56,19 +60,27 @@ impl PtyTransport {
             return Err(format!("{}: command must not be empty", project.terminal));
         };
         let mut command = CommandBuilder::new(program);
-        command.args(arguments);
+        let shell_hook = if project.shell_hook {
+            ShellHook::install(program, arguments, &mut command)?
+        } else {
+            None
+        };
+        if shell_hook.is_none() {
+            command.args(arguments);
+        }
         command.cwd(&project.path);
         if let Some(socket) = socket {
             command.env("TERMDECK_SOCK", socket);
             command.env("TERMDECK_PANE", project.terminal.to_string());
         }
-        Self::spawn_command(project.terminal.clone(), command, size)
+        Self::spawn_command(project.terminal.clone(), command, size, shell_hook)
     }
 
     fn spawn_command(
         terminal: TerminalId,
         command: CommandBuilder,
         size: ScreenSize,
+        shell_hook: Option<ShellHook>,
     ) -> Result<Self, String> {
         let pair = native_pty_system()
             .openpty(pty_size(size))
@@ -116,6 +128,7 @@ impl PtyTransport {
             events: Some(events),
             reader: Some(reader),
             waiter: Some(waiter),
+            _shell_hook: shell_hook,
         })
     }
 
@@ -321,6 +334,7 @@ mod tests {
             terminal: terminal.clone(),
             path: PathBuf::from("/"),
             command: vec!["/bin/sh".to_owned()],
+            shell_hook: false,
         };
         let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
         transport.resize(ScreenSize::new(101, 7)).unwrap();
@@ -377,6 +391,7 @@ mod tests {
                 "-c".to_owned(),
                 "sleep 30 & wait".to_owned(),
             ],
+            shell_hook: false,
         };
         let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
         let process_group = transport.process_group.unwrap();
@@ -404,6 +419,7 @@ mod tests {
                 "-c".to_owned(),
                 "printf '%s|%s\\n' \"$TERMDECK_SOCK\" \"$TERMDECK_PANE\"".to_owned(),
             ],
+            shell_hook: false,
         };
         let mut transport = PtyTransport::spawn_with_socket(
             &project,

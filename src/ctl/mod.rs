@@ -583,6 +583,7 @@ mod tests {
             terminal: TerminalId::new(name),
             path: std::env::temp_dir().join(name),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         }
     }
 

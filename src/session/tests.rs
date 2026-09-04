@@ -243,11 +243,13 @@ fn a_committed_sheet_names_its_additions_around_the_running_ones() {
             terminal: TerminalId::new("api"),
             path: PathBuf::from("/code/api"),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         },
         Project {
             terminal: TerminalId::new("web"),
             path: PathBuf::from("/code/web"),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         },
     ];
     let roots = [crate::ui::Entry::folder("code", "/code")];
@@ -297,11 +299,13 @@ fn the_open_terminals_are_listed_with_their_pane_numbers() {
             terminal: TerminalId::new("api"),
             path: PathBuf::from("/code/api"),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         },
         Project {
             terminal: TerminalId::new("web"),
             path: PathBuf::from("/code/web"),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         },
     ];
 
@@ -402,6 +406,7 @@ fn sleepers(count: usize) -> Vec<Project> {
             terminal: TerminalId::new(format!("t{number}")),
             path: PathBuf::from("/"),
             command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "sleep 30".to_owned()],
+            shell_hook: false,
         })
         .collect()
 }
@@ -699,6 +704,7 @@ fn runtime_add_uses_the_usable_terminal_height() {
         terminal: TerminalId::new("first"),
         path: PathBuf::from("/"),
         command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "sleep 30".to_owned()],
+        shell_hook: false,
     };
     let added = Project {
         terminal: TerminalId::new("added"),
@@ -733,6 +739,7 @@ fn resize_uses_narrow_chrome_for_a_short_wide_window() {
         terminal: terminal.clone(),
         path: PathBuf::from("/"),
         command: vec!["sh".to_owned()],
+        shell_hook: false,
     }];
     let mut engine = FakeEngine::new([terminal.clone()]);
     let deck = DeckState::new(1);
@@ -752,6 +759,7 @@ fn pty_size_is_the_visible_pane_interior() {
         terminal: TerminalId::new("frontend"),
         path: PathBuf::from("/"),
         command: vec!["sh".to_owned()],
+        shell_hook: false,
     };
     let deck = DeckState::new(1);
     assert_eq!(
@@ -790,11 +798,13 @@ fn visible_panes_resize_after_layout_changes() {
             terminal: TerminalId::new("first"),
             path: PathBuf::from("/"),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         },
         Project {
             terminal: TerminalId::new("second"),
             path: PathBuf::from("/"),
             command: vec!["sh".to_owned()],
+            shell_hook: false,
         },
     ];
     let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
