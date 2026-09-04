@@ -265,3 +265,9 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   deliver to claude's lane (idle) after its integration turn completes
   (never steer a working worker). If the user's composed line already
   reached claude, this is a no-op.
+- 2026-09-04: #84 integration verified (claude 758dfaf on main: close_terminal
+  -> session/lifecycle.rs, close_at+draw -> ui/deck.rs, close_column+HELP ->
+  ui/chrome.rs, tests -> session/ui tests.rs; 272 green, snapshots honest, no
+  orphans; NOT pushed). USER now steering claude directly (composer lines);
+  REFINEMENT (last-pane close -> quit-confirm modal) still pending handoff
+  when claude is clean-idle with no user-composed line.
