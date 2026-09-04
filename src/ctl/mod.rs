@@ -19,8 +19,8 @@ use serde_json::{Value, json};
 
 use crate::{
     config::Workspace,
-    contracts::{Project, ScreenSize, TerminalEngine, TerminalStatus},
-    ui::DeckState,
+    contracts::{NotifyKind, Project, ScreenSize, TerminalEngine, TerminalStatus, Timestamp},
+    ui::{DeckState, Notifications},
 };
 
 pub const SCHEMA: &str = "ctl.v1";
@@ -158,6 +158,10 @@ impl Response {
 }
 
 /// State read by the Phase 1 verbs while the session loop owns it.
+///
+/// `notify` is the one verb that writes: it lands in the session's notify
+/// state (#97), which is why the caller's pane identity and the session's
+/// clock arrive here with it. Time is an input everywhere in this feature.
 pub struct State<'a, E> {
     pub workspace: &'a Workspace,
     pub projects: &'a [Project],
@@ -165,9 +169,13 @@ pub struct State<'a, E> {
     pub engine: &'a E,
     pub size: ScreenSize,
     pub sheet_open: bool,
+    pub notifies: &'a mut Notifications,
+    /// `TERMDECK_PANE` of the calling process, when it runs inside a pane.
+    pub caller: Option<&'a str>,
+    pub now: Timestamp,
 }
 
-pub fn dispatch<E: TerminalEngine>(request: Request, state: State<'_, E>) -> Response {
+pub fn dispatch<E: TerminalEngine>(request: Request, mut state: State<'_, E>) -> Response {
     if request.schema != SCHEMA {
         return Response::error(2, "bad request: unsupported schema");
     }
@@ -231,7 +239,7 @@ pub fn dispatch<E: TerminalEngine>(request: Request, state: State<'_, E>) -> Res
         }
         "notify" => match request.msg {
             Some(message) => {
-                dispatch_notify(&message);
+                dispatch_notify(&message, &mut state);
                 Response::ok(json!({ "delivered": true }))
             }
             None => Response::error(2, "bad request: notify requires msg"),
@@ -243,9 +251,39 @@ pub fn dispatch<E: TerminalEngine>(request: Request, state: State<'_, E>) -> Res
     }
 }
 
-/// #71 owns the visual overlay.  Keeping this typed handoff here prevents ctl
-/// dispatch from becoming a second UI path before that surface lands.
-fn dispatch_notify(_message: &str) {}
+/// Routes an explicit notification into the session's notify state (#71/#97).
+///
+/// The caller names itself by running where it runs: every spawned PTY
+/// inherits `TERMDECK_PANE`, so the pane the message belongs to is the pane
+/// the connection came from.  A caller outside every pane (one holding only
+/// `TERMDECK_SOCK`) has no pane to flash, and one naming a terminal this
+/// session does not run has none either; both are dropped here.  The wire is
+/// unchanged either way: `{delivered:true}` is what shipped, and the response
+/// has never reported what the interface then did with it.
+fn dispatch_notify<E: TerminalEngine>(message: &str, state: &mut State<'_, E>) -> bool {
+    let Some(project) = state.caller.and_then(|pane| {
+        state
+            .projects
+            .iter()
+            .find(|project| project.terminal.to_string() == pane)
+    }) else {
+        return false;
+    };
+    let master = state
+        .deck
+        .active()
+        .and_then(|position| state.projects.get(position))
+        .map(|project| &project.terminal);
+    state.notifies.record(
+        &project.terminal,
+        master,
+        NotifyKind::Message {
+            title: String::new(),
+            body: message.to_owned(),
+        },
+        state.now,
+    )
+}
 
 struct Pending {
     stream: UnixStream,
@@ -294,7 +332,7 @@ impl Listener {
     /// pending until its newline arrives; no second connection is accepted in
     /// that frame.
     pub fn poll<E: TerminalEngine>(&mut self, state: State<'_, E>) -> io::Result<bool> {
-        self.poll_with(|request, _| dispatch(request, state))
+        self.poll_with(move |request, caller| dispatch(request, State { caller, ..state }))
     }
 
     /// Like [`Listener::poll`], but hands the caller's pane identity to the
@@ -506,11 +544,11 @@ mod tests {
     use crate::{
         config::Workspace,
         contracts::{
-            EngineCommand, EngineEvent, Project, ScreenSize, TerminalEngine, TerminalFrame,
-            TerminalId, TerminalMetadata, TerminalStatus,
+            EngineCommand, EngineEvent, NotifyKind, Project, ScreenSize, TerminalEngine,
+            TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
         },
         engine::FakeEngine,
-        ui::DeckState,
+        ui::{DeckState, Notifications},
     };
 
     use super::{
@@ -525,6 +563,7 @@ mod tests {
         engine: &'a FakeEngine,
         projects: &'a [Project],
         deck: &'a DeckState,
+        notifies: &'a mut Notifications,
     ) -> State<'a, FakeEngine> {
         State {
             workspace,
@@ -533,6 +572,9 @@ mod tests {
             engine,
             size: ScreenSize::new(80, 24),
             sheet_open: false,
+            notifies,
+            caller: None,
+            now: Timestamp::default(),
         }
     }
 
@@ -585,6 +627,7 @@ mod tests {
             },
         );
         let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
         let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
 
         let peek = dispatch(
@@ -601,7 +644,7 @@ mod tests {
                 paste: None,
                 keys: None,
             },
-            state(&workspace, &engine, &projects, &deck),
+            state(&workspace, &engine, &projects, &deck, &mut notifies),
         );
         let data = peek.data.unwrap();
         assert_eq!(data["lines"], serde_json::json!(["tail"]));
@@ -620,7 +663,7 @@ mod tests {
                 paste: None,
                 keys: None,
             },
-            state(&workspace, &engine, &projects, &deck),
+            state(&workspace, &engine, &projects, &deck, &mut notifies),
         );
         assert!(version.ok);
     }
@@ -663,6 +706,73 @@ mod tests {
         }
     }
 
+    /// #97: the shipped wire is untouched — `notify` still answers
+    /// `{delivered:true}` — and the message now lands in the session's notify
+    /// state, addressed to the pane the connection came from.
+    #[test]
+    fn notify_routes_the_callers_pane_into_the_notify_state() {
+        let projects = vec![project("one"), project("two")];
+        let engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+        let deck = DeckState::new(2);
+        let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
+        let mut notifies = Notifications::new();
+        let request = || Request {
+            schema: SCHEMA.to_owned(),
+            verb: "notify".to_owned(),
+            msg: Some("tests passed".to_owned()),
+            ..Default::default()
+        };
+        let call = |notifies: &'_ mut Notifications, caller| {
+            dispatch(
+                request(),
+                State {
+                    workspace: &workspace,
+                    projects: &projects,
+                    deck: &deck,
+                    engine: &engine,
+                    size: ScreenSize::new(80, 24),
+                    sheet_open: false,
+                    notifies,
+                    caller,
+                    now: Timestamp { unix_millis: 10 },
+                },
+            )
+        };
+
+        let response = call(&mut notifies, Some("two"));
+
+        assert!(response.ok);
+        assert_eq!(response.data.unwrap()["delivered"], true);
+        assert_eq!(
+            notifies
+                .pending(&TerminalId::new("two"))
+                .map(|notify| notify.kind.clone()),
+            Some(NotifyKind::Message {
+                title: String::new(),
+                body: "tests passed".to_owned(),
+            })
+        );
+
+        // The pane holding the master frame is on screen already, and a
+        // caller in no pane at all has no pane to mark. Both still deliver:
+        // the response has never reported what the interface did with it.
+        assert!(call(&mut notifies, Some("one")).ok);
+        assert!(notifies.pending(&TerminalId::new("one")).is_none());
+        assert!(call(&mut notifies, None).ok);
+        assert!(call(&mut notifies, Some("gone")).ok);
+
+        // And the argument check is where it was.
+        let missing = dispatch(
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "notify".to_owned(),
+                ..Default::default()
+            },
+            state(&workspace, &engine, &projects, &deck, &mut notifies),
+        );
+        assert_eq!(missing.error.unwrap().code, 2);
+    }
+
     #[test]
     fn socket_round_trip_and_mode_are_local() {
         let _lock = LISTENER_TEST_LOCK.lock().unwrap();
@@ -680,11 +790,12 @@ mod tests {
         let projects = vec![project("one")];
         let engine = FakeEngine::new([projects[0].terminal.clone()]);
         let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
         let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
         let mut listener = listener;
         assert!(
             listener
-                .poll(state(&workspace, &engine, &projects, &deck))
+                .poll(state(&workspace, &engine, &projects, &deck, &mut notifies))
                 .unwrap()
         );
         let mut response = String::new();
@@ -706,11 +817,12 @@ mod tests {
         let projects = vec![project("one")];
         let engine = FakeEngine::new([projects[0].terminal.clone()]);
         let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
         let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
         let mut listener = listener;
         assert!(
             listener
-                .poll(state(&workspace, &engine, &projects, &deck))
+                .poll(state(&workspace, &engine, &projects, &deck, &mut notifies))
                 .unwrap()
         );
         let mut response = String::new();
@@ -730,11 +842,12 @@ mod tests {
         let projects = vec![project("one")];
         let engine = FakeEngine::new([projects[0].terminal.clone()]);
         let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
         let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
         let mut listener = listener;
         assert!(
             listener
-                .poll(state(&workspace, &engine, &projects, &deck))
+                .poll(state(&workspace, &engine, &projects, &deck, &mut notifies))
                 .unwrap()
         );
 
@@ -744,7 +857,7 @@ mod tests {
             .unwrap();
         assert!(
             listener
-                .poll(state(&workspace, &engine, &projects, &deck))
+                .poll(state(&workspace, &engine, &projects, &deck, &mut notifies))
                 .unwrap()
         );
         let mut response = String::new();
@@ -763,6 +876,7 @@ mod tests {
         let projects = vec![project("one")];
         let engine = NoHistory;
         let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
         let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
         let mut listener = listener;
         assert!(
@@ -774,6 +888,9 @@ mod tests {
                     engine: &engine,
                     size: ScreenSize::new(80, 24),
                     sheet_open: false,
+                    notifies: &mut notifies,
+                    caller: None,
+                    now: Timestamp::default(),
                 })
                 .unwrap()
         );

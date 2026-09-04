@@ -16,6 +16,6 @@ pub use screen::{
     CellContent, CellStyle, CellWidth, Cursor, Rgb, ScreenCell, ScreenSize, TerminalFrame,
 };
 pub use terminal::{
-    Elapsed, ProcessInfo, ScrollbackPosition, TerminalId, TerminalMetadata, TerminalStatus,
-    Timestamp,
+    Elapsed, NotifyKind, ProcessInfo, ScrollbackPosition, TerminalId, TerminalMetadata,
+    TerminalStatus, Timestamp,
 };

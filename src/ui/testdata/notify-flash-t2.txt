@@ -1,0 +1,42 @@
+┌─ > 1 frontend  ·  ●  ·  pnpm dev ───────────────────────────────────────────────── [####··] × ─┐│ ┌─ ▾ 2 backend · ! ─────────── [##····] × ─┐
+│  $ pnpm dev                                                                                    ││ │    INFO  Server running on               │
+│                                                                                                ││ │          [http://127.0.0.1:8000]         │
+│  > idp-frontend@0.4.2 dev                                                                      ││ │                                          │
+│  > vite --host                                                                                 ││ │  12:05:52 /api/workspaces ····· 42.1ms   │
+│                                                                                                ││ │  12:05:53 /api/workspaces/idp/… 118ms    │
+│    VITE v5.4.8  ready in 412 ms                                                                ││ │  12:05:58 /api/terminals ······ 11.4ms   │
+│                                                                                                ││ │  12:06:01 /api/health ·········  3.0ms   │
+│    ➜  Local:   http://localhost:5173/                                                          ││ │  12:06:07 queue ProcessLog ··· done      │
+│    ➜  Network: http://192.168.1.24:5173/                                                       ││ │  12:06:09 /api/terminals/2/log  8.7ms    │
+│    ➜  press h + enter to show help                                                             ││ │                                          │
+│                                                                                                ││ │                                          │
+│  12:03:58 [vite] page reload src/main.tsx                                                      ││ │                                          │
+│  12:04:12 [vite] hmr update /src/routes/WorkspaceList.tsx                                      ││ │                                          │
+│  12:04:12 [vite] hmr update /src/styles/tokens.css                                             ││ │                                          │
+│  12:04:29 [vite] hmr update /src/routes/WorkspaceList.tsx                                      ││ │                                          │
+│  12:04:41 [vite] optimized dependencies changed, reloading                                     ││ │                                          │
+│                                                                                                ││ │                                          │
+│    VITE v5.4.8  ready in 268 ms                                                                ││ │                                          │
+│                                                                                                │┃ │                                          │
+│  12:05:02 [vite] hmr update /src/components/PaneTitle.tsx                                      │┃ │                                          │
+│  12:05:09 warning  src/components/PaneTitle.tsx:17:8                                           │┃ │                                          │
+│           'status' is declared but its value is never read.                                    ││ │                                          │
+│  12:05:17 [vite] hmr update /src/components/PaneTitle.tsx                                      ││ │                                          │
+│  12:05:33 [vite] hmr update /src/components/StatusBar.tsx                                      ││ │                                          │
+│  12:05:58 [vite] hmr update /src/routes/Dashboard.tsx                                          ││ │                                          │
+│  12:06:04 [vite] hmr invalidate /src/hooks/useTerminals.ts — could not Fast Refresh            ││ │                                          │
+│  12:06:04 [vite] page reload src/hooks/useTerminals.ts                                         ││ │                                          │
+│  12:06:11 [vite] hmr update /src/routes/Dashboard.tsx                                          ││ │                                          │
+│                                                                                                ││ │                                          │
+│                                                                                                ││ │                                          │
+│                                                                                                ││ │                                          │
+│                                                                                                ││ │                                          │
+│                                                                                                ││ └──────────────────────────────────────────┘
+│                                                                                                ││                                             
+│                                                                                                ││   ▸ 3 app · ! · attention               ×   
+│                                                                                                ││                                             
+│                                                                                                ││   ▸ 4 worker · ○ · idle 6m              ×   
+│                                                                                                ││                                             
+└────────────────────────────────────────────────────────────────────────────────────────────────┘│  2 collapsed · ^g c expand all              
+                                                                                                                                                
+   idp   4 terminals   > 1 frontend  ·  + add  ·  1 open  ·  2 collapsed         ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  

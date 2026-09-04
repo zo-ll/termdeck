@@ -6,8 +6,8 @@ use std::{
 
 use crate::{
     contracts::{
-        Elapsed, EngineCommand, EngineEvent, ProcessInfo, Project, ScreenSize, TerminalEngine,
-        TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
+        Elapsed, EngineCommand, EngineEvent, NotifyKind, ProcessInfo, Project, ScreenSize,
+        TerminalEngine, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
     },
     engine::{PtyEvent, PtyTransport, VtFrameAdapter},
 };
@@ -113,6 +113,15 @@ impl NativeTerminal {
                     terminal: terminal.clone(),
                     metadata: self.metadata.clone(),
                 });
+                // A bell in that output is the untaught tool's notification
+                // (#97). One event per drain, whatever the burst carried:
+                // the session keeps a single slot per terminal anyway.
+                if self.adapter.take_bells() > 0 {
+                    events.push(EngineEvent::Notify {
+                        terminal: terminal.clone(),
+                        kind: NotifyKind::Attention,
+                    });
+                }
                 let replies = self.adapter.take_pty_replies();
                 if !replies.is_empty()
                     && let Some(transport) = self.transport.as_mut()
@@ -500,7 +509,7 @@ mod tests {
     };
 
     use crate::contracts::{
-        CellContent, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
+        CellContent, EngineCommand, EngineEvent, NotifyKind, Project, ScreenSize, ScrollCommand,
         TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
     };
 
@@ -765,6 +774,42 @@ mod tests {
                 .as_ref()
                 .is_some_and(|transport| transport.has_joined_threads())
         }));
+    }
+
+    /// #97: a real child ringing a real bell reaches the session as one
+    /// additive event. `tput bel` is what a shell hook or an untaught tool
+    /// emits, and nothing had to be taught to emit it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_bell_from_a_real_pty_arrives_as_a_notification() {
+        let terminal = TerminalId::new("beeper");
+        let projects = [project(terminal.clone(), "printf 'RANG\\a\\n'; sleep 30")];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 4)).unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut rang = false;
+        while Instant::now() < deadline && !rang {
+            rang = engine.drain_events().iter().any(|event| {
+                matches!(
+                    event,
+                    EngineEvent::Notify { terminal: rung, kind: NotifyKind::Attention }
+                        if rung == &terminal
+                )
+            });
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert!(rang, "the bell never reached the engine seam");
+        assert!(frame_text(engine.frame(&terminal).unwrap()).contains("RANG"));
+        // The bell was taken with the output that carried it: a later drain
+        // of quiet output raises nothing.
+        assert!(
+            !engine
+                .drain_events()
+                .iter()
+                .any(|event| matches!(event, EngineEvent::Notify { .. }))
+        );
+        engine.dispatch(EngineCommand::Shutdown);
     }
 
     #[test]

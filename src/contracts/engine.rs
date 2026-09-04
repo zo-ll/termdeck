@@ -1,4 +1,4 @@
-use super::{ScreenSize, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus};
+use super::{NotifyKind, ScreenSize, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus};
 
 /// An engine-owned scrollback movement. `Up` moves toward older output, and
 /// `Down` moves toward newer output; `Bottom` returns to live output.
@@ -43,6 +43,13 @@ pub enum EngineEvent {
     MetadataChanged {
         terminal: TerminalId,
         metadata: TerminalMetadata,
+    },
+    /// A terminal asked for the user's attention: a BEL out of the PTY, or an
+    /// explicit `ctl notify` (#97). Additive, so an engine that raises none
+    /// and a consumer that ignores them both stay correct.
+    Notify {
+        terminal: TerminalId,
+        kind: NotifyKind,
     },
 }
 

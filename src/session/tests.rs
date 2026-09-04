@@ -2,16 +2,16 @@
 use super::dispatch_control;
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
-    close_terminal, dispatch_live_input, mouse_action, now, open_terminals, request_close,
-    resize_terminals, route_wheel, spawn_terminals, terminal_sizes,
+    close_terminal, dispatch_live_input, master_terminal, mouse_action, now, open_terminals,
+    request_close, resize_terminals, route_wheel, spawn_terminals, terminal_sizes,
 };
 use crate::{
     contracts::{
-        ActionCommand, EngineCommand, Project, ScreenSize, ScrollCommand, ScrollbackPosition,
-        TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
+        ActionCommand, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
+        ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
-    ui::{DeckState, Input, Key, Modal, Reaction, SheetState},
+    ui::{DeckState, Input, Key, Modal, Notifications, Reaction, SheetState},
 };
 use ratatui::layout::Position;
 use std::path::PathBuf;
@@ -573,6 +573,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
     let mut closed = BTreeSet::new();
     let mut quit = false;
+    let mut notifies = crate::ui::Notifications::new();
     let request = |verb: &str| crate::ctl::Request {
         schema: crate::ctl::SCHEMA.to_owned(),
         verb: verb.to_owned(),
@@ -587,6 +588,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
                 &mut projects,
                 &mut deck,
                 &mut engine,
+                &mut notifies,
                 size,
                 false,
                 socket,
@@ -606,6 +608,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
         &mut projects,
         &mut deck,
         &mut engine,
+        &mut notifies,
         size,
         true,
         socket,
@@ -912,4 +915,48 @@ fn drag_and_double_click_dispatch_the_existing_promotion_action() {
         }
     }
     assert_eq!(state.active(), Some(2));
+}
+
+/// #97: the loop's ingest, in the lines it is made of. A bell names the
+/// terminal it rang in; the master frame's own bell is dropped, because that
+/// pane is on screen in every layout; and taking the master frame is what
+/// answers a notification, with no clock involved.
+#[test]
+fn a_bell_marks_its_pane_and_the_master_ignores_its_own() {
+    let projects = sleepers(3);
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    let mut notifies = Notifications::new();
+    let at = Timestamp { unix_millis: 1_000 };
+    let ring = |engine: &mut FakeEngine,
+                notifies: &mut Notifications,
+                deck: &DeckState,
+                terminal: &TerminalId| {
+        for event in engine.bell(terminal) {
+            let EngineEvent::Notify { terminal, kind } = event else {
+                continue;
+            };
+            notifies.record(&terminal, master_terminal(deck, &projects), kind, at);
+        }
+    };
+
+    ring(&mut engine, &mut notifies, &deck, &TerminalId::new("t3"));
+    ring(&mut engine, &mut notifies, &deck, &TerminalId::new("t1"));
+
+    assert!(notifies.pending(&TerminalId::new("t3")).is_some());
+    assert!(
+        notifies.pending(&TerminalId::new("t1")).is_none(),
+        "t1 holds the master frame"
+    );
+
+    // Promotion is what the session calls `clear` for, once a frame, for
+    // whichever terminal holds the master frame.
+    deck.apply(&ActionCommand::SelectPosition(2), &sleepers(3), now());
+    let master = master_terminal(&deck, &projects).cloned().unwrap();
+    assert_eq!(master, TerminalId::new("t3"));
+    assert!(notifies.clear(&master));
+    assert!(notifies.is_empty());
+
+    // An unknown terminal rings nothing at all.
+    assert!(engine.bell(&TerminalId::new("gone")).is_empty());
 }

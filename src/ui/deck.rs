@@ -79,7 +79,70 @@ impl Deck<'_> {
                 dim(frame.buffer_mut(), body, &panes);
                 self.modal(frame.buffer_mut(), area, modal);
             }
-            None => self.place_cursor(engine, frame, panes[0]),
+            None => {
+                // The toast is not a modal: nothing is dimmed, the master
+                // keeps its cursor, and every key still goes where it was
+                // going (#97). It is only drawn for panes this layout leaves
+                // nowhere else to say it — and never over a modal, which owns
+                // the screen while it is open.
+                let toast = self.toast_items(body);
+                if !toast.is_empty() {
+                    self.toast(frame.buffer_mut(), area, &toast);
+                }
+                self.place_cursor(engine, frame, panes[0]);
+            }
+        }
+    }
+
+    /// The notifications the current layout has nowhere to draw: their pane is
+    /// hidden, so the toast is the only place they can appear. Newest first,
+    /// which is the order the batch is read in.
+    fn toast_items(&self, body: Rect) -> Vec<(usize, &Notify)> {
+        if self.notifies.is_empty() {
+            return Vec::new();
+        }
+        let mut items: Vec<(usize, &Notify)> = self
+            .hidden(body)
+            .into_iter()
+            .filter_map(|position| {
+                let project = self.projects.get(position)?;
+                let notify = self.notifies.pending(&project.terminal)?;
+                self.notifies
+                    .toasting(&project.terminal, self.now)
+                    .then_some((position, notify))
+            })
+            .collect();
+        items.sort_by(|left, right| right.1.at.cmp(&left.1.at).then(left.0.cmp(&right.0)));
+        items
+    }
+
+    /// The configured positions this layout draws no pane for.
+    ///
+    /// Zoom and the narrow fallback hide the whole stack; a column shorter
+    /// than its list hides whatever the window left out. The master is never
+    /// among them: every layout draws it.
+    fn hidden(&self, body: Rect) -> Vec<usize> {
+        match self.layout(body) {
+            Layout::Single => Vec::new(),
+            Layout::Zoom | Layout::Narrow => self.stack_items(),
+            Layout::Stacked { stack, preview } => {
+                let drawn: Vec<usize> = self
+                    .stack_layout(
+                        Rect {
+                            x: body.width - GUTTER - stack,
+                            width: stack,
+                            ..body
+                        },
+                        preview,
+                    )
+                    .iter()
+                    .map(|slot| slot.position)
+                    .collect();
+                self.stack_items()
+                    .into_iter()
+                    .filter(|position| !drawn.contains(position))
+                    .collect()
+            }
         }
     }
 
@@ -689,6 +752,11 @@ impl Deck<'_> {
                     Pane::Preview.dragging(false)
                 } else if self.state.drag_target() == Some(slot.position) {
                     Pane::Preview.dragging(true)
+                } else if self.notifies.flashing(&project.terminal, self.now) {
+                    // A pane asking for you outranks one that has just
+                    // settled: the drag is the only thing the pointer is
+                    // holding, so it still comes first.
+                    Pane::Notify
                 } else if demoted == Some(slot.position) {
                     Pane::Demoted
                 } else {
@@ -775,6 +843,11 @@ impl Deck<'_> {
     /// meaningful line. The box goes and takes the cwd, the right-hand
     /// activity slot, the viewport, the exit footer and the scrollback marker
     /// with it; all of them come back when the pane expands.
+    ///
+    /// A strip already sits on the demotion tint, so it cannot flash by
+    /// lifting its background the way an open pane does (#97). It inverts
+    /// instead — warning ground, canvas ink — and swaps its status dot for a
+    /// `!`, which is the mark the censuses use for the same state.
     fn draw_strip(
         &self,
         engine: &dyn TerminalEngine,
@@ -783,22 +856,33 @@ impl Deck<'_> {
         project: &Project,
         position: usize,
     ) {
+        let flashing = self.notifies.flashing(&project.terminal, self.now);
+        let background = if flashing { WARNING } else { DEMOTED_BG };
         Block::new()
-            .style(Style::new().bg(DEMOTED_BG))
+            .style(Style::new().bg(background))
             .render(area, buffer);
         let status = self.status(engine, project);
         let metadata = self.metadata(engine, project);
-        let (glyph, glyph_colour) = status_glyph(&status, &metadata);
-        let separator = Style::new().fg(SEPARATOR).bg(DEMOTED_BG);
+        let (glyph, glyph_colour) = if flashing {
+            (NOTIFY_MARK, CANVAS)
+        } else {
+            status_glyph(&status, &metadata)
+        };
+        let ink = |colour: Color| {
+            Style::new()
+                .fg(if flashing { CANVAS } else { colour })
+                .bg(background)
+        };
+        let separator = ink(SEPARATOR);
 
         let mut spans = vec![
-            Span::styled("▸ ", Style::new().fg(HINT).bg(DEMOTED_BG)),
+            Span::styled("▸ ", ink(HINT)),
             Span::styled(
                 format!("{} {}", position + 1, project.terminal),
-                Style::new().fg(PREVIEW_FG).bg(DEMOTED_BG),
+                ink(PREVIEW_FG),
             ),
             Span::styled(" · ", separator),
-            Span::styled(glyph, Style::new().fg(glyph_colour).bg(DEMOTED_BG)),
+            Span::styled(glyph, Style::new().fg(glyph_colour).bg(background)),
         ];
         // The strip sits two columns in, per the export's `padding:0 2ch`, and
         // keeps the same inset on the right.
@@ -814,22 +898,21 @@ impl Deck<'_> {
         // after it states nothing, so the two go together.
         let room = (width as usize).saturating_sub(taken + 3);
         if room > 1 {
-            let (tail, colour) = self.strip_tail(engine, project, &status, &metadata);
+            let (tail, colour) = match self.notifies.pending(&project.terminal) {
+                // While it flashes the strip says what it is flashing about,
+                // which is the one line it has to say anything in.
+                Some(notify) if flashing => (notify_text(&notify.kind), MUTED),
+                _ => self.strip_tail(engine, project, &status, &metadata),
+            };
             spans.push(Span::styled(" · ", separator));
-            spans.push(Span::styled(
-                clip(&tail, room),
-                Style::new().fg(colour).bg(DEMOTED_BG),
-            ));
+            spans.push(Span::styled(clip(&tail, room), ink(colour)));
         }
         buffer.set_line(area.x + PADDING, area.y, &Line::from(spans), width);
         if let Some(column) = close {
             buffer.set_line(
                 column,
                 area.y,
-                &Line::from(Span::styled(
-                    CLOSE_AFFORDANCE,
-                    Style::new().fg(HINT).bg(DEMOTED_BG),
-                )),
+                &Line::from(Span::styled(CLOSE_AFFORDANCE, ink(HINT))),
                 CLOSE_AFFORDANCE.chars().count() as u16,
             );
         }
@@ -957,17 +1040,28 @@ impl Deck<'_> {
             }
             let status = self.status(engine, project);
             let metadata = self.metadata(engine, project);
+            // The narrow fallback hides every pane but the master, so its
+            // chips are the only census it has: a pane that has asked for you
+            // wears the mark until it is promoted (#97).
+            let notified = !master && self.notifies.pending(&project.terminal).is_some();
             let label = format!(
-                " {} {}{} ",
+                " {} {}{}{} ",
                 position + 1,
                 project.terminal,
-                chip_tag(&status, &metadata)
+                chip_tag(&status, &metadata),
+                if notified {
+                    format!(" {NOTIFY_MARK}")
+                } else {
+                    String::new()
+                }
             );
             let style = if master {
                 Style::new()
                     .fg(CANVAS)
                     .bg(ACCENT)
                     .add_modifier(Modifier::BOLD)
+            } else if notified {
+                Style::new().fg(WARNING).bg(CHIP_BG)
             } else {
                 Style::new().fg(chip_colour(&status, &metadata)).bg(CHIP_BG)
             };
@@ -1040,6 +1134,107 @@ impl Deck<'_> {
         }
     }
 
+    /// Draws the notification toast: the quit confirmation's size and shape,
+    /// none of its authority (#97).
+    ///
+    /// It clears the cells beneath it like a modal, because a half-legible
+    /// box says less than none, but it dims nothing, takes no key and leaves
+    /// the master its cursor. It lists the batch newest first and counts the
+    /// rest, so a fifth notification lengthens no box.
+    fn toast(&self, buffer: &mut Buffer, area: Rect, items: &[(usize, &Notify)]) {
+        let (width, tallest) = TOAST_SIZE;
+        // The box is the width of the quit confirmation and as tall as it
+        // needs: borders, the row it opens with, a row per notification, the
+        // count when there is one, and the row it closes with.
+        let listed = items.len().min(TOAST_ROWS);
+        let height = (4 + listed as u16 + u16::from(items.len() > listed)).min(tallest);
+        let rect = Rect {
+            x: area.x + area.width.saturating_sub(width) / 2,
+            y: area.y + area.height.saturating_sub(height) / 2,
+            width: width.min(area.width),
+            height: height.min(area.height),
+        };
+        if rect.width < 2 * PADDING + 4 || rect.height < 3 {
+            return;
+        }
+        Clear.render(rect, buffer);
+        let style = Style::new().fg(WARNING).bg(CANVAS);
+        Block::bordered()
+            .style(Style::new().bg(CANVAS))
+            .border_style(style)
+            .render(rect, buffer);
+
+        let left = rect.x + 1 + PADDING;
+        let right = rect.x + rect.width - 2 - PADDING;
+        let width = right - left + 1;
+        let name = format!("{} notification{}", items.len(), plural(items.len()));
+        buffer.set_line(
+            left - 1,
+            rect.y,
+            &Line::from(clear_around(
+                vec![Span::styled(name, Style::new().fg(WARNING))],
+                style,
+            )),
+            width + 2,
+        );
+        // The way out is stated the way the help overlay states its own, and
+        // it is only one of the ways: a click or any deck command clears the
+        // batch too, and it settles by itself.
+        const DISMISS: &str = "esc";
+        let slot = DISMISS.chars().count() as u16;
+        buffer.set_line(
+            right - slot,
+            rect.y,
+            &Line::from(clear_around(
+                vec![Span::styled(DISMISS, Style::new().fg(HINT))],
+                style,
+            )),
+            slot + 2,
+        );
+
+        let hint = Style::new().fg(HINT).bg(CANVAS);
+        let separator = Style::new().fg(SEPARATOR).bg(CANVAS);
+        // A canvas too short for the box it asked for lists fewer rather
+        // than overrunning: the interior, less the rows the box opens and
+        // closes with and the row the count may need.
+        let listed = listed.min((rect.height as usize).saturating_sub(3));
+        for (row, (position, notify)) in items.iter().take(listed).enumerate() {
+            let Some(project) = self.projects.get(*position) else {
+                continue;
+            };
+            let head = format!("{} {}", position + 1, project.terminal);
+            let age = age(self.now.unix_millis.saturating_sub(notify.at.unix_millis));
+            let taken = head.chars().count() + age.chars().count() + 6;
+            let spans = vec![
+                Span::styled(head, Style::new().fg(MASTER_FG).bg(CANVAS)),
+                Span::styled(" · ", separator),
+                Span::styled(
+                    clip(
+                        &notify_text(&notify.kind),
+                        (width as usize).saturating_sub(taken),
+                    ),
+                    Style::new()
+                        .fg(match notify.kind {
+                            NotifyKind::Attention => MUTED,
+                            NotifyKind::Message { .. } => PREVIEW_FG,
+                        })
+                        .bg(CANVAS),
+                ),
+                Span::styled(" · ", separator),
+                Span::styled(age, hint),
+            ];
+            buffer.set_line(left, rect.y + 2 + row as u16, &Line::from(spans), width);
+        }
+        if items.len() > listed {
+            buffer.set_line(
+                left,
+                rect.y + 2 + listed as u16,
+                &Line::styled(format!("+{} more", items.len() - listed), hint),
+                width,
+            );
+        }
+    }
+
     /// Draws one bordered pane: border, title chrome, terminal cells, footer.
     fn draw_pane(
         &self,
@@ -1061,6 +1256,10 @@ impl Deck<'_> {
         let (border, background) = match pane {
             Pane::Preview => (IDLE_BORDER, CANVAS),
             Pane::Demoted => (DEMOTED_BORDER, DEMOTED_BG),
+            // The demotion idiom's lifted background with the warning border
+            // a held pane wears: the same lift, saying "answer me" rather
+            // than "that just happened" (#97).
+            Pane::Notify => (WARNING, DEMOTED_BG),
             // A held pane turns warning-coloured; its only valid counterpart
             // gets the accent and a quiet lifted background.
             Pane::DragMasterSource | Pane::DragPreviewSource => (WARNING, CANVAS),
@@ -1175,7 +1374,13 @@ impl Deck<'_> {
         let number = position + 1;
         let name = project.terminal.to_string();
         let separator = if wide { "  ·  " } else { " · " };
-        let (glyph, glyph_colour) = status_glyph(status, metadata);
+        // A flashing pane wears the mark its folded strip and the censuses
+        // wear: the border says it is asking, the glyph says so in text (#97).
+        let (glyph, glyph_colour) = if pane.base() == Pane::Notify {
+            (NOTIFY_MARK, WARNING)
+        } else {
+            status_glyph(status, metadata)
+        };
         let mut spans = Vec::new();
         // Every stack pane declares its disclosure state, folded or not: the
         // open `▾` is the only thing on a fresh frame that says the stack
@@ -1204,7 +1409,7 @@ impl Deck<'_> {
         } else {
             spans.push(Span::styled(
                 format!("{prefix}{name}"),
-                Style::new().fg(if pane.base() == Pane::Demoted {
+                Style::new().fg(if matches!(pane.base(), Pane::Demoted | Pane::Notify) {
                     DEMOTED_FG
                 } else {
                     PREVIEW_FG
@@ -1562,7 +1767,13 @@ impl Deck<'_> {
             }
             let status = self.status(engine, project);
             let metadata = self.metadata(engine, project);
-            let (glyph, colour) = status_glyph(&status, &metadata);
+            // The toast is dismissible and the flash settles; the census is
+            // where a pane that has asked for you stays accounted for until
+            // it is promoted (#97).
+            let (glyph, colour) = match self.notifies.pending(&project.terminal) {
+                Some(_) => (NOTIFY_MARK, WARNING),
+                None => status_glyph(&status, &metadata),
+            };
             spans.push(Span::styled(
                 format!("{}{glyph}", position + 1),
                 Style::new().fg(colour).bg(STATUS_BG),

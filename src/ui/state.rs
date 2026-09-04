@@ -4,11 +4,181 @@
 //! data: everything it stores is a configured position, so terminal identity
 //! stays with the engine and survives promotion untouched.
 
-use crate::contracts::{ActionCommand, Elapsed, Project, Timestamp};
+use std::collections::BTreeMap;
+
+use crate::contracts::{ActionCommand, Elapsed, NotifyKind, Project, TerminalId, Timestamp};
 
 /// How long a just-demoted pane keeps its highlight, per the design export's
 /// "holds ... for ~1.5s, then settles".
 const DEMOTION_WINDOW: Elapsed = Elapsed { millis: 1_500 };
+
+/// How long a notified pane keeps its flash (#97).
+///
+/// Longer than the demotion highlight it borrows its idiom from, because a
+/// notification is something to answer rather than something that just
+/// happened, and shorter than the 30s activity window, so it settles rather
+/// than becoming another permanent state.
+pub const NOTIFY_WINDOW: Elapsed = Elapsed { millis: 4_000 };
+/// How long the toast stays up before it settles by itself. Long enough to
+/// read four lines, short enough not to sit over the master.
+pub const TOAST_WINDOW: Elapsed = Elapsed { millis: 8_000 };
+/// Within this window a bell behind an explicit message is the same event
+/// told twice, so it is dropped rather than re-armed.
+const COALESCE_WINDOW: Elapsed = Elapsed { millis: 2_000 };
+
+/// One pane's pending notification: what it asked for, and when.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Notify {
+    pub kind: NotifyKind,
+    pub at: Timestamp,
+}
+
+/// What the terminals have asked for and has not been seen yet (#97).
+///
+/// One slot per terminal, keyed by identity rather than by configured
+/// position, so a notification survives the promotion and the renumbering a
+/// close causes. Nothing here reads a clock: `now` arrives with every call,
+/// the way [`DeckState::demoted`] already takes it, so a fixture can render
+/// any frame of a flash it likes.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Notifications {
+    pending: BTreeMap<TerminalId, Notify>,
+    /// When the batch was last dismissed. The marks it leaves behind outlive
+    /// it: a dismissal closes the toast, it does not mean the pane was seen.
+    dismissed: Option<Timestamp>,
+}
+
+impl Notifications {
+    pub const fn new() -> Self {
+        Self {
+            pending: BTreeMap::new(),
+            dismissed: None,
+        }
+    }
+
+    /// Records what a terminal asked for. Returns whether anything changed.
+    ///
+    /// `master` is the terminal holding the master frame, which is drawn in
+    /// every layout: a pane the user is already looking at has nothing to
+    /// announce, so its bells and its messages are dropped here. That is also
+    /// the "master bells are ignored" rule, kept in one place rather than at
+    /// each of the two transports.
+    ///
+    /// Precedence and coalescing are the whole of the dedupe story, because
+    /// the slot is single: an explicit message always overwrites and re-arms;
+    /// a bell arriving behind a message younger than [`COALESCE_WINDOW`] is
+    /// the same event twice and is dropped; any other bell re-arms what
+    /// stands without downgrading a message to an attention.
+    pub fn record(
+        &mut self,
+        terminal: &TerminalId,
+        master: Option<&TerminalId>,
+        kind: NotifyKind,
+        now: Timestamp,
+    ) -> bool {
+        if master == Some(terminal) {
+            return false;
+        }
+        let Some(standing) = self.pending.get_mut(terminal) else {
+            self.pending
+                .insert(terminal.clone(), Notify { kind, at: now });
+            return true;
+        };
+        match (&standing.kind, &kind) {
+            (_, NotifyKind::Message { .. }) => {
+                *standing = Notify { kind, at: now };
+                true
+            }
+            (NotifyKind::Message { .. }, NotifyKind::Attention)
+                if elapsed(now, standing.at) < COALESCE_WINDOW.millis =>
+            {
+                false
+            }
+            _ => {
+                standing.at = now;
+                true
+            }
+        }
+    }
+
+    /// Clears one terminal's slot: the pane has been seen. The session calls
+    /// this for whichever terminal holds the master frame, so a promotion
+    /// answers a notification with no clock involved at all.
+    pub fn clear(&mut self, terminal: &TerminalId) -> bool {
+        self.pending.remove(terminal).is_some()
+    }
+
+    /// Closes the toast on everything standing now. Later notifications open
+    /// it again; the census marks stay either way.
+    pub fn dismiss(&mut self, now: Timestamp) -> bool {
+        let closed = self
+            .pending
+            .values()
+            .any(|notify| self.undismissed(notify.at));
+        self.dismissed = Some(now);
+        closed
+    }
+
+    /// What this terminal is still asking for, dismissed or not. This is the
+    /// census mark: it outlives both the flash and the toast, and only
+    /// [`Notifications::clear`] takes it away.
+    pub fn pending(&self, terminal: &TerminalId) -> Option<&Notify> {
+        self.pending.get(terminal)
+    }
+
+    /// Whether this pane is inside its flash window.
+    pub fn flashing(&self, terminal: &TerminalId, now: Timestamp) -> bool {
+        self.pending
+            .get(terminal)
+            .and_then(|notify| since(now, notify.at))
+            .is_some_and(|elapsed| elapsed < NOTIFY_WINDOW.millis)
+    }
+
+    /// Whether this pane still belongs in the toast: never dismissed since it
+    /// arrived, and inside the toast's own window.
+    pub fn toasting(&self, terminal: &TerminalId, now: Timestamp) -> bool {
+        self.pending.get(terminal).is_some_and(|notify| {
+            self.undismissed(notify.at)
+                && since(now, notify.at).is_some_and(|elapsed| elapsed < TOAST_WINDOW.millis)
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+
+    /// Whether any window is still open, and so still owes the interface a
+    /// frame to close in.
+    ///
+    /// A flash and a toast end by themselves, and a loop that only draws
+    /// when something happens would leave the last one on screen until the
+    /// next keystroke. This is what keeps it drawing until they have both
+    /// settled — and no longer, because a notification whose windows have
+    /// passed only lives in the censuses, which do not change on their own.
+    pub fn settling(&self, now: Timestamp) -> bool {
+        let window = NOTIFY_WINDOW.millis.max(TOAST_WINDOW.millis);
+        self.pending
+            .values()
+            .filter_map(|notify| since(now, notify.at))
+            .any(|elapsed| elapsed < window)
+    }
+
+    /// Whether a notification arrived after the last dismissal.
+    fn undismissed(&self, at: Timestamp) -> bool {
+        self.dismissed.is_none_or(|dismissed| at > dismissed)
+    }
+}
+
+/// How long ago a notification arrived, or `None` if it has not arrived yet.
+/// A frame drawn before one is a frame without it: that is what lets a
+/// fixture hold one set of notifications and render every keyframe of it.
+fn since(now: Timestamp, at: Timestamp) -> Option<u64> {
+    now.unix_millis.checked_sub(at.unix_millis)
+}
+
+fn elapsed(now: Timestamp, at: Timestamp) -> u64 {
+    now.unix_millis.saturating_sub(at.unix_millis)
+}
 
 /// The narrowest and widest share of the width the master pane may take.
 ///
@@ -456,9 +626,9 @@ impl DeckState {
 
 #[cfg(test)]
 mod tests {
-    use super::DeckState;
+    use super::{DeckState, Notifications};
     use crate::{
-        contracts::{ActionCommand, Elapsed, Timestamp},
+        contracts::{ActionCommand, Elapsed, NotifyKind, TerminalId, Timestamp},
         ui::fixture,
     };
 
@@ -1056,5 +1226,123 @@ mod tests {
         assert_eq!(state.demoted(later(1_499)), Some(0));
         assert_eq!(state.demoted(later(1_500)), None);
         assert_eq!(super::DEMOTION_WINDOW, Elapsed { millis: 1_500 });
+    }
+
+    fn message(body: &str) -> NotifyKind {
+        NotifyKind::Message {
+            title: String::new(),
+            body: body.to_owned(),
+        }
+    }
+
+    /// #97: one slot per terminal. An explicit message always outranks a
+    /// bell and re-arms the flash; a bell behind a fresh message is the same
+    /// event told twice; any later bell re-arms what stands without
+    /// downgrading the message to a bare attention.
+    #[test]
+    fn a_message_outranks_a_bell_and_a_bell_behind_one_is_coalesced() {
+        let worker = TerminalId::new("worker");
+        let mut notifies = Notifications::new();
+
+        assert!(notifies.record(&worker, None, NotifyKind::Attention, NOW));
+        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(NOW));
+
+        // A bell on a bell re-arms the one slot rather than adding a second.
+        assert!(notifies.record(&worker, None, NotifyKind::Attention, later(1_000)));
+        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(later(1_000)));
+
+        assert!(notifies.record(&worker, None, message("build done"), later(1_500)));
+        assert_eq!(
+            notifies.pending(&worker).map(|n| n.kind.clone()),
+            Some(message("build done"))
+        );
+
+        // Inside the coalesce window the bell that follows a message says
+        // nothing the message has not already said.
+        assert!(!notifies.record(&worker, None, NotifyKind::Attention, later(2_000)));
+        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(later(1_500)));
+
+        // Past it, the bell is a fresh event: it re-arms the flash and the
+        // message it re-arms is still the message.
+        assert!(notifies.record(&worker, None, NotifyKind::Attention, later(4_000)));
+        let pending = notifies.pending(&worker).unwrap();
+        assert_eq!(pending.at, later(4_000));
+        assert_eq!(pending.kind, message("build done"));
+
+        // The same message again re-arms without duplicating.
+        assert!(notifies.record(&worker, None, message("build done"), later(4_500)));
+        assert_eq!(notifies.pending(&worker).map(|n| n.at), Some(later(4_500)));
+    }
+
+    /// The master frame is drawn in every layout, so the pane holding it has
+    /// nothing to announce: that is the "master bells are ignored" rule, and
+    /// it covers explicit messages for the same reason.
+    #[test]
+    fn the_pane_holding_the_master_frame_announces_nothing() {
+        let master = TerminalId::new("frontend");
+        let mut notifies = Notifications::new();
+
+        assert!(!notifies.record(&master, Some(&master), NotifyKind::Attention, NOW));
+        assert!(!notifies.record(&master, Some(&master), message("done"), NOW));
+
+        assert!(notifies.is_empty());
+    }
+
+    /// Promotion answers a notification, and needs no clock to do it.
+    #[test]
+    fn promotion_clears_the_slot_whatever_the_time_is() {
+        let worker = TerminalId::new("worker");
+        let mut notifies = Notifications::new();
+        notifies.record(&worker, None, NotifyKind::Attention, NOW);
+
+        assert!(notifies.clear(&worker));
+
+        assert!(!notifies.clear(&worker), "there is nothing left to clear");
+        assert!(notifies.pending(&worker).is_none());
+    }
+
+    /// Both windows are read off the clock the caller hands in, so a fixture
+    /// can render any frame of a flash it likes.
+    #[test]
+    fn the_flash_settles_before_the_toast_does() {
+        let worker = TerminalId::new("worker");
+        let mut notifies = Notifications::new();
+        notifies.record(&worker, None, NotifyKind::Attention, NOW);
+
+        assert!(notifies.settling(NOW));
+        assert!(notifies.flashing(&worker, later(3_999)));
+        assert!(!notifies.flashing(&worker, later(4_000)));
+        assert!(notifies.toasting(&worker, later(7_999)));
+        assert!(!notifies.toasting(&worker, later(8_000)));
+        assert_eq!(super::NOTIFY_WINDOW, Elapsed { millis: 4_000 });
+        assert_eq!(super::TOAST_WINDOW, Elapsed { millis: 8_000 });
+
+        // The mark outlives both: only being seen takes it away. Once the
+        // windows have passed nothing changes on its own any more, so the
+        // loop has nothing left to redraw for.
+        assert!(notifies.pending(&worker).is_some());
+        assert!(!notifies.settling(later(8_000)));
+    }
+
+    /// A dismissal closes the batch that stands, and nothing else: a later
+    /// notification opens the toast again, and the census marks never go.
+    #[test]
+    fn a_dismissal_closes_the_batch_and_leaves_the_marks() {
+        let worker = TerminalId::new("worker");
+        let app = TerminalId::new("app");
+        let mut notifies = Notifications::new();
+        notifies.record(&worker, None, NotifyKind::Attention, NOW);
+
+        assert!(notifies.dismiss(later(1_000)));
+        assert!(!notifies.toasting(&worker, later(1_000)));
+        assert!(notifies.pending(&worker).is_some(), "the mark stays");
+        assert!(!notifies.dismiss(later(2_000)), "nothing left to close");
+
+        notifies.record(&app, None, message("failed"), later(3_000));
+        assert!(notifies.toasting(&app, later(3_000)));
+        assert!(
+            !notifies.toasting(&worker, later(3_000)),
+            "the dismissed one stays dismissed"
+        );
     }
 }
