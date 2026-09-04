@@ -322,3 +322,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
 - 2026-09-04: #94 MCP PASS (protocol 2026-07-28 verified externally; 3 SHALL
   nits; no live claude/codex handshake test on this machine). #95 Ctrl+J
   PASS pending (queued). OPEN: user merge/drop call on MCP; #95 merge.
+- 2026-09-04 (USER): MCP (#94) HELD on its branch — coord/94-ctl-mcp stays
+  pushed/unmerged (critic-passed, protocol 2026-07-28 verified). Live
+  handshake test deferred to the user from the branch binary. Issue #94 open
+  + marked held. Rebase onto main when picked up.
