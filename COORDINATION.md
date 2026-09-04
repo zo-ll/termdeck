@@ -390,3 +390,8 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
 - 2026-09-04: SHELL-INTEGRATION issue #108 (dir 107-shell-integration,
   branch coord/109-shell-hook when implementing; no worktree yet).
   Cleaned: #97 (slice, merged) + #100 (record) closed now.
+- 2026-09-04: #108 slice 1 MERGED (PR #110; shell hooks live in the binary
+  — bash/zsh panes now auto-notify on exit!=0 or >=10s; private OSC 7777 via
+  pre-scan decoder). Critic pass after the zmodload fix. Slice 2 pending
+  (fixtures, identical-message refinement, fish?, nested-marker eyeball).
+  NOTE: this machine has NO zsh binary — zsh path verified by construction.
