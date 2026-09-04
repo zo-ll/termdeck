@@ -288,3 +288,10 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   recipe + research protocol in the coordinator skill), then kills the window
   after the brief lands. Env default = 0 coordinator, 1 critic, 2 claude,
   3 codex.
+- 2026-09-04: #72 research delivered (researcher brief,
+  docs/design/termdeck/agent-api-research.md, committed + pushed). Key:
+  socket+JSON concurring with draft; PEEK BLOCKER (additive read-only
+  frame/history trait method, default-body, needed for peek); input gated
+  (TERMDECK_ALLOW_INPUT|--force); MCP = adapter; Q1-8 answered. Awaiting
+  USER decision (adopt A? §4a allowed? input policy? close-last --force?)
+  before Phase-1 dispatch (rendezvous + read verbs).
