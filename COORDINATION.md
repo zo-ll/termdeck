@@ -398,3 +398,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
 - 2026-09-04: #108 slice 2 dispatched to FRESH codex (coord/111-shell-slice2:
   identical-message no-rearm (ui/state.rs, cross-ownership approved), rich
   keyframes, fish-or-defer, nested TERMDECK_SHELL_HOOK env fix, README para.
+- 2026-09-04: #108 SHELL INTEGRATION COMPLETE (slices 1+2 merged; #108 closed;
+  binary rebuilt — bash/zsh/fish panes auto-notify on exit!=0 or >=10s;
+  TERMDECK_NOTIFY knobs; no-rearm; nested-safe). Open set: #94 (MCP held),
+  #33 (animations parked). Main 320 lib.
