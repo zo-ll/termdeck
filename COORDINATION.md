@@ -315,3 +315,7 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   (coord/92-ctl-verbs, on current main incl. Phase 1). Gates: input/close
   --force/close-self/sheet. NOTE: gh issue create output captures the URL
   ($N trap, 3rd time) — always use the literal issue number afterwards.
+- 2026-09-04: Phase 3 (#94 MCP adapter) dispatched to FRESH codex
+  (coord/94-ctl-mcp on current main). Pin MCP spec version at impl time;
+  docs snippets pi/claude/codex. Agent API Phases 1+2 already MERGED
+  (PR #91, #93; binary rebuilt; 288 tests main).
