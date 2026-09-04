@@ -1,3 +1,5 @@
+   idp   4 terminals   > 1 frontend  ·  + add  ·  1 open  ·  2 collapsed         ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  
+                                                                                                                                                
 ┌─ > 1 frontend  ·  ●  ·  pnpm dev ───────────────────────────────────────────────── [####··] × ─┐│ ┌─ ▾ 2 backend · ● ─────────── [##····] × ─┐
 │  $ pnpm dev                                                                                    ││ │    INFO  Server running on               │
 │                                                                                                ││ │          [http://127.0.0.1:8000]         │
@@ -38,5 +40,3 @@
 │                                                                                                ││   ▸ 4 worker · ○ · idle 6m              ×   
 │                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  2 collapsed · ^g c expand all              
-                                                                                                                                                
-   idp   4 terminals   > 1 frontend  ·  + add  ·  1 open  ·  2 collapsed         ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  

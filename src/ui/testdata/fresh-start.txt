@@ -1,3 +1,5 @@
+   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed         ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  
+                                                                                                                                                
 ┌─ > 1 frontend  ·  ●  ·  pnpm dev ─────────────────────────────────────────────────────────────────────── [####··] × ─┐│   ▸ 2 backend · ● ×   
 │  $ pnpm dev                                                                                                          ││                       
 │                                                                                                                      ││   ▸ 3 app · ✕     ×   
@@ -38,5 +40,3 @@
 │                                                                                                                      ││                       
 │                                                                                                                      ││                       
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│  3 collapsed          
-                                                                                                                                                
-   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed         ^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit  

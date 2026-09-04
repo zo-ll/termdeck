@@ -1,3 +1,5 @@
+   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                     confirm quit  ·  y quit  n cancel  
+                                                                                                                                                
 ┌─ > 1 frontend  ·  ●  ·  pnpm dev ───────────────────────────────────────────────── [####··] × ─┐│   ▸ 2 backend · ● · 12:06:09 /api/term… ×   
 │  $ pnpm dev                                                                                    ││                                             
 │                                                                                                ││   ▸ 3 app · ✕ · exit 1                  ×   
@@ -12,18 +14,18 @@
 │                                                                                                ││                                             
 │  12:03:58 [vite] page reload src/main.tsx                                                      ││                                             
 │  12:04:12 [vite] hmr update /src/routes/WorkspaceList.tsx                                      ││                                             
-│  12:04:12 [vite] hmr update /src/styles/tokens.css                                             ││                                             
-│  12:04:29 [vite] hmr update /src/routes/WorkspaceList.tsx                                      ││                                             
-│  12:04:41 [vite] optimized dependencies chan┌─ quit ───────────────────────────────────────────┐│                                             
+│  12:04:12 [vite] hmr update /src/styles/toke┌─ quit ───────────────────────────────────────────┐│                                             
+│  12:04:29 [vite] hmr update /src/routes/Work│                                                  ││                                             
+│  12:04:41 [vite] optimized dependencies chan│  quit termdeck?                                  ││                                             
 │                                             │                                                  ││                                             
-│    VITE v5.4.8  ready in 268 ms             │  quit termdeck?                                  ││                                             
-│                                             │                                                  │┃                                             
-│  12:05:02 [vite] hmr update /src/components/│  4 terminals will be closed.                     │┃                                             
-│  12:05:09 warning  src/components/PaneTitle.│  SIGTERM, then SIGKILL after 2s.                 │┃                                             
+│    VITE v5.4.8  ready in 268 ms             │  4 terminals will be closed.                     ││                                             
+│                                             │  SIGTERM, then SIGKILL after 2s.                 │┃                                             
+│  12:05:02 [vite] hmr update /src/components/│                                                  │┃                                             
+│  12:05:09 warning  src/components/PaneTitle.│  y  quit         n  cancel         esc  cancel   │┃                                             
 │           'status' is declared but its value│                                                  ││                                             
-│  12:05:17 [vite] hmr update /src/components/│  y  quit         n  cancel         esc  cancel   ││                                             
-│  12:05:33 [vite] hmr update /src/components/│                                                  ││                                             
-│  12:05:58 [vite] hmr update /src/routes/Dash└──────────────────────────────────────────────────┘│                                             
+│  12:05:17 [vite] hmr update /src/components/└──────────────────────────────────────────────────┘│                                             
+│  12:05:33 [vite] hmr update /src/components/StatusBar.tsx                                      ││                                             
+│  12:05:58 [vite] hmr update /src/routes/Dashboard.tsx                                          ││                                             
 │  12:06:04 [vite] hmr invalidate /src/hooks/useTerminals.ts — could not Fast Refresh            ││                                             
 │  12:06:04 [vite] page reload src/hooks/useTerminals.ts                                         ││                                             
 │  12:06:11 [vite] hmr update /src/routes/Dashboard.tsx                                          ││                                             
@@ -38,5 +40,3 @@
 │                                                                                                ││                                             
 │                                                                                                ││                                             
 └────────────────────────────────────────────────────────────────────────────────────────────────┘│  3 collapsed · ^g c expand all              
-                                                                                                                                                
-   idp   4 terminals   > 1 frontend  ·  + add  ·  0 open  ·  3 collapsed                                     confirm quit  ·  y quit  n cancel  

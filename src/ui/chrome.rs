@@ -172,6 +172,30 @@ pub(super) fn close_column(pane: Rect) -> Option<u16> {
     (pane.width > 2 * PADDING + 2).then(|| pane.x + pane.width - 2 - PADDING)
 }
 
+/// The status row: the canvas's first row (#101).
+///
+/// Every session frame in the export now opens with the bar — workspace chip,
+/// census, then the keys — and the panes start two rows below it. The export's
+/// specification panel still describes the pre-move grid (`status row 42`); the
+/// screens are what the deck follows.
+pub(super) fn status_of(area: Rect) -> Rect {
+    Rect { height: 1, ..area }
+}
+
+/// The rows the deck draws panes into: everything under the status row and the
+/// blank row that separates it from the panes.
+///
+/// Callers guard `area.height >= 4` before they lay anything out, so the
+/// subtraction is only saturating for the ones that measure a pointer against
+/// an area they were handed.
+pub(super) fn body_of(area: Rect) -> Rect {
+    Rect {
+        y: area.y + 2,
+        height: area.height.saturating_sub(2),
+        ..area
+    }
+}
+
 /// Whether the split can move at this width. Below [`WIDE_COLUMNS`] the export
 /// fixes the stack at [`COMPACT_STACK`], so the ratio has nothing to say and
 /// the divider is neither drawn nor draggable.

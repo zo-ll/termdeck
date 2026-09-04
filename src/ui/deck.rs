@@ -11,11 +11,8 @@ impl Deck<'_> {
             return;
         }
 
-        // Rows: body, one blank row, then the status row.
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        // Rows: the status row, one blank row, then the body (#101).
+        let body = body_of(area);
         let layout = self.layout(body);
         // The drawn panes, so an open modal knows which cells are pane chrome
         // and which are the key hints between them.
@@ -65,11 +62,8 @@ impl Deck<'_> {
         self.status_row(
             engine,
             frame.buffer_mut(),
-            Rect {
-                y: area.y + area.height - 1,
-                height: 1,
-                ..area
-            },
+            status_of(area),
+            area.height,
             layout,
         );
         // A modal takes focus: the interface recedes behind it and the master
@@ -163,10 +157,7 @@ impl Deck<'_> {
         if area.width < GUTTER + 4 || area.height < 4 {
             return sizes;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let mut set = |position: usize, pane: Rect| {
             if position < sizes.len() {
                 sizes[position] = Some(inner_size(pane));
@@ -223,10 +214,7 @@ impl Deck<'_> {
         if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let active = || {
             self.state
                 .active()
@@ -279,10 +267,7 @@ impl Deck<'_> {
         if area.width < GUTTER + 4 || area.height < 4 || self.state.collapsed(position) {
             return None;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let rect = match self.layout(body) {
             // An empty stack is the full body too: no stack, no divider,
             // so the master owns every column the zoomed master does.
@@ -335,10 +320,7 @@ impl Deck<'_> {
         if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let Layout::Stacked { stack, preview } = self.layout(body) else {
             return None;
         };
@@ -371,10 +353,7 @@ impl Deck<'_> {
         if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let hit = |position: usize, pane: Rect| {
             let column = close_column(pane)?;
             (pointer.y == pane.y && (pointer.x == column || pointer.x == column + 1))
@@ -419,10 +398,7 @@ impl Deck<'_> {
         if area.width < GUTTER + 4 || area.height < 4 {
             return StackWindow::default();
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let Layout::Stacked { preview, .. } = self.layout(body) else {
             return StackWindow::default();
         };
@@ -439,10 +415,7 @@ impl Deck<'_> {
         if !area.contains(pointer) || area.width < GUTTER + 4 || area.height < 4 {
             return false;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let Layout::Stacked { stack, preview } = self.layout(body) else {
             return false;
         };
@@ -475,10 +448,7 @@ impl Deck<'_> {
         if area.width < GUTTER + 4 || area.height < 4 {
             return None;
         }
-        let body = Rect {
-            height: area.height - 2,
-            ..area
-        };
+        let body = body_of(area);
         let Layout::Stacked { stack, .. } = self.layout(body) else {
             return None;
         };
@@ -513,13 +483,10 @@ impl Deck<'_> {
     /// active pane, so where it lands depends on their widths; this measures
     /// the same spans the row draws rather than guessing a column.
     pub fn add_at(&self, area: Rect, pointer: Position) -> bool {
-        if area.height < 2 || pointer.y + 1 != area.y + area.height {
+        if area.height < 2 || pointer.y != area.y {
             return false;
         }
-        let body = Rect {
-            height: area.height.saturating_sub(2),
-            ..area
-        };
+        let body = body_of(area);
         // The narrow fallback's row has no affordance to click.
         if self.layout(body) == Layout::Narrow {
             return false;
@@ -549,10 +516,7 @@ impl Deck<'_> {
 
     /// A draggable pane must have a visible master-and-stack counterpart.
     pub fn swap_position_at(&self, area: Rect, pointer: Position) -> Option<usize> {
-        let body = Rect {
-            height: area.height.saturating_sub(2),
-            ..area
-        };
+        let body = body_of(area);
         matches!(self.layout(body), Layout::Stacked { .. })
             .then(|| self.position_at(area, pointer))
             .flatten()
@@ -1293,7 +1257,7 @@ impl Deck<'_> {
             .flatten();
         // Its column, plus the blank one that keeps the slot off it.
         let reserved = u16::from(close.is_some()) * 2;
-        let slot = self.right_slot(&status, &metadata, pane);
+        let slot = self.right_slot(project, &status, &metadata, pane);
         let slot_width: u16 = slot.iter().map(|span| span.width() as u16).sum();
         let title = self.title(
             project,
@@ -1374,13 +1338,12 @@ impl Deck<'_> {
         let number = position + 1;
         let name = project.terminal.to_string();
         let separator = if wide { "  ·  " } else { " · " };
-        // A flashing pane wears the mark its folded strip and the censuses
-        // wear: the border says it is asking, the glyph says so in text (#97).
-        let (glyph, glyph_colour) = if pane.base() == Pane::Notify {
-            (NOTIFY_MARK, WARNING)
-        } else {
-            status_glyph(status, metadata)
-        };
+        // The canvas keeps the ordinary status dot on a flashing pane (#101):
+        // its right slot names the notification, which is the same fact in
+        // more words than a mark, so the dot is free to go on saying whether
+        // the terminal is running. A folded strip has no such slot, so it
+        // keeps the mark the censuses use (#97).
+        let (glyph, glyph_colour) = status_glyph(status, metadata);
         let mut spans = Vec::new();
         // Every stack pane declares its disclosure state, folded or not: the
         // open `▾` is the only thing on a fresh frame that says the stack
@@ -1472,6 +1435,7 @@ impl Deck<'_> {
     /// already say which pane it is.
     fn right_slot(
         &self,
+        project: &Project,
         status: &TerminalStatus,
         metadata: &TerminalMetadata,
         pane: Pane,
@@ -1487,6 +1451,18 @@ impl Deck<'_> {
         }
         if pane.base() == Pane::Compact {
             return Vec::new();
+        }
+        // A flashing pane spends its right slot on what it is asking about
+        // (#101): the canvas draws `job done` where the activity meter sits,
+        // so the message is named in the title row rather than left to the
+        // border colour alone. The meter comes back when the flash settles.
+        if pane.base() == Pane::Notify
+            && let Some(notify) = self.notifies.pending(&project.terminal)
+        {
+            return vec![Span::styled(
+                clip(&notify_text(&notify.kind), NOTIFY_SLOT),
+                Style::new().fg(WARNING),
+            )];
         }
         let colour = match pane.base() {
             Pane::Master | Pane::Zoomed => ACCENT,
@@ -1616,6 +1592,7 @@ impl Deck<'_> {
         engine: &dyn TerminalEngine,
         buffer: &mut Buffer,
         area: Rect,
+        rows: u16,
         layout: Layout,
     ) {
         Block::new()
@@ -1635,8 +1612,7 @@ impl Deck<'_> {
             // stack is missing.
             Line::from(vec![
                 workspace,
-                // The row below the body, so `y + height` is the row count.
-                Span::styled(format!("  {}×{}  ", area.width, area.y + area.height), hint),
+                Span::styled(format!("  {}×{}  ", area.width, rows), hint),
                 Span::styled("stack hidden", Style::new().fg(WARNING).bg(STATUS_BG)),
             ])
         } else {
