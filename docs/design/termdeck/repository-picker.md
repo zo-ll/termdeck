@@ -11,13 +11,22 @@ to the live Claude Design project on import), specifically:
 
 - **Screen 06 — "Repository picker — `termdeck` with no path"**: browse left,
   selection right, on the same 98/2/44 split as the session.
-- **Screen 07 — "Filter — `/hor`"**, with its three edge-state cards: zero
-  results, empty folder, and the root list with nothing selected.
+- **Screen 07 — the filter state** (`/pro` typed), with its three edge-state
+  cards: zero results, empty folder, and the root list with nothing selected.
 - **Screen 08 — "Add at runtime — `ctrl+g a`"**: the same picker language
   reduced to a centred sheet over the live session.
 - The spec boards **PICKER — LAYOUT & GLYPHS**, **SELECTION STATES**,
   **FILTER & EMPTY STATES**, **RUNTIME ADD — ^g a**, and **KEY MAP — MOUSE
   PARITY**.
+
+**On the repository names below.** The export's screens are drawn with one
+particular set of sibling repos. This document uses neutral stand-ins —
+`product-frontend`, `product-backend`, `product-app`, `product-infra`,
+`product-docs`, and the query `/pro` that matches them — because none of the
+rules being recorded depends on what the repos are called. Every name is the
+same width as the one it replaces, so the listings below still line up with the
+export's columns, and the sort order, the tie-breaks and the filter behaviour
+they illustrate are unchanged.
 
 The update is purely additive: screens 01–05, the narrow fallback, the
 vertical-collapse board and every pre-existing spec board are byte-identical to
@@ -174,12 +183,12 @@ directory.
 
 `..` first, then folders and repositories interleaved, then plain files last.
 
-**Ambiguity.** Screen 06 lists `archive/`, `horizon-frontend`,
-`horizon-backend`, `horizon-app`, `horizon-infra`, `notes/`, `termdeck`,
-`vendor/` — alphabetical *except* the four `horizon-*` repos, which are in
+**Ambiguity.** Screen 06 lists `archive/`, `product-frontend`,
+`product-backend`, `product-app`, `product-infra`, `notes/`, `termdeck`,
+`vendor/` — alphabetical *except* the four `product-*` repos, which are in
 frontend/backend/app/infra order. That is the reading order of the workspace
 the export is about, not a sort. **Chosen:** case-insensitive alphabetical
-across folders and repos together, files last. The export's `horizon-*` run is
+across folders and repos together, files last. The export's sibling-repo run is
 illustrative; sorting them by selection order would make the list jump under
 the cursor as the user selects, which nothing in the export suggests.
 
@@ -225,7 +234,7 @@ the first-selected-is-master rule and the ordering coherent when a path appears
 twice.
 
 ```
-[x] ◆  horizon-frontend       ×2 · git · main          2h ago
+[x] ◆  product-frontend       ×2 · git · main          2h ago
 ```
 
 - **The checkbox states whether the path has any instance.** The selection
@@ -261,12 +270,12 @@ The selection panel shows them, so a doubled path reads as two rows that differ
 by exactly the thing that distinguishes the panes:
 
 ```
-1 horizon-frontend    MASTER
-  ~/code/horizon-frontend
-2 horizon-backend
-  ~/code/horizon-backend
-3 horizon-frontend-2
-  ~/code/horizon-frontend
+1 product-frontend    MASTER
+  ~/code/product-frontend
+2 product-backend
+  ~/code/product-backend
+3 product-frontend-2
+  ~/code/product-frontend
 ```
 
 The selection panel also carries the **workspace name** — a chip in accent,
@@ -274,10 +283,10 @@ The selection panel also carries the **workspace name** — a chip in accent,
 the bottom of the panel. (The export drew `⏎` on that button; §7's revision
 moved launch to `o`, and everything that names the key follows it.)
 
-**Ambiguity.** The export shows the name `idp` for a selection of `horizon-*`
-repos under `~/code`, so the default name is derivable from neither the root
-nor the repos. **Chosen:** default to the common parent folder's name, and let
-`e` rename. It has to have *some* default, because the launch button is
+**Ambiguity.** The export shows the name `idp` for a selection of sibling
+repos under `~/code` that share none of it, so the default name is derivable
+from neither the root nor the repos. **Chosen:** default to the common parent
+folder's name, and let `e` rename. It has to have *some* default, because the launch button is
 reachable without ever visiting the field.
 
 **Ambiguity.** Nothing says what the picker does with a selected repo's command
@@ -293,11 +302,11 @@ in what order; everything else about a terminal stays configuration's business.
 `/` opens a query line **pinned to the bottom of the listing — never a modal**:
 
 ```
-   /hor                                         esc clear · ⏎/⇥ toggle
+   /pro                                         esc clear · ⏎/⇥ toggle
 ```
 
 - Matching substrings highlight in `ACCENT` inside the row's name
-  (`hor` teal, `izon-frontend` in the ordinary name colour).
+  (`pro` teal, `duct-frontend` in the ordinary name colour).
 - The listing header becomes `MATCH <query> · <n> of <total> · recursive from
   <root>`, so the count states both how much matched and what was searched.
 - **Matches from other configured roots appear below a labelled rule**
@@ -512,7 +521,7 @@ a session or a shell.
 **Picker keys are bare** — no `^g` prefix, because no terminal has focus yet.
 Inside a session everything stays prefixed, so `a`, `m`, `x` and `/` are
 picker-local and never reach a shell. The board names the session bindings the
-picker must not reuse: `^g z`, `^g c`, `^g [`, `^g 1-4`, `^g q`.
+picker must not reuse: `^g z`, `^g c`, `^g [`, `^g N`, `^g q`.
 
 **Contradiction in the export.** Screen 06's browse-panel title hint reads
 `h up · l enter · ~ home · / root`, but both the bottom bar and the key-map

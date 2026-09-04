@@ -41,9 +41,10 @@ git -C "$acceptance_root/repos/apps/mobile" init -q
   even though the folder is not a repository.
 - Run `$td "$acceptance_root/repos"`. It must discover and launch `fe-web`,
   `be-api`, and `app-mobile` in that order.
-- Run `$td --config examples/horizon.yaml check`, `list`, and `idp`. The
-  configured launch remains unchanged: frontend is master; backend and an
-  available app are live previews in their configured directories.
+- Run `$td --config examples/<example>.yaml check`, `list`, and `idp`, using
+  one of the configurations shipped under `examples/`. The configured launch
+  remains unchanged: frontend is master; backend and an available app are live
+  previews in their configured directories.
 
 For every launch shape, verify `Ctrl+g 2`, `Ctrl+g 3`, `Ctrl+g j`, and
 `Ctrl+g k` promote panes without stopping the old master. Check `Ctrl+g z`,

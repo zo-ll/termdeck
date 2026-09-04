@@ -173,7 +173,8 @@ modelcontextprotocol.io then; record the pin in the PR).
 - No `watch`/subscribe, no streaming, no daemon, no persistence.
 - No per-terminal ACLs or auth beyond same-uid.
 - No remote access of any kind (localhost socket only).
-- Horizon stays configuration-only; agents reach us via this API, not horizon.
+- Workspace integration stays configuration-only; agents reach us via this
+  API, not via the tools a workspace happens to run.
 
 ## 9. Confirm-at-impl pins
 

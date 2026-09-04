@@ -39,13 +39,17 @@ consulted, not changed, and not affected.
 
 ### 1.1 The frame that everything sits in (unchanged, from BORDERS & SPACING)
 
-Grid 144×42 at the reference size.
+Grid 144×42 at the reference size. The status row sits at the **top** since
+#101 — the canvas puts it on row 1 in every layout — with one blank row under
+it and the body beneath that. The export's specification panel still says
+`content rows 40, blank row 41, status row 42`; the screens are what the
+implementation follows.
 
 | Region | Extent |
 | --- | --- |
-| Body | rows 0–39 (40 rows) |
-| Blank | row 40 |
-| Status | row 41 |
+| Status | row 0, `STATUS_BG` |
+| Blank | row 1 |
+| Body | rows 2–41 (40 rows) |
 | Master | columns 0–97 (98) |
 | Gutter | columns 98–99 (2) |
 | Stack | columns 100–143 (44) |
@@ -85,7 +89,7 @@ app      collapsed   1 row    (row  35)
 blank                1 row    (row  36)
 worker   collapsed   1 row    (row  37)
 blank                1 row    (row  38)
-footer               1 row    (row  39)
+footer row           1 row    (row  39, reserved — §3.6)
                     ------
                     40 rows
 ```
@@ -117,11 +121,11 @@ Consequences, all consistent with the export:
   shows 2 previews filling 39 rows, so nothing licenses that.)
 - `k = 0` (everything collapsed, reachable via `^g c` on the master): the strips
   pack to the top of the stack column, the remaining rows stay canvas-blank, and
-  the footer stays anchored to the last row.
+  the reserved footer row stays the last one.
   **Ambiguity:** the export never renders an all-collapsed stack. Chosen
-  reading: strips top-aligned, footer bottom-anchored, master untouched —
-  because "collapse is vertical only; the stack never changes width" forbids the
-  master from claiming the empty column.
+  reading: strips top-aligned, the footer row still reserved at the bottom,
+  master untouched — because "collapse is vertical only; the stack never
+  changes width" forbids the master from claiming the empty column.
 
 ### 1.4 Minimum heights and the sub-30-row regime
 
@@ -180,14 +184,16 @@ The width trigger (`body.width < NARROW_COLUMNS`) is unchanged.
 > once. `^g 2-4` promotes a collapsed pane directly — it expands as it takes the
 > master frame.
 
-Screen 05's status bar shows `^g c collapse` in the hint row and the stack
-footer shows `2 collapsed · ^g c expand all`.
+Screen 05's status row carries the fold census and its hint row advertises
+`^g c`. The stack column states no census of its own: the updated canvas took
+the footer's `{c} collapsed · ^g c expand all` out (#103), because the strip,
+its marker and the status row already say it. See §3.5 and §3.6.
 
 ### 2.2 Ambiguity, and the resolution
 
 The export says `^g c` "toggles the selected pane", but **Termdeck has no
 preview selection**: selection *is* promotion, the master is always the selected
-pane, and every key that addresses a preview (`^g 2-4`, double-click, drag)
+pane, and every key that addresses a preview (`^g N`, double-click, drag)
 promotes or swaps it. Read literally, `^g c` can therefore only ever mean "on
 the master", i.e. all-at-once — yet screen 05 shows a *mixed* stack (backend
 open, app and worker collapsed) that all-at-once cannot produce.
@@ -200,8 +206,8 @@ The master is always the selected pane, so `^g c` toggles the whole stack:
 - any preview open → collapse every preview;
 - every preview collapsed → expand every preview.
 
-This is precisely the language the export puts on screen: the hint says
-`collapse`, the footer says `expand all`.
+This is the language the export puts on screen: the hint row names `^g c`
+while a fold is in play.
 
 **(b) Click the disclosure marker — the per-preview control (required).**
 The export draws the affordance itself: `▾` on an open pane's title row, `▸` on
@@ -222,12 +228,12 @@ arm the double-click promote timer.
 ### 2.3 Where the affordance lives visually
 
 - Open preview: `▾ ` prefixed to the title, inside the top border, at the
-  title's existing 2-column inset. Screen 05: `▾ 2 backend · …/backend · ●`.
+  title's existing 2-column inset. Screen 05: `▾ 2 backend · ●`.
 - Collapsed preview: `▸ ` at the head of the strip, same column.
 - The marker is drawn on **every** stack pane, folded or not — see §3.4, as
   revised by issue #32.
-- The stack footer states the exit: `{c} collapsed · ^g c expand all`.
-- The status bar states the census and advertises the key: see §3.5.
+- The status row states the census and advertises the key, and is the only
+  place that does: see §3.5. The stack footer states no fold (§3.6).
 
 ### 2.4 What is *not* the control
 
@@ -311,15 +317,18 @@ except:
 - its height is the §1.3 figure (34 rows in screen 05).
 
 The marker costs 2 columns of title budget. At the reference width this still
-fits: `▾ 2 backend · …/backend · ●` is 27 columns against a 28-column budget
-(38 content columns − 8 slot − 2 clearance). At `COMPACT_STACK` (34) the path
-shortens as it already does.
+fits with room to spare: `▾ 2 backend · ●` is 15 columns against a 28-column
+budget (38 content columns − 8 slot − 2 clearance). It was 27 before the
+declutter pass took the `· …/backend` out of every pane title, which is what
+made the 2 columns free.
 
 ### 3.3 Demoted, exited, and scrollback interplay inside a strip
 
 - **Demoted + collapsed:** a strip has no border and already sits on
-  `DEMOTED_BG`, so it carries no demotion highlight. The demotion is still
-  announced by the stack footer for its 1.5s window (§3.6).
+  `DEMOTED_BG`, so it carries no demotion highlight. **Accepted loss:** the
+  stack footer's `promoted {name} · ^g 1 back` line went with the declutter
+  pass (§3.6), so a demotion into a folded slot is stated only by the status
+  row's `>` pointer naming the new master.
 - **Exited + collapsed:** dot `✕` in `ERROR`, tail `exit 1` in `ERROR`. The rule
   line, timestamp and `r restart` line are gone with the box. `^g r` is
   unchanged — it has always restarted the *active* terminal only, so nothing
@@ -367,9 +376,9 @@ click target are all unchanged.
 **Revised by issue #39 — every preview starts folded.** The export's screens
 01–04 show an open stack, and until #39 `DeckState::new` matched them. The user
 inverted the default: a fresh run draws the §5 "all previews collapsed" state —
-strips top-aligned at the head of the column, blank column below, footer
-`{n} collapsed · ^g c expand all`, status `0 open  ·  {n} collapsed` — and a
-marker click (or `^g c`) is what opens a preview.
+strips top-aligned at the head of the column, blank column below, status
+`0 open  ·  {n} collapsed` — and a marker click (or `^g c`) is what opens a
+preview.
 
 Nothing else in this document changes. The geometry, the strip contents, the
 marker cells, the footer and status precedence and the §4 interplay rules are
@@ -394,7 +403,7 @@ than an edge case:
 
 ### 3.5 Status bar
 
-Screen 05's left segment:
+The status row's left segment (row 0 since #101):
 
 ```
  idp   4 terminals   > 1 frontend  ·  1 open  ·  2 collapsed
@@ -408,15 +417,19 @@ exited`) is **dropped**. Screen 05 has nothing exited, so the code's current
 `all running` suffix would otherwise appear there and it does not. When `c == 0`
 the status bar is exactly as today.
 
-Screen 05's right hint row:
+Its right hint row:
 
 ```
-^g j/k switch  ^g 1-4 select  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit
+^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit
 ```
 
 `^g c` in `ACCENT` `#2dd4a7`, its label `collapse` in `PREVIEW_FG` — the same
 treatment `^g z` gets in screen 03 when zoom is on. Note that `^g [ scroll` is
 **absent**; `^g c collapse` takes its place.
+
+`^g N select` is absent too, and permanently: the declutter pass took it and
+`^g [ scroll` out of the key row for good. Both stay bound, stay in the help
+overlay, and stay in the narrow collapsed row.
 
 Rule: when `c >= 1` the hint row **drops** `^g [ scroll` and **seats
 `^g c collapse` ahead of `^g z zoom`**, accenting the key. Note the ordering:
@@ -433,18 +446,20 @@ The narrow status line (`84×22  stack hidden`) is unchanged.
 
 ### 3.6 Stack footer precedence
 
-The stack footer's last row already carries three mutually exclusive messages.
-With collapse there are four; precedence, most specific first:
+The stack's last row is still reserved, but it now states only what nothing
+else states. The declutter pass took out the promotion keys
+(`ctrl+g N promote · j/k cycle`) and the `promoted {name} · ^g 1 back`
+demotion line; the updated canvas (screen 05) took the fold census out with
+them (#103), because a fold is already declared three times over — its own
+strip, its marker, and the status row's `{c} collapsed` beside an accented
+`^g c`.
+
+What is left, most specific first:
 
 1. scrollback — `scrollback · esc returns to live`
-2. demotion, for its 1.5s window — `promoted backend · ^g 1 back`
-3. `c >= 1` — `{c} collapsed · ^g c expand all`
-   (`{c} collapsed · ` and ` expand all` in `HINT`, `^g c` in `PREVIEW_FG`,
-   drawn at `stack.x + 1` — the export's `padding-left:1ch`)
-4. default — `ctrl+g 1-4 promote · j/k cycle`
-
-Demotion outranks collapse because it is transient and self-clearing; the
-collapse footer returns 1.5s later. **Chosen**, not shown in the export.
+2. hidden previews — `↑ 2 more · ↓ 3 more · ^g pgup/pgdn`, the one thing a
+   preview cannot state about itself (`scrollable-stack.md` §3)
+3. otherwise the row is blank.
 
 ### 3.7 Transitions
 
@@ -458,7 +473,7 @@ easing, no reflow step.
 
 | Situation | Behaviour | Grounding |
 | --- | --- | --- |
-| **Promote a collapsed preview** (`^g 2-4`, double-click, drag) | Its collapse flag clears and it expands as it takes the master frame. The demoted old master lands in the vacated slot **open** (it was never collapsed). Freed rows recompute for the remaining stack. | Export: "`^g 2-4` promotes a collapsed pane directly — it expands as it takes the master frame." |
+| **Promote a collapsed preview** (`^g N`, double-click, drag) | Its collapse flag clears and it expands as it takes the master frame. The demoted old master lands in the vacated slot **open** (it was never collapsed). Freed rows recompute for the remaining stack. | Export: "`^g 2-4` promotes a collapsed pane directly — it expands as it takes the master frame." |
 | **Collapse state across promotion** | Flags are keyed by configured position, so they travel with the terminal and survive any number of promotions and swaps. Only the pane being promoted has its flag cleared. | Export: "Collapse state persists per workspace and survives promotion." |
 | **The master** | Never collapsed. There is no master collapse flag; `^g c` on the master addresses the previews. | Export: "on the master it collapses every preview at once." |
 | **Zoom + collapse** | Zoom hides the stack outright, so collapse is inert but retained; unzoom restores the exact mix. The zoom status line keeps its `hidden: 2● 3● 4○` summary unchanged and says nothing about collapse. | Screen 03 shows the zoom status line with no collapse census; the export never combines the two. **Ambiguity resolved by: zoom hides everything, so it reports everything the same way.** |
@@ -476,9 +491,9 @@ easing, no reflow step.
 
 | Case | Behaviour |
 | --- | --- |
-| **Empty stack** (1 terminal, `n = 0`) | Nothing to collapse. `^g c` is a no-op and returns `false` from the state method. The status census reads `0 stacked` as today; no collapse census, no `^g c` hint. The stack column already draws only the footer. |
-| **Exactly 1 preview** (`n = 1`) | `^g c` toggles it. Collapsed: one strip at the top of the column, the rest of the column blank, footer `1 collapsed · ^g c expand all`, status `0 open  ·  1 collapsed`. Open: `base` rows as today. |
-| **All previews collapsed** (`k = 0`) | Strips top-aligned, blank column below, footer anchored at the last row. Master unchanged in both dimensions. `^g c` expands all. |
+| **Empty stack** (1 terminal, `n = 0`) | Nothing to collapse. `^g c` is a no-op and returns `false` from the state method. The status census reads `0 stacked` as today; no collapse census, no `^g c` hint. The stack column already draws only its reserved footer row. |
+| **Exactly 1 preview** (`n = 1`) | `^g c` toggles it. Collapsed: one strip at the top of the column, the rest of the column blank, status `0 open  ·  1 collapsed`. Open: `base` rows as today. |
+| **All previews collapsed** (`k = 0`) | Strips top-aligned, blank column below, the reserved footer row still the last one. Master unchanged in both dimensions. `^g c` expands all. |
 | **Exited preview collapsed** | Dot `✕` `ERROR`, tail `exit {code}` `ERROR`. Exit rule/timestamp/`r restart` are not drawn. §3.3. |
 | **Preview holding scrollback history, collapsed** | The `↑ N lines above · ^g [` tag is not drawn; it returns when the pane expands. The engine's viewport position is untouched by collapse. §3.3. |
 | **Starting terminal collapsed** | Dot `○` in `WARNING` (existing `status_glyph`), tail `starting`. |
@@ -556,18 +571,22 @@ responsive follow-on and can land second.
   chrome, matching screen 05 exactly:
 
   ```
-  rows  0–33  backend, open, 34 rows, title  "▾ 2 backend · …/backend · ●"
+  row      0  status (from column 2) " idp   4 terminals   > 1 frontend  ·  1 open  ·  2 collapsed"
+                     + "^g j/k switch  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit"
+  row      1  blank
+  rows  2–35  backend, open, 34 rows, title  "▾ 2 backend · ●"
                                      slot   "[##····]"
-  row     34  blank
-  row     35  strip  "▸ 3 app · ✕ · exit 1"        (background #101317)
   row     36  blank
-  row     37  strip  "▸ 4 worker · ○ · idle 6m"    (background #101317)
+  row     37  strip  "▸ 3 app · ✕ · exit 1"        (background #101317)
   row     38  blank
-  row     39  footer "2 collapsed · ^g c expand all"   at column 101
+  row     39  strip  "▸ 4 worker · ○ · idle 6m"    (background #101317)
   row     40  blank
-  row     41  status (from column 2) " idp   4 terminals   > 1 frontend  ·  1 open  ·  2 collapsed"
-                     + "^g j/k switch  ^g 1-4 select  ^g c collapse  ^g z zoom  ^g ? help  ^g q quit"
+  row     41  the stack's reserved footer row, blank here (§3.6)
   ```
+
+  Row numbers are absolute: the status row is row 0 and the body starts at row
+  2 (§1.1). The title carries no `cwd` — the declutter pass took it out of
+  every pane title.
 
   **Deviation to expect:** the export's screen 05 draws app as *running* after a
   restart (`● · bundled 1.2s`) and gives backend 34 rows of fresh output that
@@ -609,9 +628,9 @@ responsive follow-on and can land second.
 | A4 | `^g c collapse` in screen 05's hint row vs. its absence in screens 01/02. | The hint row swaps `^g [ scroll` for `^g c collapse` only while ≥ 1 preview is collapsed; discoverability otherwise comes from the help overlay. |
 | A5 | "last meaningful line" — `bundled 1.2s` is not derivable from any single field. | Deterministic table in §3.1; matches `idle 6m` and `exit 1` exactly, matches `bundled 1.2s` in kind. |
 | A6 | RESPONSIVE board's `<30 rows → previews reduce to 2, then to the strip` vs. the collapse board's auto-collapse rule. | Collapse board governs; previews are never dropped, only folded. The 6-row floor is the operative number, not 30. |
-| A7 | All-collapsed stack is never rendered. | Strips top-aligned, remaining column blank, footer bottom-anchored. |
+| A7 | All-collapsed stack is never rendered. | Strips top-aligned, remaining column blank, the footer row still reserved at the bottom. |
 | A8 | Zoom + collapse never shown together. | Zoom hides the stack; its status line is unchanged and says nothing about collapse. |
-| A9 | Stack footer when a demotion and a collapse are both live. | Demotion wins for its 1.5s window, then the collapse footer returns. |
+| A9 | Stack footer when a demotion and a collapse are both live. | **Moot since #103:** the footer draws neither. The demotion is stated by the demoted pane's own 1.5s highlight, the fold by the status row (§3.6). |
 | A10 | Wheel over a strip never shown. | No-op — a strip has no viewport. |
 | A11 | The export's strip text sits at `2ch` while a pane title's text sits at `3ch`, so `▸` and `▾` are one column out of line. | Followed literally. Moving the title would change the committed screen-01/02 fixtures; moving the strip would deviate from screen 05. |
 

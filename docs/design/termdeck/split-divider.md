@@ -28,8 +28,10 @@ master, column 98 at the reference size.
   one column.
 - The two pieces of gutter chrome never overlap: divider beside the master,
   scroll track beside the stack.
-- The divider is drawn for the full body height (rows 0–39), stopping before
-  the blank row and the status row.
+- The divider is drawn for the full body height — rows 2–41 at the reference
+  size, starting below the status row and the blank row under it. (The body
+  moved down two rows when the status bar took row 0 in #101; it is still 40
+  rows and the divider still spans all of them.)
 
 ```
  master … ┐│┃│  ▸ 2 backend …
@@ -99,12 +101,16 @@ out rather than pinning the old 0.70.
 
 Two pieces of chrome had to learn the narrower column, both by giving up their
 least important part first, which is the rule the paging footer already
-followed:
+followed. One of the two is still there:
 
 - a **strip** with no room for its tail drops the ` · ` that would have
-  introduced it, rather than ending on a separator that separates nothing;
-- the **fold census** drops ` · ^g c expand all` and keeps `{c} collapsed`,
-  rather than rendering half of `expand`.
+  introduced it, rather than ending on a separator that separates nothing.
+
+The other was the stack footer's **fold census**, which dropped
+` · ^g c expand all` and kept `{c} collapsed` rather than rendering half of
+`expand`. It has nothing left to shed: the updated canvas deleted that footer
+outright (#103) and the census moved to the status row, which spans the whole
+frame whatever the split does.
 
 The marker, the configured number, the name and the status dot all still fit,
 so the affordance #39 depends on survives the minimum width. That is why the

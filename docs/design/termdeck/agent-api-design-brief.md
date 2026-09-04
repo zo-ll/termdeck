@@ -72,7 +72,7 @@ Conventions:
 ## Agent coverage ("any agent")
 
 - One `termctl` CLI binary implements the whole surface (works for pi,
-  shells, horizon, notebooks).
+  shells, notebooks — any harness or agent that can run a command).
 - `termdeck mcp` — a thin MCP server wrapping the SAME schema over the same
   socket, so Claude Code / Codex native MCP tool calls drive the session
   identically. No second API to learn; MCP is a transport adapter only.
@@ -104,6 +104,7 @@ Conventions:
 - Contracts stay frozen; the API is an outward adapter (new crate/module
   `src/ctl/` + `src/cli` entry), no engine internals change.
 - No daemon: the socket dies with the session (unlike tmux), matching the
-  project constitution. Horizon stays configuration-only here too.
+  project constitution. Workspace integration stays configuration-only here
+  too.
 - Research precedent: #71 stays parked; `notify` ships in the API now, the
   visual flash/overlay lands with #71's design.
