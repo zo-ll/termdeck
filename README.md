@@ -10,9 +10,12 @@ the tools that workspace runs.
 
 ## Status
 
-The configured workspace opens as an interactive master-and-preview terminal
-deck. See [the WSL manual acceptance pass](docs/WSL_ACCEPTANCE.md) for the
-end-to-end check.
+A workspace opens as an interactive master-and-preview terminal deck, whether
+it comes from a configuration file, from a folder Termdeck discovers
+repositories in, or from the picker. Terminals can be added and closed while
+the session runs, and a running session can be inspected and driven from
+another shell with `termctl`. See [the WSL manual acceptance
+pass](docs/WSL_ACCEPTANCE.md) for the end-to-end procedure.
 
 ## Toolchain
 
@@ -36,22 +39,56 @@ rustc 1.98.0
 The existing `/usr/bin/rustc` may remain installed. Ensure `$HOME/.cargo/bin`
 appears before `/usr/bin` in `PATH` so the rustup-managed toolchain is selected.
 
+## Running Termdeck
+
+The repository builds two binaries, `termdeck` and `termctl`, so `cargo run`
+has to be told which one:
+
+```bash
+cargo run --bin termdeck -- [ARGUMENTS]
+cargo run --bin termctl -- [ARGUMENTS]
+```
+
+What `termdeck` opens is decided by what it is given:
+
+| Invocation | What it opens |
+| --- | --- |
+| `termdeck` | The repository picker, over the working directory and `$HOME`. No configuration file is read. |
+| `termdeck FOLDER` | That folder directly. Repositories under `frontends/`, `backends/` and `apps/` become `fe-`, `be-` and `app-` terminals; other repositories in the folder become one terminal each; a folder with nothing to discover — a repository itself, or a plain directory — becomes a single terminal of its own. |
+| `termdeck CONFIG_FILE` | That configuration file's workspace. |
+| `termdeck --config PATH [WORKSPACE]` | `WORKSPACE` from `PATH`. |
+| `termdeck check` / `termdeck list` | Nothing: it inspects the configuration and exits. |
+
+A bare positional argument is a **path**, not a workspace name. It has to
+exist, and whether it is a directory or a file decides which of the two shapes
+above applies; a name that is neither is an error rather than a guess at a
+misspelled workspace. A workspace is named only alongside `--config`, and only
+when the file holds more than one — a file with exactly one workspace opens it
+without being asked, and a file with several lists them instead of choosing.
+
+`$XDG_CONFIG_HOME/termdeck/config.yaml`, falling back to
+`$HOME/.config/termdeck/config.yaml`, is the configuration `check` and `list`
+read when `--config` does not name another. Launching reads only the file it
+was given, by `--config` or as a positional path.
+
 ## Configuration commands
 
 The example configurations under `examples/` can be validated and listed
 without starting any terminals:
 
 ```bash
-cargo run -- --config examples/<example>.yaml check
-cargo run -- --config examples/<example>.yaml list
+cargo run --bin termdeck -- --config examples/<example>.yaml check
+cargo run --bin termdeck -- --config examples/<example>.yaml list
 ```
-
-The command shape is `termdeck [--config PATH] [WORKSPACE|check|list]`. Without
-`--config`, Termdeck loads `$XDG_CONFIG_HOME/termdeck/config.yaml`, falling
-back to `$HOME/.config/termdeck/config.yaml`.
 
 `check` validates workspace roots, required terminal paths, and command argv
 arrays. Missing optional terminal paths are omitted by `list`.
+
+A configuration file describes workspaces, their roots, and their terminals.
+There is no environment-override key: a terminal's command inherits the
+environment Termdeck was started in, plus the pane variables Termdeck sets
+itself (`TERMDECK_SOCK`, `TERMDECK_PANE`). Unknown keys are rejected rather
+than ignored.
 
 ## Shell notifications
 

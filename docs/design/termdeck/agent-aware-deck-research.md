@@ -14,14 +14,64 @@ already exists.** This brief enumerates the possibilities for both threads,
 grounds them in the current architecture, and recommends a direction. It
 decides nothing.
 
+## Amendments (2026-09-05, #129)
+
+This brief was written on 2026-09-04 and is load-bearing for the #112 decision
+gate, so the claims below are corrected here rather than edited away: the
+original text stands and each correction is marked where the claim is made.
+Raised by the repo audit (#129) and, for several of them, by the brief's own
+author.
+
+- **A1 — "the constitution says no; a decision, not a build task" (§1.2, §3.1
+  row B) puts too much of B on policy.** The `TerminalEngine` seam does fit a
+  remote engine, but a persistent server is not blocked by the constitution
+  alone: reconnection and client handoff, PTY and session ownership across
+  clients, resize arbitration between attached clients of different sizes,
+  output buffering and backpressure for a slow or absent client,
+  authentication for a socket that outlives the session that made it, and
+  shutdown and orphan policy when the last client leaves are all unsolved
+  design work here. Read row B as three gates, not one: the seam fits, the
+  design does not yet exist, and the constitution says no.
+- **A2 — "the one thing tmux semantically cannot offer" (§1.7, §3.2 row Pc)
+  is too strong.** tmux ships no approval prompt, but it is scriptable enough
+  to approximate one — control mode, `display-menu` / `command-prompt`, hooks,
+  and a wrapper process that gates the command. The defensible claim is
+  narrower: tmux offers no *native* approval affordance, and anything built
+  there wraps a multiplexer that does not know what an agent turn is.
+  Termdeck's advantage is integration, not impossibility.
+- **A3 — the "no tool can save a running process" claims (§1.1, §3.1 row C)
+  are right about this class of tool and wrong as a universal.** What row C
+  says about tmux-resurrect is correct — it *recreates* by re-running recorded
+  commands, and zellij's session restore is the same shape — and that is the
+  part the desire has to be defused against. But live process state can be
+  checkpointed in specific setups: CRIU on Linux checkpoints and restores
+  process trees, ptys included, under real constraints (privileges, kernel
+  support, a matching environment, open files and sockets). It is not a path
+  this product would take. "No tool can" should read "nothing in this class of
+  tool does, and the general case is out of reach for a terminal application".
+- **A4 — the sizings in §3 (S/M/L, "1–2 slices", "10–20 issues") are
+  estimates made without a validated design,** and several restate the
+  author's own earlier answers rather than independent evidence. None of them
+  survives contact with A1's open questions, and B's "10–20 issues" in
+  particular prices a server design that has not been written. Treat every
+  number in §3 as a relative ordering hint, and re-estimate once a design
+  exists.
+- **A5 — "turns the app into a direct tmux competitor" (§1.2) and "the product
+  stays 'tiled terminals + a control socket'" (§3.1 row E) read as though
+  Termdeck were not a multiplexer. It is one:** it owns several PTYs, keeps VT
+  state for each, and multiplexes them into a single interface. What it does
+  not have is detach/reattach and background execution — a separate capability
+  that happens to be tmux's headline one. B would open competition over
+  persistence, not over multiplexing, which Termdeck already does today.
+
 ## 1. Executive summary (the decision in 8 lines)
 
 1. **PERSISTENCE IS NOT ONE FEATURE.** "Like tmux" conceals three desires:
    workspace-layout resumption (A, no daemon), live detach/reattach +
    background execution (B, requires a server/daemon), and the myth that a
-   running process can be saved (C — no tool can rewind a live `vim`; even
-   tmux-resurrect *recreates*, it doesn't restore). Decide which desire is
-   real *before* designing. (§3.1)
+   running process can be saved (C — no tool in this class rewinds a live
+   `vim`; even tmux-resurrect *recreates*, it doesn't restore — **see A3**).
+   Decide which desire is real *before* designing. (§3.1)
 2. **B is an architecture inversion, not an add-on.** It contradicts three
    constitution documents (AGENTS.md, PLAN.md, DESIGN.md: "no tmux, no
    OpenMux, no daemon, no session persistence"), rewrites the lifecycle
@@ -29,7 +79,9 @@ decides nothing.
    PLAN.md), and turns the app into a direct tmux competitor. Feasible — the
    `TerminalEngine` contract + `EngineCommand`/`EngineEvent` + the ctl socket
    were built as exactly the remote-engine seam B needs — but it is a
-   constitution decision, not an engineering one. (§3.1, §2)
+   constitution decision, not an engineering one. (§3.1, §2) **See A1** (the
+   server design is unwritten, not merely unapproved) and **A5** (Termdeck
+   already multiplexes; B adds persistence).
 3. **Even A (resume) touches the constitution.** "Persist sessions" is
    banned in writing; a resume feature is arguably layout/config
    persistence, but the user must adjudicate the letter vs the spirit.
@@ -52,7 +104,8 @@ decides nothing.
    1–2 slices on the existing socket. (§3.2, §5)
 7. **Pc (terminal-native approval: agent asks, human says allow once/
    always) is the differentiating-but-risky piece.** It is the one feature
-   tmux semantically cannot offer. It needs its own design decision
+   tmux offers no native affordance for (**see A2**). It needs its own
+   design decision
    (modal vs keybinding vs toast; who holds "always allow") and must honor
    the #71 finding that background-event UX is non-modal. (§3.2, §5)
 8. **Recommended shape: A + Pa + Pb now (no daemon, both worker lanes);
@@ -117,15 +170,17 @@ decides nothing.
 
 ## 3. Possibilities
 
+*Every cost in the tables below is an unvalidated estimate — see **A4**.*
+
 ### 3.1 Persistence
 
 | # | Mechanism | What it gives | Pros | Cons / cost | Fit with constraints |
 |---|-----------|---------------|------|-------------|----------------------|
 | A | **Workspace resume** (`termdeck --resume`): on exit (or on demand), serialize deck state — terminal defs, paths, cwd, master id, zoom, divider ratio, sheet — to a session file; relaunch recreates the deck with **fresh** PTYs | "My three project terminals are back where I left them" — the editor-tabs UX | No daemon; cheap (S, 1–2 slices, mirrors config model); processes start clean (no stale-shell rot); pairs with the agent story (the deck survives to be peeked at) | NOT live continuation — running `vim`/`cargo` die and restart; session file lifecycle (auto-save policy, stale files); letter-of-constitution question ("persist sessions" is banned) | Strong — architecture unchanged; needs only a scope-clause amendment |
-| B | **Server/daemon** (tmux model): a separate process owns PTYs + VT state; the UI becomes a client; `EngineCommand`/`EngineEvent` travel the local socket; session naming/listing/attach; lifecycle = graceful handoff | True detach/reattach; background execution (`cargo build`, a long agent run) survives client close | The only way to get Desire B; contract seam already fits; differentiates with the agent story (supervised detached agents) | Architecture inversion (L, 10–20 issues across both lanes); contradicts 3 constitution docs + the "no owned child processes" acceptance criterion; becomes a tmux competitor | The seam says feasible; the constitution says no; a decision, not a build task |
-| C | "Persist my live work" (reboot survival) | — | — | **Myth**: no tool restores a live process; tmux-resurrect *recreates* commands; VT state is memory | N/A — name to defuse the desire, not to build |
+| B | **Server/daemon** (tmux model): a separate process owns PTYs + VT state; the UI becomes a client; `EngineCommand`/`EngineEvent` travel the local socket; session naming/listing/attach; lifecycle = graceful handoff | True detach/reattach; background execution (`cargo build`, a long agent run) survives client close | The only way to get Desire B; contract seam already fits; differentiates with the agent story (supervised detached agents) | Architecture inversion (L, 10–20 issues across both lanes); contradicts 3 constitution docs + the "no owned child processes" acceptance criterion; becomes a tmux competitor | The seam says feasible; the design (reconnect, ownership, resize, buffering, auth, shutdown) is unwritten; the constitution says no — **see A1** |
+| C | "Persist my live work" (reboot survival) | — | — | **Myth** for this class of tool: tmux-resurrect *recreates* commands; VT state is memory (**see A3** — checkpointing exists elsewhere, e.g. CRIU, and is not a path here) | N/A — name to defuse the desire, not to build |
 | D | **Delegate: termdeck drives tmux** as the persistence backend (own UI + agent layer; tmux owns PTYs) | Cheap path to B-full; detect whether "detach + reattach + background" is actually the need | Rewires the PTY provider (`portable-pty` → tmux as provider) — ripples across engine/contracts/tests; "no tmux" is in the constitution; runs against a WSL acceptance env where tmux must be present | M–L; best used as a **falsification experiment**, not the end state |
-| E | Do nothing (die-with-session status quo) | — | Zero cost; matches the current constitution | Desire A/B both unmet; the product stays "tiled terminals + a control socket" | Baseline |
+| E | Do nothing (die-with-session status quo) | — | Zero cost; matches the current constitution | Desire A/B both unmet; the product stays a multiplexer without detach — "tiled terminals + a control socket" (**see A5**) | Baseline |
 
 ### 3.2 Agent awareness (degrees beyond the shipped control API)
 
@@ -133,7 +188,7 @@ decides nothing.
 |---|------|---------------|----------|------|----------------|
 | Pa | **Event push** (`watch`/`drain`): bounded event ring (PaneExited, StatusChanged, CommandFinished — already decoded from OSC-7777 — + new AgentTurnStarted/Ended) served over the ctl socket | Agents stop polling per-frame; a spinner in pane 3 becomes "exit 1" as an event | Bounded ring buffer; pull-style `drain` verb keeps the one-request-per-frame invariant; or a persistent-connection mode (needs a second fd — breaks the invariant; user call) | S–M (1–2 slices) | No daemon, no threads (tee into the existing drain); the v2 `watch` verb pulled forward |
 | Pb | **Advisory agent identity**: invert `TERMDECK_PANE` — agent emits kind/model/busy-state in a handshake; `status`/`list` report "pane 3: claude, idle"; UI badge per pane | The deck *knows* what runs in it; notifications differentiate "agent finished, exit 1" from a normal command | New verb + envelope fields; model is advisory by construction (trust precedent §2) | S (1 slice) | Trust: **advisory only, never a gate** (identity is self-reported) |
-| Pc | **Terminal-native approval**: agent requests a command; deck asks the human "allow once/always?" and routes the reply back over the socket | The one thing tmux semantically cannot offer; makes a long-lived supervised agent tolerable at the keyboard | Decision needed: modal vs dedicated key (`Ctrl+g a` approve) vs toast+keybind; who holds "always allow" (per-agent, per-session, per-command-class); audit log reuses the `--force` visibility idea | M–L; needs its own design + security review; cross-lane (engine + UI) | Must honor the #71 non-modal principle for *background* cases; foreground approval is legitimately modal (Help/Quit precedent) |
+| Pc | **Terminal-native approval**: agent requests a command; deck asks the human "allow once/always?" and routes the reply back over the socket | The one thing tmux has no native affordance for (**see A2**); makes a long-lived supervised agent tolerable at the keyboard | Decision needed: modal vs dedicated key (`Ctrl+g a` approve) vs toast+keybind; who holds "always allow" (per-agent, per-session, per-command-class); audit log reuses the `--force` visibility idea | M–L; needs its own design + security review; cross-lane (engine + UI) | Must honor the #71 non-modal principle for *background* cases; foreground approval is legitimately modal (Help/Quit precedent) |
 | Pd | **Turn-aware history**: OSC-7777 already marks shell command boundaries; add *turn* boundaries (input region / output region / exit code) to `history_lines` or a structured `peek` | An agent can align its tool calls to lines; audit value neither tmux capture-pane nor anything else offers | Additive contract method or envelope fields (the `history_lines` default-body precedent) | S–M (1 slice) | Additive pattern already blessed; needs the shell hooks to emit agent-turn markers (extension of #108's seam) |
 | Pe | **Agent workbench spawn** (`termdeck agent` / `ctl spawn`): open a pane running a code agent pointed at the workspace, with `TERMDECK_SOCK`/`TERMDECK_PANE` pre-set | "Run an agent on this repo, watch it in the stack, approve from the keyboard" as one gesture | New verb + rc wiring (what hooks exist per agent CLI) + UI affordance | M (2+ slices) | Product bet, not engineering; workspace integration stays config-only |
 
