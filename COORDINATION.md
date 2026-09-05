@@ -1228,6 +1228,12 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (coordinator adjudication per the #130 pattern; WORKING,
   transcript-verified; worktree coord/133-cli-shadow off 8ae14fc).
   #129-A resumes at the 19:44 codex reset (~1h20m).
+- 2026-09-05 19:46: codex quota RESET — #129-A RESUMED in place (4
+  uncommitted files intact; codex reports 'help routing complete for
+  both binaries, validating the final option-order regression, then
+  gate + commit + handoff'). Working. Next: #129-A done → critic (pre-
+  written assignment incl. the README cargo-run reconcile with
+  default-run) → merge → close #129 → #135 → close #132/#131.
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
