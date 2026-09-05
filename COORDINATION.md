@@ -1228,6 +1228,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (coordinator adjudication per the #130 pattern; WORKING,
   transcript-verified; worktree coord/133-cli-shadow off 8ae14fc).
   #129-A resumes at the 19:44 codex reset (~1h20m).
+- 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
+  README; marker: `--` ends the verbs — termdeck -- check, --config
+  f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
+  deliberately rejected; 3 tests fail pre-fix 'unknown option: --';
+  gate 405 lib + 4). Routed to CLAUDE critic (assignment 133.critic.md
+  — --convention across flag positions by RUNNING the binaries, design
+  honesty of the cwd rejection, edge cases (-- alone, -- --help), exit-
+  code contract, gate). Verdict ping inbox 133-cli-shadow.critic.ping.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
