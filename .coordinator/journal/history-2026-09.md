@@ -681,3 +681,43 @@ The last ~15 events — older ones live in the journal above; ask and the coordi
   remain. All workers stopped; main green 257.
 - 2026-09-03: #81/#82 fully DELETED (worktrees, local AND remote branches) —
   user will work on them tomorrow. All other coord/* remote branches kept.
+
+
+---
+
+## Archived 2026-09-05: original dashboard tables (Issues #1-#14, Small tasks, Waves) — moved here during the #129 docs-prune (nit 2). All content historical; the live tracker (gh) is the source of truth.
+## Issues
+
+| # | Title | Blocked by | Branch | Worker | Skills | PR | Status |
+|---|-------|------------|--------|--------|--------|----|--------|
+| [1](https://github.com/zo-ll/termdeck/issues/1) | Shared contracts and fake engine | — | `coord/01-contracts` | Codex (Terra/high) | ponytail | [#5](https://github.com/zo-ll/termdeck/pull/5) | merged (`b880b60`) |
+| [2](https://github.com/zo-ll/termdeck/issues/2) | Native PTY and terminal engine epic | 1 | — | Codex | ponytail | — | split into #7–#10 |
+| [3](https://github.com/zo-ll/termdeck/issues/3) | Master-stack interface epic | 1 | — | Claude Code via `claudep` (Opus/high) | ponytail | [#6](https://github.com/zo-ll/termdeck/pull/6) | design merged; #11 active |
+| [4](https://github.com/zo-ll/termdeck/issues/4) | Production integration and WSL acceptance | 2, 3 | — | Codex | Rust | — | pending |
+
+## Small tasks
+
+Each slice targets one observable behavior and one focused review boundary. If
+an agent turn exceeds roughly 25 minutes, it checkpoints instead of widening
+scope.
+
+| Issue | Slice | Blocked by | Status |
+|---|---|---|---|
+| [#7](https://github.com/zo-ll/termdeck/issues/7) | VT frame adapter | — | PR #15 merged (`4b4fec4`) |
+| [#8](https://github.com/zo-ll/termdeck/issues/8) | Single-shell PTY transport | — | reviewed pass — pushed, [PR #17](https://github.com/zo-ll/termdeck/pull/17) |
+| [#9](https://github.com/zo-ll/termdeck/issues/9) | One-terminal native engine | #7, #8 | blocked |
+| [#10](https://github.com/zo-ll/termdeck/issues/10) | Native lifecycle | #9 | blocked |
+| [#11](https://github.com/zo-ll/termdeck/issues/11) | Static master-stack renderer | — | PR #16 merged (`ddb45f4`) |
+| [#12](https://github.com/zo-ll/termdeck/issues/12) | Promotion, zoom, narrow | — | reviewed pass — pushed, [PR #18](https://github.com/zo-ll/termdeck/pull/18) |
+| [#13](https://github.com/zo-ll/termdeck/issues/13) | Status and scrollback chrome | #12 | done — `fe7922c` local (`coord/13-ui-chrome`), critic reviewing |
+| [#14](https://github.com/zo-ll/termdeck/issues/14) | Modal and input modes | #12, #13 | blocked |
+
+## Waves
+
+- Wave 1: issue 1 — merged
+- Wave 2A: #7 and #8 in parallel; approve/merge design draft PR #6
+- Wave 2B: #9 and #11
+- Wave 2C: #10 plus #12 and #13
+- Wave 2D: #14
+- Wave 3: issue 4, decomposed after the engine/UI epics close
+
