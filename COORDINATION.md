@@ -1149,6 +1149,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (pointer needed a redispatch — /usage overlay ate the first; Esc+re-paste
   landed, transcript-verified). Audit remaining: #129 (both parts), #130,
   #131 (+#132).
+- 2026-09-05: #129-DOCS DONE (claude, 3 commits 61e1fa0/a986544/7b52a41;
+  marker: README/PLAN corrected against real CLI (verified by running),
+  research-brief A1-A5 amendment notes, MIT LICENSE, WSL labelled
+  procedure-not-evidence, Horizon 0 outside pinned export; docs-only,
+  build clean) → routed to CLAUDE critic (transcript-verified reviewing).
+- 2026-09-05 (CODEX QUOTA HIT mid-#129-A): codex session parked at the
+  usage wall ("try again at 7:44 PM" — weekly reset; Pro-upgrade hint).
+  #129-A (CLI/help) is PARTIAL: uncommitted edits intact on disk
+  (Cargo.toml + src/bin/termctl.rs + src/cli/mod.rs — help asserts + run
+  (unknown)==3 visible; NO commits/marker/ping). Resume options for the
+  user: (a) wait for the 19:44 reset → codex resumes in place; (b) hand
+  the half-done CLI slice to the claude lane (cross-ownership + resume
+  in place, adjudicated); (c) second codex usage reset if any remain.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
