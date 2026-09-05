@@ -1260,6 +1260,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   env vars real, default-run works both binaries, repo canonical,
   worktree clean. NITS: --config PATH WORKSPACE form + TERMDECK_NOTIFY_
   LONG_SECS undocumented; `--` lines missing on the pages.
+- 2026-09-05 19:56: #129-CORRECTION DONE (codex, e316976 REBASED onto
+  current main — ahead 1, clean; marker: "rebased help slice, separated
+  termctl usage/refusal exits, preserved literal paths, reconciled
+  README; gate 406 lib + 5 termctl + 1 main"). RE-REVIEW dispatched to
+  the claude critic (129-recheck.critic.md — verify EVERY handback item
+  on the built binaries: usage=2 vs refusal=3 separation + test,
+  termdeck-3 decision comment, `--`/!literal/literal-path matrix incl.
+  a folder named help, README reconcile, --config/NOTIFY_LONG_SECS
+  docs, gate real numbers). Verdict ping inbox 129-cli-help.critic
+  .ping. On pass: merge → close #129 → dispatch #135 → close #132/#131
+  = asterisk audit complete.
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
