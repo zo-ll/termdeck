@@ -45,19 +45,20 @@ pub enum Key {
 }
 
 impl Key {
-    /// What the key sends to a terminal when it is forwarded.
-    fn bytes(self) -> Vec<u8> {
+    /// What the key sends to a terminal when it is forwarded. DECCKM changes
+    /// only unmodified arrows; modified arrows remain CSI sequences.
+    fn bytes(self, application_cursor: bool) -> Vec<u8> {
         match self {
             Self::Char(character) => character.to_string().into_bytes(),
             // `ctrl+a` is 0x01, so the prefix's own literal byte is 0x07.
             Self::Ctrl(character) => vec![character.to_ascii_uppercase() as u8 & 0x1f],
-            Self::Up => b"\x1b[A".to_vec(),
+            Self::Up => arrow(b'A', application_cursor),
             Self::ShiftUp => b"\x1b[1;2A".to_vec(),
             Self::ShiftDown => b"\x1b[1;2B".to_vec(),
             Self::ShiftTab => b"\x1b[Z".to_vec(),
-            Self::Down => b"\x1b[B".to_vec(),
-            Self::Right => b"\x1b[C".to_vec(),
-            Self::Left => b"\x1b[D".to_vec(),
+            Self::Down => arrow(b'B', application_cursor),
+            Self::Right => arrow(b'C', application_cursor),
+            Self::Left => arrow(b'D', application_cursor),
             Self::PageUp => b"\x1b[5~".to_vec(),
             Self::PageDown => b"\x1b[6~".to_vec(),
             Self::Enter => b"\r".to_vec(),
@@ -66,6 +67,15 @@ impl Key {
             Self::Escape => vec![0x1b],
         }
     }
+}
+
+fn arrow(direction: u8, application_cursor: bool) -> Vec<u8> {
+    [
+        b"\x1b".as_slice(),
+        if application_cursor { b"O" } else { b"[" },
+        &[direction],
+    ]
+    .concat()
 }
 
 /// What one key press leaves for the caller once the deck has taken its part.
@@ -130,6 +140,20 @@ impl Input {
         projects: &[Project],
         now: Timestamp,
     ) -> Option<Reaction> {
+        self.press_with_application_cursor(key, deck, projects, now, false)
+    }
+
+    /// Handles a key with the active child's DECCKM mode. The mode enters the
+    /// UI as an owned boolean from the engine contract, never an emulator
+    /// type.
+    pub fn press_with_application_cursor(
+        &mut self,
+        key: Key,
+        deck: &mut DeckState,
+        projects: &[Project],
+        now: Timestamp,
+        application_cursor: bool,
+    ) -> Option<Reaction> {
         if self.number.is_some() {
             return self.capture_number(key, deck, projects, now);
         }
@@ -162,7 +186,7 @@ impl Input {
             }
             None if deck.scrollback() => self.scroll(key, deck, projects, now),
             None => Some(Reaction::Send(UserCommand::Input(InputCommand::Bytes(
-                key.bytes(),
+                key.bytes(application_cursor),
             )))),
         }
     }
@@ -193,7 +217,7 @@ impl Input {
             // Doubling the prefix is the way to type it.
             Key::Ctrl('g') => {
                 return Some(Reaction::Send(UserCommand::Input(InputCommand::Bytes(
-                    Key::Ctrl('g').bytes(),
+                    Key::Ctrl('g').bytes(false),
                 ))));
             }
             Key::Char('j') | Key::Down => ActionCommand::SelectNext,
@@ -408,6 +432,27 @@ mod tests {
         assert_eq!(session.deck.active(), Some(0));
     }
 
+    #[test]
+    fn application_cursor_mode_uses_ss3_for_plain_arrows() {
+        let mut input = Input::new(PAGE);
+        let mut deck = DeckState::new(4);
+        let projects = fixture::projects();
+
+        assert_eq!(
+            input.press_with_application_cursor(Key::Up, &mut deck, &projects, NOW, true),
+            sent(b"\x1bOA")
+        );
+        assert_eq!(
+            input.press_with_application_cursor(Key::Right, &mut deck, &projects, NOW, true),
+            sent(b"\x1bOC")
+        );
+        assert_eq!(
+            input.press_with_application_cursor(Key::ShiftUp, &mut deck, &projects, NOW, true),
+            sent(b"\x1b[1;2A"),
+            "modified arrows remain CSI under DECCKM"
+        );
+    }
+
     /// `ctrl+j` is Line Feed, `⏎` is Carriage Return, and a shell that
     /// distinguishes them (a REPL taking `ctrl+j` as a soft newline) can only
     /// do so if the two keys stay two bytes (#95).
@@ -584,7 +629,7 @@ mod tests {
         assert_eq!(
             input.press(Key::Char('-'), &mut deck, &projects, NOW),
             Some(Reaction::Send(UserCommand::Input(InputCommand::Bytes(
-                Key::Char('-').bytes()
+                Key::Char('-').bytes(false)
             ))))
         );
         assert_eq!(deck.master_ratio(), 0.80);

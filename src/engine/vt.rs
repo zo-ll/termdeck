@@ -12,8 +12,8 @@ use alacritty_terminal::{
 };
 
 use crate::contracts::{
-    CellContent, CellStyle, CellWidth, Cursor, Rgb, ScreenCell, ScreenSize, ScrollCommand,
-    ScrollbackPosition, TerminalFrame, TerminalId,
+    CellContent, CellStyle, CellWidth, Cursor, MouseProtocol, Rgb, ScreenCell, ScreenSize,
+    ScrollCommand, ScrollbackPosition, TerminalFrame, TerminalId,
 };
 
 /// Current-thread adapter from recorded VT output to an owned frame.
@@ -169,10 +169,26 @@ impl VtFrameAdapter {
         self.term.mode().contains(TermMode::ALT_SCREEN)
     }
 
-    /// Whether the app enabled mouse reporting: with it the app wants the
-    /// wheel as SGR mouse reports, without it as cursor keys (#74).
+    /// Whether the child enabled DECCKM application-cursor mode.
+    pub fn application_cursor(&self) -> bool {
+        self.term.mode().contains(TermMode::APP_CURSOR)
+    }
+
+    /// Whether the app enabled mouse reporting.
     pub fn mouse_reporting(&self) -> bool {
         self.term.mode().intersects(TermMode::MOUSE_MODE)
+    }
+
+    /// The wire encoding selected by a mouse-reporting application.
+    pub fn mouse_protocol(&self) -> MouseProtocol {
+        let mode = self.term.mode();
+        if mode.contains(TermMode::SGR_MOUSE) {
+            MouseProtocol::Sgr
+        } else if mode.contains(TermMode::UTF8_MOUSE) {
+            MouseProtocol::Utf8
+        } else {
+            MouseProtocol::X10
+        }
     }
 
     /// Whether the child enabled bracketed paste (DEC 2004): the session
@@ -361,7 +377,8 @@ fn indexed_color(index: u8) -> Option<alacritty_terminal::vte::ansi::Rgb> {
 #[cfg(test)]
 mod tests {
     use crate::contracts::{
-        CellContent, CellWidth, DEFAULT_SCROLLBACK, Rgb, ScreenSize, ScrollCommand, TerminalId,
+        CellContent, CellWidth, DEFAULT_SCROLLBACK, MouseProtocol, Rgb, ScreenSize, ScrollCommand,
+        TerminalId,
     };
 
     use super::VtFrameAdapter;
@@ -588,6 +605,24 @@ mod tests {
         adapter.feed(b"\x1b[?1000h\x1b[?1006h");
         assert!(adapter.mouse_reporting());
         adapter.feed(b"\x1b[?1000l");
+        assert!(!adapter.mouse_reporting());
+    }
+
+    #[test]
+    fn application_cursor_and_mouse_protocol_follow_the_childs_modes() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+        adapter.feed(b"\x1b[?1h\x1b[?1000h");
+        assert!(adapter.application_cursor());
+        assert!(adapter.mouse_reporting());
+        assert_eq!(adapter.mouse_protocol(), MouseProtocol::X10);
+
+        adapter.feed(b"\x1b[?1006h");
+        assert_eq!(adapter.mouse_protocol(), MouseProtocol::Sgr);
+        adapter.feed(b"\x1b[?1006l\x1b[?1005h");
+        assert_eq!(adapter.mouse_protocol(), MouseProtocol::Utf8);
+
+        adapter.feed(b"\x1b[?1l\x1b[?1000l");
+        assert!(!adapter.application_cursor());
         assert!(!adapter.mouse_reporting());
     }
 
