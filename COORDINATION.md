@@ -1154,6 +1154,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   bounded coverage sweep (fill ONLY real gaps; cap 2-4 new tests) + WSL
   evidence stamp; gate real numbers. WORKING (transcript-verified).
   #129-A still parked (codex quota).
+- 2026-09-05: #130 DONE (claude, 3 commits 6be316f/f77e2a5/a4eed8e;
+  marker: CI bounded+pinned+zsh/fish+cargo-audit+--locked (YAML
+  validated, shell logic run locally); 3 real gaps filled (socket-to-
+  deck e2e, live fish hook, ANSI colour bytes) after checking all 10
+  audit classes; WSL evidence stamp; gate 401 lib + 4, fmt/clippy
+  clean). Routed to CLAUDE critic (assignment 130.critic.md — CI-YAML
+  critical read, 3 tests genuine fail-pre-fix + deterministic,
+  already-covered claims spot-checked, impl deltas test-support-only,
+  gate). Verdict ping inbox 130-tests-ci.critic.ping.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
