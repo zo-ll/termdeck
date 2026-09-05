@@ -239,6 +239,38 @@ impl Deck<'_> {
         sizes
     }
 
+    /// Terminal identities whose timing metadata is present in the deck's
+    /// current drawing. This deliberately differs from [`Self::terminal_sizes`]:
+    /// a folded preview has no PTY viewport to resize, but its drawn strip
+    /// still reports its idle age.
+    pub fn timing_terminals(&self, area: Rect) -> Vec<TerminalId> {
+        if area.width < GUTTER + 4 || area.height < 4 {
+            return Vec::new();
+        }
+        let body = body_of(area);
+        let mut positions = self.state.active().into_iter().collect::<Vec<_>>();
+        if let Layout::Stacked { stack, preview } = self.layout(body) {
+            let master_width = body.width - GUTTER - stack;
+            positions.extend(
+                self.stack_layout(
+                    Rect {
+                        x: body.x + master_width + GUTTER,
+                        width: stack,
+                        ..body
+                    },
+                    preview,
+                )
+                .into_iter()
+                .map(|slot| slot.position),
+            );
+        }
+        positions
+            .into_iter()
+            .filter_map(|position| self.projects.get(position))
+            .map(|project| project.terminal.clone())
+            .collect()
+    }
+
     /// Returns the configured position in the pane under `pointer`.
     ///
     /// A collapsed preview still answers here, so promoting or swapping it by

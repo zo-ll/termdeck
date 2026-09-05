@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::contracts::{
     Elapsed, EngineCommand, EngineEvent, NotifyKind, ScreenSize, ScrollCommand, TerminalEngine,
@@ -24,6 +24,7 @@ pub struct FakeEngine {
     input: Vec<(TerminalId, Vec<u8>)>,
     now: Timestamp,
     terminals: BTreeMap<TerminalId, FakeTerminalState>,
+    timing_visible: BTreeSet<TerminalId>,
 }
 
 impl FakeEngine {
@@ -47,6 +48,7 @@ impl FakeEngine {
                     )
                 })
                 .collect(),
+            timing_visible: BTreeSet::new(),
         }
     }
 
@@ -167,6 +169,11 @@ impl FakeEngine {
         &self.input
     }
 
+    /// The terminals the session says currently render timing metadata.
+    pub fn timing_visible(&self) -> &BTreeSet<TerminalId> {
+        &self.timing_visible
+    }
+
     /// Supplies retained output to ctl tests and fixtures.
     pub fn set_history_lines(&mut self, terminal: &TerminalId, lines: Vec<String>) -> bool {
         let Some(state) = self.terminals.get_mut(terminal) else {
@@ -189,6 +196,10 @@ impl FakeEngine {
 impl TerminalEngine for FakeEngine {
     fn dispatch(&mut self, command: EngineCommand) -> Vec<EngineEvent> {
         match command {
+            EngineCommand::SetTimingVisibility { terminals } => {
+                self.timing_visible = terminals;
+                Vec::new()
+            }
             EngineCommand::Input { terminal, bytes } => {
                 if self.terminals.contains_key(&terminal) {
                     self.input.push((terminal, bytes));

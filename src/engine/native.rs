@@ -123,7 +123,6 @@ struct NativeTerminal {
     status: TerminalStatus,
     metadata: TerminalMetadata,
     started: Instant,
-    last_timing_refresh: Instant,
     scrollback: usize,
     last_output: Option<Instant>,
     notify_carry: Vec<u8>,
@@ -156,7 +155,6 @@ impl NativeTerminal {
             frame,
             status: TerminalStatus::Running,
             started,
-            last_timing_refresh: started,
             scrollback,
             last_output: None,
             notify_carry: Vec::new(),
@@ -189,24 +187,7 @@ impl NativeTerminal {
     }
 
     fn refresh_timing(&mut self) {
-        let observed = Instant::now();
-        self.last_timing_refresh = observed;
-        self.refresh_timing_at(observed);
-    }
-
-    fn refresh_timing_if_due(&mut self, observed: Instant) -> bool {
-        if !matches!(
-            self.status,
-            TerminalStatus::Starting | TerminalStatus::Running
-        ) {
-            return false;
-        }
-        if observed.saturating_duration_since(self.last_timing_refresh) < TIMING_REFRESH_INTERVAL {
-            return false;
-        }
-        self.last_timing_refresh = observed;
-        self.refresh_timing_at(observed);
-        self.metadata.process.is_some() || self.metadata.output_idle.is_some()
+        self.refresh_timing_at(Instant::now());
     }
 
     fn status_changed(&mut self, status: TerminalStatus) -> Vec<EngineEvent> {
@@ -332,7 +313,6 @@ impl NativeTerminal {
         };
         self.transport = Some(transport);
         self.started = Instant::now();
-        self.last_timing_refresh = self.started;
         self.last_output = None;
         self.notify_carry.clear();
 
@@ -357,6 +337,9 @@ impl NativeTerminal {
 pub struct NativeEngine {
     terminals: Vec<NativeTerminal>,
     scrollback: usize,
+    /// One deadline for all rendered timing values, rather than one per PTY.
+    last_timing_refresh: Instant,
+    timing_visible: BTreeSet<TerminalId>,
 }
 
 impl NativeEngine {
@@ -393,8 +376,13 @@ impl NativeEngine {
             .map(|(project, size)| NativeTerminal::spawn(project, size, scrollback, None))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
+            timing_visible: terminals
+                .iter()
+                .map(|terminal| terminal.frame.terminal.clone())
+                .collect(),
             terminals,
             scrollback,
+            last_timing_refresh: Instant::now(),
         })
     }
 
@@ -414,8 +402,10 @@ impl NativeEngine {
                 project.terminal
             ));
         }
+        let terminal = project.terminal.clone();
         self.terminals
             .push(NativeTerminal::spawn(project, size, self.scrollback, None)?);
+        self.timing_visible.insert(terminal);
         Ok(())
     }
 
@@ -436,12 +426,14 @@ impl NativeEngine {
                 project.terminal
             ));
         }
+        let terminal = project.terminal.clone();
         self.terminals.push(NativeTerminal::spawn(
             project,
             size,
             self.scrollback,
             Some(socket),
         )?);
+        self.timing_visible.insert(terminal);
         Ok(())
     }
 
@@ -472,8 +464,13 @@ impl NativeEngine {
             .map(|(project, size)| NativeTerminal::spawn(project, size, scrollback, Some(socket)))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
+            timing_visible: terminals
+                .iter()
+                .map(|terminal| terminal.frame.terminal.clone())
+                .collect(),
             terminals,
             scrollback,
+            last_timing_refresh: Instant::now(),
         })
     }
 
@@ -496,6 +493,7 @@ impl NativeEngine {
             return false;
         };
         self.terminals.remove(index);
+        self.timing_visible.remove(terminal);
         true
     }
 
@@ -559,6 +557,33 @@ impl NativeEngine {
             })
             .collect()
     }
+
+    fn refresh_timing_if_due(&mut self, observed: Instant) -> Option<EngineEvent> {
+        if observed.saturating_duration_since(self.last_timing_refresh) < TIMING_REFRESH_INTERVAL {
+            return None;
+        }
+
+        let mut refreshed = false;
+        let mut metadata_changed = false;
+        for terminal in &mut self.terminals {
+            if !self.timing_visible.contains(&terminal.frame.terminal)
+                || !matches!(
+                    terminal.status,
+                    TerminalStatus::Starting | TerminalStatus::Running
+                )
+            {
+                continue;
+            }
+            refreshed = true;
+            terminal.refresh_timing_at(observed);
+            metadata_changed |=
+                terminal.metadata.process.is_some() || terminal.metadata.output_idle.is_some();
+        }
+        if refreshed {
+            self.last_timing_refresh = observed;
+        }
+        metadata_changed.then_some(EngineEvent::TimingChanged)
+    }
 }
 
 impl Drop for NativeEngine {
@@ -570,6 +595,10 @@ impl Drop for NativeEngine {
 impl TerminalEngine for NativeEngine {
     fn dispatch(&mut self, command: EngineCommand) -> Vec<EngineEvent> {
         match command {
+            EngineCommand::SetTimingVisibility { terminals } => {
+                self.timing_visible = terminals;
+                Vec::new()
+            }
             EngineCommand::Input { terminal, bytes } => {
                 let Some(item) = self.terminal_mut(&terminal) else {
                     return Vec::new();
@@ -665,12 +694,9 @@ impl TerminalEngine for NativeEngine {
             for event in pty_events {
                 terminal.handle_pty_event(event, &mut events);
             }
-            if terminal.refresh_timing_if_due(Instant::now()) {
-                events.push(EngineEvent::MetadataChanged {
-                    terminal: terminal.frame.terminal.clone(),
-                    metadata: terminal.metadata.clone(),
-                });
-            }
+        }
+        if let Some(event) = self.refresh_timing_if_due(Instant::now()) {
+            events.push(event);
         }
         events
     }
@@ -720,6 +746,7 @@ fn now() -> Timestamp {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeSet,
         path::PathBuf,
         time::{Duration, Instant},
     };
@@ -729,6 +756,8 @@ mod tests {
         NotifyKind, ProcessInfo, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
         TerminalMetadata, TerminalStatus,
     };
+    use crate::ui::{Deck, DeckState, Notifications};
+    use ratatui::layout::Rect;
 
     use super::{
         NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter, scan_notify,
@@ -1472,25 +1501,16 @@ mod tests {
         );
     }
 
-    #[test]
-    fn timing_metadata_is_derived_from_its_stored_instants() {
-        let observed = Instant::now();
-        let terminal = TerminalId::new("timing");
+    fn timing_terminal(terminal: TerminalId, observed: Instant) -> NativeTerminal {
         let project = Project {
             terminal: terminal.clone(),
             path: PathBuf::from("/"),
             command: Vec::new(),
             shell_hook: false,
         };
-        let adapter = VtFrameAdapter::new(
-            terminal.clone(),
-            ScreenSize::new(80, 24),
-            DEFAULT_SCROLLBACK,
-        );
+        let adapter = VtFrameAdapter::new(terminal, ScreenSize::new(80, 24), DEFAULT_SCROLLBACK);
         let frame = adapter.frame();
-        let started = observed.checked_sub(Duration::from_millis(2_000)).unwrap();
-        let last_output = observed.checked_sub(Duration::from_millis(1_500)).unwrap();
-        let mut item = NativeTerminal {
+        NativeTerminal {
             project,
             socket: None,
             transport: None,
@@ -1504,22 +1524,155 @@ mod tests {
                 }),
                 ..TerminalMetadata::default()
             },
-            started,
-            last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
+            started: observed.checked_sub(Duration::from_millis(2_000)).unwrap(),
             scrollback: DEFAULT_SCROLLBACK,
-            last_output: Some(last_output),
+            last_output: Some(observed.checked_sub(Duration::from_millis(1_500)).unwrap()),
             notify_carry: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn timing_metadata_uses_one_visible_shared_tick() {
+        let observed = Instant::now();
+        let visible = TerminalId::new("visible");
+        let also_visible = TerminalId::new("also-visible");
+        let hidden = TerminalId::new("hidden");
+        let mut engine = NativeEngine {
+            terminals: vec![
+                timing_terminal(visible.clone(), observed),
+                timing_terminal(also_visible.clone(), observed),
+                timing_terminal(hidden.clone(), observed),
+            ],
+            scrollback: DEFAULT_SCROLLBACK,
+            last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
+            timing_visible: BTreeSet::from([visible.clone(), also_visible.clone()]),
         };
 
-        assert!(item.refresh_timing_if_due(observed));
         assert_eq!(
-            item.metadata.process.map(|process| process.uptime),
+            engine.refresh_timing_if_due(observed),
+            Some(EngineEvent::TimingChanged),
+            "every rendered terminal shares one redraw signal"
+        );
+        assert_eq!(
+            engine
+                .metadata(&visible)
+                .and_then(|metadata| metadata.process)
+                .map(|process| process.uptime),
             Some(Elapsed { millis: 2_000 })
         );
-        assert_eq!(item.metadata.output_idle, Some(Elapsed { millis: 1_500 }));
-        assert!(
-            !item.refresh_timing_if_due(observed),
-            "the quiet-poll tick is bounded"
+        assert_eq!(
+            engine
+                .metadata(&visible)
+                .and_then(|metadata| metadata.output_idle),
+            Some(Elapsed { millis: 1_500 })
+        );
+        assert_eq!(
+            engine
+                .metadata(&also_visible)
+                .and_then(|metadata| metadata.process)
+                .map(|process| process.uptime),
+            Some(Elapsed { millis: 2_000 }),
+            "all rendered panes share the same observed instant"
+        );
+        assert_eq!(
+            engine
+                .metadata(&hidden)
+                .and_then(|metadata| metadata.process)
+                .map(|process| process.uptime),
+            Some(Elapsed::default()),
+            "a zoom-hidden or narrow-hidden pane is not refreshed"
+        );
+        assert_eq!(
+            engine.refresh_timing_if_due(observed + Duration::from_millis(999)),
+            None,
+            "the shared tick is bounded to one second"
+        );
+        assert_eq!(
+            engine.refresh_timing_if_due(observed + Duration::from_secs(1)),
+            Some(EngineEvent::TimingChanged),
+            "the visible terminal remains on the one-second cadence"
+        );
+        assert_eq!(
+            engine
+                .metadata(&visible)
+                .and_then(|metadata| metadata.process)
+                .map(|process| process.uptime),
+            Some(Elapsed { millis: 3_000 })
+        );
+
+        engine.dispatch(EngineCommand::SetTimingVisibility {
+            terminals: BTreeSet::new(),
+        });
+        assert_eq!(
+            engine.refresh_timing_if_due(observed + Duration::from_secs(2)),
+            None,
+            "no hidden terminal schedules a timing redraw"
+        );
+    }
+
+    #[test]
+    fn a_folded_strip_keeps_its_idle_age_on_the_shared_tick() {
+        let observed = Instant::now();
+        let master = TerminalId::new("master");
+        let folded = TerminalId::new("folded");
+        let projects = [
+            Project {
+                terminal: master.clone(),
+                path: PathBuf::from("/"),
+                command: Vec::new(),
+                shell_hook: false,
+            },
+            Project {
+                terminal: folded.clone(),
+                path: PathBuf::from("/"),
+                command: Vec::new(),
+                shell_hook: false,
+            },
+        ];
+        let deck = DeckState::new(projects.len());
+        let notifies = Notifications::new();
+        let timing_visible = Deck {
+            workspace: "",
+            projects: &projects,
+            state: &deck,
+            notifies: &notifies,
+            master_ratio: deck.master_ratio(),
+            now: crate::contracts::Timestamp::default(),
+        }
+        .timing_terminals(Rect::new(0, 0, 144, 42))
+        .into_iter()
+        .collect();
+        let mut engine = NativeEngine {
+            terminals: vec![
+                timing_terminal(master, observed),
+                timing_terminal(folded.clone(), observed),
+            ],
+            scrollback: DEFAULT_SCROLLBACK,
+            last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
+            timing_visible,
+        };
+
+        assert_eq!(
+            engine.refresh_timing_if_due(observed),
+            Some(EngineEvent::TimingChanged)
+        );
+        assert_eq!(
+            engine
+                .metadata(&folded)
+                .and_then(|metadata| metadata.output_idle),
+            Some(Elapsed { millis: 1_500 }),
+            "the folded strip draws this idle age"
+        );
+        assert_eq!(
+            engine.refresh_timing_if_due(observed + Duration::from_secs(1)),
+            Some(EngineEvent::TimingChanged)
+        );
+        assert_eq!(
+            engine
+                .metadata(&folded)
+                .and_then(|metadata| metadata.output_idle),
+            Some(Elapsed { millis: 2_500 }),
+            "the drawn folded strip keeps advancing"
         );
     }
 
@@ -1554,12 +1707,13 @@ mod tests {
                 status: TerminalStatus::Running,
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
-                last_timing_refresh: Instant::now(),
                 scrollback: DEFAULT_SCROLLBACK,
                 last_output: None,
                 notify_carry: Vec::new(),
             }],
             scrollback: DEFAULT_SCROLLBACK,
+            last_timing_refresh: Instant::now(),
+            timing_visible: BTreeSet::from([terminal.clone()]),
         };
         engine.dispatch(EngineCommand::Scroll {
             terminal: terminal.clone(),
@@ -1644,12 +1798,13 @@ mod tests {
                 status: TerminalStatus::Running,
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
-                last_timing_refresh: Instant::now(),
                 scrollback: DEFAULT_SCROLLBACK,
                 last_output: None,
                 notify_carry: Vec::new(),
             }],
             scrollback: DEFAULT_SCROLLBACK,
+            last_timing_refresh: Instant::now(),
+            timing_visible: BTreeSet::from([terminal.clone()]),
         };
         engine.dispatch(EngineCommand::Scroll {
             terminal: terminal.clone(),

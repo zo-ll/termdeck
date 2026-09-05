@@ -69,8 +69,13 @@ pub(super) fn resize_terminals(
     deck: &DeckState,
     size: ScreenSize,
 ) -> bool {
+    let sizes = terminal_sizes(projects, deck, size);
+    engine.dispatch(EngineCommand::SetTimingVisibility {
+        terminals: timing_terminals(projects, deck, size).into_iter().collect(),
+    });
+
     let mut resized = false;
-    for (project, size) in projects.iter().zip(terminal_sizes(projects, deck, size)) {
+    for (project, size) in projects.iter().zip(sizes) {
         let Some(size) = size else {
             continue;
         };
@@ -200,6 +205,24 @@ pub(super) fn terminal_sizes(
         now: now(),
     }
     .terminal_sizes(ratatui::layout::Rect::new(0, 0, size.columns, size.rows))
+}
+
+/// The deck decides which terminal metadata it renders. This is separate from
+/// PTY geometry because a folded strip draws an idle age without a viewport.
+pub(super) fn timing_terminals(
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+) -> Vec<TerminalId> {
+    Deck {
+        workspace: "",
+        projects,
+        state: deck,
+        notifies: &crate::ui::Notifications::new(),
+        master_ratio: deck.master_ratio(),
+        now: now(),
+    }
+    .timing_terminals(ratatui::layout::Rect::new(0, 0, size.columns, size.rows))
 }
 
 pub(super) fn screen_size() -> io::Result<ScreenSize> {
