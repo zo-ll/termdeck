@@ -931,6 +931,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   its next review. All else healthy (claude lane, relay, main 380+4).
   NEXT: on backend recovery, re-prompt the same worker pointer for
   #121 (session intact); the STOP-after-#121 instruction stands.
+- 2026-09-05 (BACKEND RECOVERED + TERRA LANE RESTORED): muse worker resumed
+  #121 mid-slice (backend came back; deep in session.rs ctl close/promote
+  handlers — the identity territory; ctx 25%). USER used a codex usage
+  reset (resets now 2) — TERRA available again. Codex pane relaunched
+  (full session, gpt-5.6-terra high, at coord/124-scrollback-config),
+  #124 DISPATCHED (parallel with #121 — no file overlap: config/mod.rs +
+  engine/vt.rs vs #121's session.rs), verified Working. Brief patched
+  with inline finish protocol (codex has no worker skill). Parallel
+  plan continues toward closing the audit queue; stop-after-#121
+  SUPERSEDED by the user's terra-lane enablement (resume audit queue).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
