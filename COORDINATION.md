@@ -1031,6 +1031,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   idle. Audit closed: #117 #118 #119 #120 #121 #122 #124 (+NB). #126 open
   (part2 in flight). Remaining: #123 #125 #129 #130 #131.
 
+- 2026-09-05: #126-PARSER-BOUNDS DONE (codex, commit 8e5effd: explicit
+  ground/ESC/paste/mouse/discard states; 64KiB paste + 256B mouse caps with
+  discard-through-terminator; UTF-8 valid-prefix recovery; exhaustive compact
+  partition + deterministic chunk-fuzz coverage; gate 393 lib + 4; worktree
+  clean). Routed to CLAUDE critic (assignment .scratch/review/126-parser-
+  bounds.critic.md — caps enforcement, é+invalid repro pinned, #120/#118
+  non-regression, fuzz determinism; pass ≈ closes #126). #123 (bash -l hook)
+  rebased to main + DISPATCHED to codex (WORKING).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
