@@ -1,0 +1,1765 @@
+
+thread 'main' (373669) panicked at src/ui/picker/sheet.rs:115:51:
+min > max. min = 11, max = 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'main' (373669) panicked at src/ui/picker/sheet.rs:115:51:
+min > max. min = 11, max = 6
+
+thread 'main' (373669) panicked at src/ui/picker/sheet.rs:115:51:
+min > max. min = 11, max = 10
+
+thread 'main' (373669) panicked at src/ui/picker/render.rs:567:21:
+end byte index 4 is out of bounds for string of length 3
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1380:20:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1413:17:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow
+
+thread 'main' (373669) panicked at src/ui/deck.rs:1381:21:
+attempt to subtract with overflow

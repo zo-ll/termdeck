@@ -1,0 +1,31 @@
+case $- in *i*) ;; *) return;; esac
+if [ -n "${TERMDECK_SHELL_HOOK-}" ] || [ -z "${TERMDECK_SOCK-}" ] || [ -z "${TERMDECK_PANE-}" ]; then return; fi
+export TERMDECK_SHELL_HOOK=1
+__td_start= __td_cmd=
+__td_now() { if [ -n "${EPOCHSECONDS+x}" ]; then REPLY=$EPOCHSECONDS; else REPLY=$SECONDS; fi; }
+__td_debug_trap=$(trap -p DEBUG)
+__td_run_debug_trap() {
+  [ -n "$__td_debug_trap" ] || return
+  local __td_debug_action=${__td_debug_trap#trap -- }
+  __td_debug_action=${__td_debug_action% DEBUG}
+  eval "eval $__td_debug_action"
+}
+__td_preexec() {
+  case $BASH_COMMAND in __td_*|__systemd_osc_context_*) return;; esac
+  [ -n "${__td_prompting-}" ] || [ -n "$__td_start" ] || { __td_now; __td_start=$REPLY; __td_cmd=$BASH_COMMAND; }
+  __td_run_debug_trap
+}
+__td_prompt() {
+  local code=$? now secs cmd mode=${TERMDECK_NOTIFY-} threshold=${TERMDECK_NOTIFY_LONG_SECS:-10}
+  __td_prompting=1; [ -n "$__td_start" ] || return; __td_now; now=$REPLY; secs=$((now - __td_start)); __td_start=
+  case $threshold in ''|*[!0-9]*) threshold=10;; esac
+  case $mode in none) return;; error) [ "$code" -ne 0 ] || return;; long) [ "$secs" -ge "$threshold" ] || return;; all|'') [ "$code" -ne 0 ] || [ "$secs" -ge "$threshold" ] || return;; *) return;; esac
+  cmd=${__td_cmd//[$'\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037\177']/}; cmd=${cmd:0:512}
+  printf '\033]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\a' "$code" "$secs" "$cmd"
+}
+__td_prompt_end() { __td_prompting=; }
+trap '__td_preexec' DEBUG
+case "$(declare -p PROMPT_COMMAND 2>/dev/null)" in
+  "declare -a "*) PROMPT_COMMAND=(__td_prompt "${PROMPT_COMMAND[@]}" __td_prompt_end);;
+  *) PROMPT_COMMAND="__td_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __td_prompt_end";;
+esac

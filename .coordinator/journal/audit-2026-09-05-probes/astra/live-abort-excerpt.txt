@@ -1,0 +1,10 @@
+Excerpt from live-output.bin (the #140a live resize reproduction), filtered to the
+panic/abort lines. The full 219 KB raw terminal capture was not committed.
+
+thread 'main' (374549) panicked at src/ui/picker/sheet.rs:115:51:
+thread 'main' (374549) panicked at /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/std/src/panicking.rs:184:9:
+cannot modify the panic hook from a panicking thread
+stack backtrace:
+thread 'main' (374549) panicked at /rustc/88d9e12ae178fab0fb5cc050a94da85685d449ea/library/core/src/panicking.rs:233:5:
+panic in a destructor during cleanup
+thread caused non-unwinding panic. aborting.
