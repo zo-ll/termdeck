@@ -1287,6 +1287,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   brief (observation). #135 (shared timing deadline + visibility gate)
   DISPATCHED to codex (WORKING; closes #132 on merge). Remaining:
   #135 → #131 umbrella → DONE.
+- 2026-09-05 20:08: #135 DONE (codex, 334b3cf "Batch visible terminal
+  timing refreshes", +237/-70 across engine/fake, engine/native,
+  session.rs, session/lifecycle, session/tests; marker pass 407 lib + 5
+  termctl + 1 main (406+1); worktree clean — ping had a staging hiccup,
+  delivered via the relay regardless). Routed to CLAUDE critic
+  (assignment 135.critic.md — shared-deadline batching in native.rs,
+  visibility gate honesty, #125 injected-clock determinism, expiry
+  non-regression incl. #132-part1, 3 fail-pre-fix tests, gate; no live-
+  session termctl calls per the #129 disclosure). Verdict ping inbox
+  135-timing-tick.critic.ping. On pass: merge → close #132 + #131 →
+  ASTRA AUDIT + review-born children COMPLETE.
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
