@@ -1,7 +1,7 @@
 # Coordination — Termdeck
 
 Status: ACTIVE — tracker on GitHub.
-Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #116 (guaranteed peek — critic PASS, rebased, awaiting merge approval), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
+Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
 Recently closed: everything through #110 (shell integration) + #112 research brief committed (5ddf02c).
 Freshness: 2026-09-04 (takeover) — main `5ddf02c`, gate green (324 tests: 320 lib + 4 integration).
 
@@ -487,11 +487,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   muse-spark-1.3-contributor, critic-skill only, assignment
   .scratch/review/111.critic.md, single-line pointer; critic Working — reading
   diff at source). Verdict pings via inbox 111-notify-fix.critic.ping.
-- 2026-09-05: #111 MERGED (user approval) — --no-ff merge into main, gate green
-  322 lib + 4 int, pushed; issue #111 CLOSED with smoke comment; binary updated
-  to ~/.local/bin/termdeck via mv (Text-file-busy workaround) — DECK RESTART
-  required to load (restart tears down this workspace's panes; do with #116
-  merged, at a convenient stop).
+- 2026-09-05: #116 MERGED (user approval) — --no-ff merge (f57ab6a), gate green
+  324 lib + 4 int, pushed; issue #116 CLOSED with smoke comment; binary
+  rebuilt → ~/.local/bin/termdeck (restart loads #111+#116 together).
+  Result: termctl peek now returns the ACTIVE screen (main/alt, "screen"
+  field) — full-screen TUIs visible — this coordinator's peek blind spot is
+  fixed at the root (per-user design approved at dispatch).
+  Codex lane idle; #115 still queued on claude lane after #113 merges.
 - 2026-09-05: #116 CRITIC VERDICT = PASS (inbox 116-peek-active-screen.critic.ping):
   all 6 acceptance criteria met; active-suffix with history fallback; screen
   field derived from same adapter metadata (can't disagree with grid); error
