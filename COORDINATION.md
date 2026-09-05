@@ -1244,6 +1244,22 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   dispatch. #129-A routed to CLAUDE critic (patched assignment incl.
   README default-run reconcile). Verdict ping inbox 129-cli-help.critic
   .ping.
+- 2026-09-05: #129-A CRITIC VERDICT = HANDBACK (well-earned). ALL OF
+  IT VERIFIED ON THE BUILT BINARIES: help surfaces man-page-shaped + exit
+  0 + env docs real; but (BLOCKING) termctl usage moved 2→3, colliding
+  with the ctl-refusal code — 3 now = 'asked wrongly' OR 'session
+  declined'; the single exit_codes test now asserts usage==refusal==3
+  against its own name; #122's agent trust depends on the old grouping
+  (2 = asked wrongly, 3 = declined). MINIMAL FIX + (REQUIRED) stale base:
+  branch based e187720 vs main c36ca4e — misses 129-docs/130x2/132/133;
+  fix must keep `--` before --config/leading-dash, add !literal to the
+  new help arms (else folder named help = #133 bug, third word), re-run
+  the #133 matrix; README cargo-run paragraph now false (default-run).
+  129-CORRECTION DISPATCHED to codex (same session; slug 129-correction;
+  includes README + help-page doc fixes). VERIFIED GOOD: pages+
+  env vars real, default-run works both binaries, repo canonical,
+  worktree clean. NITS: --config PATH WORKSPACE form + TERMDECK_NOTIFY_
+  LONG_SECS undocumented; `--` lines missing on the pages.
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
