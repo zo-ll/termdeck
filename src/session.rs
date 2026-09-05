@@ -37,7 +37,7 @@ use crate::{
     config::Workspace,
     contracts::{
         EngineCommand, EngineEvent, NotifyKind, Project, ScreenSize, ScrollCommand, TerminalEngine,
-        TerminalId, TerminalMetadata, Timestamp, UserCommand,
+        TerminalId, TerminalMetadata, TerminalStatus, Timestamp, UserCommand,
     },
     engine::NativeEngine,
     ui::{
@@ -416,8 +416,21 @@ fn dispatch_control(
                 .iter()
                 .find(|project| project.terminal.to_string() == id)
             else {
-                return crate::ctl::Response::error(2, "bad request: unknown terminal");
+                return if closed.contains(&id) {
+                    crate::ctl::Response::error(3, "refused: terminal is closed")
+                } else {
+                    crate::ctl::Response::error(2, "bad request: unknown terminal")
+                };
             };
+            match engine.status(&project.terminal) {
+                Some(TerminalStatus::Starting | TerminalStatus::Running) => {}
+                Some(TerminalStatus::Exited { .. } | TerminalStatus::Failed { .. }) => {
+                    return crate::ctl::Response::error(3, "refused: terminal is not live");
+                }
+                None => {
+                    return crate::ctl::Response::error(1, "terminal is unavailable");
+                }
+            }
             // Agent `paste` stays a paste operation end to end (#120); the
             // wire is unchanged, only the internal flag distinguishes it.
             let bytes = if paste {
@@ -440,7 +453,10 @@ fn dispatch_control(
                     "refused: terminal input queue is full; child is not reading",
                 );
             }
-            crate::ctl::Response::ok(serde_json::json!({ "id": id }))
+            let queued = events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::InputQueued { .. }));
+            crate::ctl::Response::ok(serde_json::json!({ "id": id, "queued": queued }))
         }
     }
 }

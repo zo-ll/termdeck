@@ -927,10 +927,9 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     input.id = Some("t2".to_owned());
     input.text = Some("echo ctl\n".to_owned());
     assert_eq!(call!(input.clone(), None, false).error.unwrap().code, 3);
-    assert!(
-        call!(input, None, true).ok,
-        "session input permission opens the gate"
-    );
+    let response = call!(input, None, true);
+    assert!(response.ok, "session input permission opens the gate");
+    assert_eq!(response.data.unwrap()["queued"], false);
     let mut forced = request("input");
     forced.id = Some("t2".to_owned());
     forced.keys = Some("\u{3}".to_owned());
@@ -962,10 +961,83 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     engine.dispatch(EngineCommand::Shutdown);
 }
 
-/// #118: the agent `input` verb tells the truth about a wedged pane. Once
-/// its bounded queue is saturated the request is refused with code 3 — the
-/// same `refused` family as the input gate — instead of hanging the loop,
-/// and the pane stays live behind the refusal.
+#[cfg(target_os = "linux")]
+#[test]
+fn ctl_input_to_an_exited_pane_is_refused_truthfully() {
+    use std::{
+        thread,
+        time::{Duration, Instant},
+    };
+
+    let size = ScreenSize::new(144, 42);
+    let mut projects = vec![Project {
+        terminal: TerminalId::new("exited"),
+        path: PathBuf::from("/"),
+        command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+        shell_hook: false,
+    }];
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
+    let mut quit = false;
+    let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
+    let terminal = projects[0].terminal.clone();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while matches!(
+        engine.status(&terminal),
+        Some(
+            crate::contracts::TerminalStatus::Starting | crate::contracts::TerminalStatus::Running
+        )
+    ) && Instant::now() < deadline
+    {
+        engine.drain_events();
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        matches!(
+            engine.status(&terminal),
+            Some(crate::contracts::TerminalStatus::Exited { .. })
+        ),
+        "the fixture terminal must exit before ctl writes to it"
+    );
+
+    let response = dispatch_control(
+        crate::ctl::Request {
+            schema: crate::ctl::SCHEMA.to_owned(),
+            verb: "input".to_owned(),
+            id: Some(terminal.to_string()),
+            text: Some("echo should-not-run\\n".to_owned()),
+            ..Default::default()
+        },
+        None,
+        &workspace,
+        &mut projects,
+        &mut deck,
+        &mut engine,
+        &mut notifies,
+        size,
+        false,
+        socket,
+        true,
+        &mut closed,
+        &mut used,
+        &mut quit,
+    );
+    let error = response.error.expect("an exited pane refuses input");
+    assert_eq!(error.code, 3);
+    assert!(error.message.contains("not live"));
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// #118/#122: an agent `input` verb tells the truth about a slow or wedged
+/// pane. A queued request says so, and a saturated queue refuses with code 3
+/// instead of hanging the loop; the pane stays live behind the refusal.
 #[cfg(target_os = "linux")]
 #[test]
 fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
@@ -997,6 +1069,34 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
         .collect();
     let mut quit = false;
     let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
+
+    // A slow reader accepts the request, but it cannot flush this much input
+    // immediately. ctl reports that it is queued instead of claiming an
+    // immediate delivery.
+    let queued = dispatch_control(
+        crate::ctl::Request {
+            schema: crate::ctl::SCHEMA.to_owned(),
+            verb: "input".to_owned(),
+            id: Some("t1".to_owned()),
+            text: Some("x".repeat(512 * 1024)),
+            ..Default::default()
+        },
+        None,
+        &workspace,
+        &mut projects,
+        &mut deck,
+        &mut engine,
+        &mut notifies,
+        size,
+        false,
+        socket,
+        true,
+        &mut closed,
+        &mut used,
+        &mut quit,
+    );
+    assert!(queued.ok, "a queue with room accepts input");
+    assert_eq!(queued.data.unwrap()["queued"], true);
 
     let chunk = vec![b'x'; 64 * 1024];
     let started = Instant::now();
@@ -1176,7 +1276,10 @@ fn a_reopened_directory_never_reuses_its_tombstoned_identity() {
     let mut input = request("input");
     input.id = Some(first.clone());
     input.text = Some("echo stale\n".to_owned());
-    assert_eq!(control!(input, None, true).error.unwrap().code, 2);
+    let stale = control!(input, None, true);
+    let error = stale.error.expect("a tombstoned pane refuses input");
+    assert_eq!(error.code, 3);
+    assert!(error.message.contains("closed"));
     let mut live = request("input");
     live.id = Some(second.clone());
     live.text = Some("echo live\n".to_owned());

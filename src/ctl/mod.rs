@@ -264,10 +264,12 @@ pub fn dispatch<E: TerminalEngine>(request: Request, mut state: State<'_, E>) ->
             }))
         }
         "notify" => match request.msg {
-            Some(message) => {
-                dispatch_notify(&message, &mut state);
-                Response::ok(json!({ "delivered": true }))
-            }
+            Some(message) => match dispatch_notify(&message, &mut state) {
+                NotifyOutcome::Delivered => Response::ok(json!({ "delivered": true })),
+                NotifyOutcome::Suppressed { reason } => {
+                    Response::ok(json!({ "delivered": false, "reason": reason }))
+                }
+            },
             None => Response::error(2, "bad request: notify requires msg"),
         },
         "version" => {
@@ -277,28 +279,40 @@ pub fn dispatch<E: TerminalEngine>(request: Request, mut state: State<'_, E>) ->
     }
 }
 
+/// The outcome of routing an explicit notification into the session state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NotifyOutcome {
+    Delivered,
+    Suppressed { reason: &'static str },
+}
+
 /// Routes an explicit notification into the session's notify state (#71/#97).
 ///
 /// The caller names itself by running where it runs: every spawned PTY
 /// inherits `TERMDECK_PANE`, so the pane the message belongs to is the pane
-/// the connection came from.  A caller outside every pane (one holding only
+/// the connection came from. A caller outside every pane (one holding only
 /// `TERMDECK_SOCK`) has no pane to flash, and one naming a terminal this
-/// session does not run has none either; both are dropped here.  The wire is
-/// unchanged either way: `{delivered:true}` is what shipped, and the response
-/// has never reported what the interface then did with it.
-fn dispatch_notify<E: TerminalEngine>(message: &str, state: &mut State<'_, E>) -> bool {
+/// session does not run has none either; both are reported as suppressed.
+fn dispatch_notify<E: TerminalEngine>(message: &str, state: &mut State<'_, E>) -> NotifyOutcome {
     let Some(project) = state
         .caller
         .and_then(|pane| project_for_pane(pane, state.projects))
     else {
-        return false;
+        return NotifyOutcome::Suppressed {
+            reason: "caller is not a live terminal pane",
+        };
     };
     let master = state
         .deck
         .active()
         .and_then(|position| state.projects.get(position))
         .map(|project| &project.terminal);
-    state.notifies.record(
+    if master == Some(&project.terminal) {
+        return NotifyOutcome::Suppressed {
+            reason: "caller pane is already visible",
+        };
+    }
+    if state.notifies.record(
         &project.terminal,
         master,
         NotifyKind::Message {
@@ -306,7 +320,13 @@ fn dispatch_notify<E: TerminalEngine>(message: &str, state: &mut State<'_, E>) -
             body: message.to_owned(),
         },
         state.now,
-    )
+    ) {
+        NotifyOutcome::Delivered
+    } else {
+        NotifyOutcome::Suppressed {
+            reason: "notification was coalesced",
+        }
+    }
 }
 
 /// Finds the pane a child process names. The PTY supplies the stable terminal
@@ -1025,9 +1045,9 @@ mod tests {
         ));
     }
 
-    /// #97: the shipped wire is untouched — `notify` still answers
-    /// `{delivered:true}` — and the message now lands in the session's notify
-    /// state, addressed to the pane the connection came from.
+    /// #122: notify reports the state it actually reached. A caller in a
+    /// background pane delivers, while a caller outside a live pane or the
+    /// already-visible master receives an explicit suppression result.
     #[test]
     fn notify_routes_the_callers_pane_into_the_notify_state() {
         let projects = vec![project("one"), project("two")];
@@ -1072,13 +1092,25 @@ mod tests {
             })
         );
 
-        // The pane holding the master frame is on screen already, and a
-        // caller in no pane at all has no pane to mark. Both still deliver:
-        // the response has never reported what the interface did with it.
-        assert!(call(&mut notifies, Some("one")).ok);
+        // The pane holding the master frame is on screen already, so the
+        // notification is intentionally suppressed rather than claimed as
+        // delivered.
+        let master = call(&mut notifies, Some("one"));
+        assert!(master.ok);
+        let master_data = master.data.unwrap();
+        assert_eq!(master_data["delivered"], false);
+        assert_eq!(master_data["reason"], "caller pane is already visible");
         assert!(notifies.pending(&TerminalId::new("one")).is_none());
-        assert!(call(&mut notifies, None).ok);
-        assert!(call(&mut notifies, Some("gone")).ok);
+        let outside = call(&mut notifies, None);
+        assert!(outside.ok);
+        assert_eq!(outside.data.as_ref().unwrap()["delivered"], false);
+        assert_eq!(
+            outside.data.unwrap()["reason"],
+            "caller is not a live terminal pane"
+        );
+        let gone = call(&mut notifies, Some("gone"));
+        assert!(gone.ok);
+        assert_eq!(gone.data.unwrap()["delivered"], false);
 
         // And the argument check is where it was.
         let missing = dispatch(
