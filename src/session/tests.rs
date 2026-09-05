@@ -1867,6 +1867,56 @@ fn a_resize_alone_is_a_reason_to_redraw() {
     );
 }
 
+/// #115's scrollbar hides itself on exactly the terms a demotion does, and
+/// carried the same gap #125 closed for the other two transients: the frame
+/// that takes the bar off the screen was never asked for, so it sat there
+/// until something unrelated redrew (#132). Its window is 4s, and the pass
+/// that crosses the deadline is the one that has to draw.
+#[test]
+fn the_scrollbar_disappearance_schedules_its_final_repaint() {
+    let mut deck = DeckState::new(2);
+    deck.mark_scrolled(0, Timestamp::default());
+    let notifies = Notifications::new();
+    let mut was_active = false;
+
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp::default(),
+    ));
+    assert!(deck.scrolling(Timestamp { unix_millis: 3_999 }).is_some());
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp { unix_millis: 3_999 },
+    ));
+
+    assert!(
+        deck.scrolling(Timestamp { unix_millis: 4_000 }).is_none(),
+        "the window is over on the millisecond, not after it"
+    );
+    assert!(
+        schedule_expiry_repaint(
+            &mut was_active,
+            &deck,
+            &notifies,
+            Timestamp { unix_millis: 4_000 },
+        ),
+        "the bar's disappearance receives a final frame"
+    );
+    assert!(
+        !schedule_expiry_repaint(
+            &mut was_active,
+            &deck,
+            &notifies,
+            Timestamp { unix_millis: 4_001 },
+        ),
+        "and exactly one: the loop goes idle again behind it"
+    );
+}
+
 #[test]
 fn expiry_transitions_schedule_their_final_repaint() {
     let mut deck = DeckState::new(2);
