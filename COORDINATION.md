@@ -1298,6 +1298,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   session termctl calls per the #129 disclosure). Verdict ping inbox
   135-timing-tick.critic.ping. On pass: merge → close #132 + #131 →
   ASTRA AUDIT + review-born children COMPLETE.
+- 2026-09-05 20:15: #135-CORRECTION DONE (codex, d1b50fb on top of
+  334b3cf — 7 files +332/-52 incl. ui/deck.rs +32 timing-set sibling;
+  marker: "folded drawn strips now keep shared timing ticks; 408 lib + 5
+  termctl + 1 main"). RE-REVIEW dispatched to the claude critic
+  (135-recheck.critic.md — drawn-set timing_terminals incl. collapsed +
+  master, folded-assertion corrected + zoom kept, engine→surface
+  regression test present, batching invariants preserved, gate).
 - 2026-09-05 20:1x: #135 CRITIC VERDICT = HANDBACK (excellent catch:
   batching half RIGHT — shared deadline, ≤1 TimingChanged/pass, additive
   contract, determinism, expiry edges untouched — but the visibility gate
