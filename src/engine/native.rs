@@ -1285,19 +1285,19 @@ mod tests {
         let projects = [Project {
             terminal: terminal.clone(),
             path: PathBuf::from("/"),
-            command: vec!["/usr/bin/bash".to_owned()],
+            command: vec!["/usr/bin/bash".to_owned(), "-l".to_owned()],
             shell_hook: true,
         }];
         let mut engine = NativeEngine::spawn_sized_with_socket(
             &projects,
-            &[ScreenSize::new(80, 4)],
+            &[ScreenSize::new(80, 24)],
             DEFAULT_SCROLLBACK,
             std::path::Path::new("/tmp/termdeck-hook-test.sock"),
         )
         .unwrap();
         engine.dispatch(EngineCommand::Input {
             terminal: terminal.clone(),
-            bytes: b"false\nTERMDECK_NOTIFY_LONG_SECS=0\nsleep 0.01\n".to_vec(),
+            bytes: b"printf 'HOOK=%s\\n' \"$TERMDECK_SHELL_HOOK\"\nfalse\nTERMDECK_NOTIFY_LONG_SECS=0\nsleep 0.01\n".to_vec(),
         });
 
         let deadline = Instant::now() + Duration::from_secs(15);
@@ -1318,6 +1318,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         let frame = frame_text(engine.frame(&terminal).unwrap());
+        assert!(frame.contains("HOOK=1"), "{messages:?}; {frame:?}");
         assert!(
             messages
                 .iter()
