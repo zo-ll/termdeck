@@ -13,6 +13,10 @@ use crate::{
 };
 
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+/// Metadata ages independently of PTY output. One update per second is enough
+/// for the displayed elapsed values while avoiding a redraw on every input
+/// poll for an otherwise quiet workspace.
+const TIMING_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 const NOTIFY_PREFIX: &[u8] = b"\x1b]7777;termdeck;finished;";
 const NOTIFY_PAYLOAD_CAP: usize = 512;
 
@@ -119,6 +123,7 @@ struct NativeTerminal {
     status: TerminalStatus,
     metadata: TerminalMetadata,
     started: Instant,
+    last_timing_refresh: Instant,
     scrollback: usize,
     last_output: Option<Instant>,
     notify_carry: Vec<u8>,
@@ -134,6 +139,7 @@ impl NativeTerminal {
         let transport = PtyTransport::spawn_with_socket(&project, size, socket)?;
         let adapter = VtFrameAdapter::new(project.terminal.clone(), size, scrollback);
         let frame = adapter.frame();
+        let started = Instant::now();
 
         Ok(Self {
             metadata: TerminalMetadata {
@@ -149,7 +155,8 @@ impl NativeTerminal {
             adapter,
             frame,
             status: TerminalStatus::Running,
-            started: Instant::now(),
+            started,
+            last_timing_refresh: started,
             scrollback,
             last_output: None,
             notify_carry: Vec::new(),
@@ -172,13 +179,34 @@ impl NativeTerminal {
         self.metadata.bracketed_paste = self.adapter.bracketed_paste();
     }
 
-    fn refresh_timing(&mut self) {
+    fn refresh_timing_at(&mut self, observed: Instant) {
         if let Some(process) = &mut self.metadata.process {
-            process.uptime = elapsed(self.started);
+            process.uptime = elapsed(self.started, observed);
         }
         if let Some(last_output) = self.last_output {
-            self.metadata.output_idle = Some(elapsed(last_output));
+            self.metadata.output_idle = Some(elapsed(last_output, observed));
         }
+    }
+
+    fn refresh_timing(&mut self) {
+        let observed = Instant::now();
+        self.last_timing_refresh = observed;
+        self.refresh_timing_at(observed);
+    }
+
+    fn refresh_timing_if_due(&mut self, observed: Instant) -> bool {
+        if !matches!(
+            self.status,
+            TerminalStatus::Starting | TerminalStatus::Running
+        ) {
+            return false;
+        }
+        if observed.saturating_duration_since(self.last_timing_refresh) < TIMING_REFRESH_INTERVAL {
+            return false;
+        }
+        self.last_timing_refresh = observed;
+        self.refresh_timing_at(observed);
+        self.metadata.process.is_some() || self.metadata.output_idle.is_some()
     }
 
     fn status_changed(&mut self, status: TerminalStatus) -> Vec<EngineEvent> {
@@ -304,6 +332,7 @@ impl NativeTerminal {
         };
         self.transport = Some(transport);
         self.started = Instant::now();
+        self.last_timing_refresh = self.started;
         self.last_output = None;
         self.notify_carry.clear();
 
@@ -636,6 +665,12 @@ impl TerminalEngine for NativeEngine {
             for event in pty_events {
                 terminal.handle_pty_event(event, &mut events);
             }
+            if terminal.refresh_timing_if_due(Instant::now()) {
+                events.push(EngineEvent::MetadataChanged {
+                    terminal: terminal.frame.terminal.clone(),
+                    metadata: terminal.metadata.clone(),
+                });
+            }
         }
         events
     }
@@ -663,9 +698,12 @@ impl TerminalEngine for NativeEngine {
     }
 }
 
-fn elapsed(instant: Instant) -> Elapsed {
+fn elapsed(instant: Instant, observed: Instant) -> Elapsed {
     Elapsed {
-        millis: instant.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        millis: observed
+            .saturating_duration_since(instant)
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64,
     }
 }
 
@@ -687,9 +725,9 @@ mod tests {
     };
 
     use crate::contracts::{
-        CellContent, DEFAULT_SCROLLBACK, EngineCommand, EngineEvent, MouseProtocol, NotifyKind,
-        Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId, TerminalMetadata,
-        TerminalStatus,
+        CellContent, DEFAULT_SCROLLBACK, Elapsed, EngineCommand, EngineEvent, MouseProtocol,
+        NotifyKind, ProcessInfo, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
+        TerminalMetadata, TerminalStatus,
     };
 
     use super::{
@@ -1365,6 +1403,57 @@ mod tests {
         );
     }
 
+    #[test]
+    fn timing_metadata_is_derived_from_its_stored_instants() {
+        let observed = Instant::now();
+        let terminal = TerminalId::new("timing");
+        let project = Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: Vec::new(),
+            shell_hook: false,
+        };
+        let adapter = VtFrameAdapter::new(
+            terminal.clone(),
+            ScreenSize::new(80, 24),
+            DEFAULT_SCROLLBACK,
+        );
+        let frame = adapter.frame();
+        let started = observed.checked_sub(Duration::from_millis(2_000)).unwrap();
+        let last_output = observed.checked_sub(Duration::from_millis(1_500)).unwrap();
+        let mut item = NativeTerminal {
+            project,
+            socket: None,
+            transport: None,
+            adapter,
+            frame,
+            status: TerminalStatus::Running,
+            metadata: TerminalMetadata {
+                process: Some(ProcessInfo {
+                    pid: 7,
+                    uptime: Elapsed::default(),
+                }),
+                ..TerminalMetadata::default()
+            },
+            started,
+            last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
+            scrollback: DEFAULT_SCROLLBACK,
+            last_output: Some(last_output),
+            notify_carry: Vec::new(),
+        };
+
+        assert!(item.refresh_timing_if_due(observed));
+        assert_eq!(
+            item.metadata.process.map(|process| process.uptime),
+            Some(Elapsed { millis: 2_000 })
+        );
+        assert_eq!(item.metadata.output_idle, Some(Elapsed { millis: 1_500 }));
+        assert!(
+            !item.refresh_timing_if_due(observed),
+            "the quiet-poll tick is bounded"
+        );
+    }
+
     /// The #9 review note was real: resizing can change Alacritty's visible
     /// history, so its metadata must be emitted with the replacement frame.
     /// #74: the viewport metadata follows the app — the session routes the
@@ -1396,6 +1485,7 @@ mod tests {
                 status: TerminalStatus::Running,
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
+                last_timing_refresh: Instant::now(),
                 scrollback: DEFAULT_SCROLLBACK,
                 last_output: None,
                 notify_carry: Vec::new(),
@@ -1485,6 +1575,7 @@ mod tests {
                 status: TerminalStatus::Running,
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
+                last_timing_refresh: Instant::now(),
                 scrollback: DEFAULT_SCROLLBACK,
                 last_output: None,
                 notify_carry: Vec::new(),

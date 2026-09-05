@@ -538,6 +538,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let roots = Browse::roots(&browser);
 
     let mut dirty = true;
+    // A transient can become invisible without a new key or PTY event. Keep
+    // one remembered active pass so crossing its deadline produces the final
+    // frame that removes it, then go idle again.
+    let mut expiry_repaint = false;
     'session: loop {
         if SIGNAL.swap(0, Ordering::SeqCst) != 0 {
             break;
@@ -559,10 +563,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             }
         }
         dirty |= input.expire(&mut deck, &projects, now());
-        // A flash and a toast end by themselves, so while either is open the
-        // loop keeps drawing: without this the last frame of a notification
-        // would sit there until the next keystroke redrew it (#97).
-        dirty |= notifies.settling(now());
+        dirty |= schedule_expiry_repaint(&mut expiry_repaint, &deck, &notifies, now());
         // A scrollbar hides itself after its window (#115), so while one is
         // up the loop keeps drawing for the same reason: without this the
         // last frame with the bar would sit there until something else
@@ -1078,6 +1079,21 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     drop(outer);
     engine.dispatch(EngineCommand::Shutdown);
     Ok(())
+}
+
+/// Continues repainting while a time-bound visual is active, then requests
+/// exactly one final frame once it expires. Both state objects remain pure:
+/// fixtures control their clocks through the `now` supplied here.
+fn schedule_expiry_repaint(
+    was_active: &mut bool,
+    deck: &DeckState,
+    notifies: &Notifications,
+    now: Timestamp,
+) -> bool {
+    let active = deck.demoted(now).is_some() || notifies.settling(now);
+    let repaint = active || *was_active;
+    *was_active = active;
+    repaint
 }
 
 /// The terminal holding the master frame, which every layout draws.

@@ -4,8 +4,8 @@ use super::input::{CAPTURE_PAYLOAD, MOUSE_SEQUENCE_CAP, PASTE_CLOSE, PASTE_OPEN}
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, encode_paste, master_terminal, mouse_action, now,
-    open_terminals, request_close, resize_terminals, resized, route_wheel, spawn_terminals,
-    spawn_terminals_with_socket, terminal_sizes,
+    open_terminals, request_close, resize_terminals, resized, route_wheel, schedule_expiry_repaint,
+    spawn_terminals, spawn_terminals_with_socket, terminal_sizes,
 };
 use crate::{
     contracts::{
@@ -1851,6 +1851,74 @@ fn a_resize_alone_is_a_reason_to_redraw() {
         !resized(&mut size, ScreenSize::new(100, 40)),
         "one redraw, not one per pass"
     );
+}
+
+#[test]
+fn expiry_transitions_schedule_their_final_repaint() {
+    let mut deck = DeckState::new(2);
+    deck.apply(
+        &ActionCommand::SelectPosition(1),
+        &sleepers(2),
+        Timestamp::default(),
+    );
+    let notifies = Notifications::new();
+    let mut was_active = false;
+
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp::default(),
+    ));
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp { unix_millis: 1_499 },
+    ));
+    assert!(
+        schedule_expiry_repaint(
+            &mut was_active,
+            &deck,
+            &notifies,
+            Timestamp { unix_millis: 1_500 },
+        ),
+        "the demotion disappearance receives a final frame"
+    );
+    assert!(!schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp { unix_millis: 1_501 },
+    ));
+
+    let terminal = TerminalId::new("worker");
+    let mut notifies = Notifications::new();
+    assert!(notifies.record(&terminal, None, NotifyKind::Attention, Timestamp::default(),));
+    let deck = DeckState::new(2);
+    let mut was_active = false;
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp { unix_millis: 7_999 },
+    ));
+    assert!(!notifies.toasting(&terminal, Timestamp { unix_millis: 8_000 }));
+    assert!(
+        schedule_expiry_repaint(
+            &mut was_active,
+            &deck,
+            &notifies,
+            Timestamp { unix_millis: 8_000 },
+        ),
+        "the toast removal receives a final frame"
+    );
+    assert!(!schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp { unix_millis: 8_001 },
+    ));
 }
 
 /// A terminal that would not start was dropped in silence, which made an
