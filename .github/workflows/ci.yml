@@ -2,12 +2,87 @@ name: CI
 
 on: [push, pull_request]
 
+# Every job is bounded. The suite drives real PTYs, real process groups, and a
+# real Unix socket, so the failure mode of a regression there is a hang rather
+# than a red assertion: without a ceiling a wedged test holds a runner for six
+# hours (#130).
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-targets --all-features
+
+      # `rust-toolchain.toml` is the only place a version is written. The
+      # workflow used to install `stable`, which meant CI and the repo could
+      # disagree about the compiler and nobody would notice; this installs
+      # exactly what the file pins and fails if the wrong one ends up active.
+      - name: Install the pinned toolchain
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          test -n "$channel"
+          echo "rust-toolchain.toml pins: $channel"
+          rustup toolchain install "$channel" --profile minimal -c clippy -c rustfmt
+          rustup default "$channel"
+          rustc --version
+          rustc --version | grep -q "$channel"
+
+      # The shell-hook compatibility tests skip the shell they cannot find, so
+      # a green suite on a machine without Zsh or Fish proves only Bash. CI is
+      # where the other two have to exist for the claim to mean anything.
+      - name: Install the shells the hook tests exercise
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zsh fish
+          bash --version | head -1
+          zsh --version
+          fish --version
+
+      # `--locked` everywhere a lockfile is read: CI resolves the dependency
+      # versions that are committed, and a `Cargo.lock` that would have to
+      # change fails the job instead of being rewritten silently.
+      - name: Formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        timeout-minutes: 20
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Tests
+        timeout-minutes: 20
+        run: cargo test --locked --all-targets --all-features
+
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          test -n "$channel"
+          rustup toolchain install "$channel" --profile minimal
+          rustup default "$channel"
+          rustc --version
+
+      # Built from source rather than pulled from a third-party action, so the
+      # supply chain of the supply-chain check is the crates.io index and this
+      # repository's own toolchain. It is the slow half of this job, which is
+      # why the ceilings differ: the build gets ten minutes, the scan five.
+      - name: Install cargo-audit
+        timeout-minutes: 10
+        run: cargo install cargo-audit --locked
+
+      # Default severity: a vulnerability advisory fails the job. Warnings —
+      # unmaintained or yanked crates, `serde_yaml 0.9.34+deprecated` among
+      # them — are reported without failing, because replacing that dependency
+      # is its own decision (#130) and should not block unrelated work. Turn
+      # this into `--deny warnings` once that decision lands.
+      - name: Dependency advisories
+        timeout-minutes: 5
+        run: cargo audit
