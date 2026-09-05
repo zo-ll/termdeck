@@ -1298,6 +1298,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   session termctl calls per the #129 disclosure). Verdict ping inbox
   135-timing-tick.critic.ping. On pass: merge → close #132 + #131 →
   ASTRA AUDIT + review-born children COMPLETE.
+- 2026-09-05 20:1x: #135 CRITIC VERDICT = HANDBACK (excellent catch:
+  batching half RIGHT — shared deadline, ≤1 TimingChanged/pass, additive
+  contract, determinism, expiry edges untouched — but the visibility gate
+  used terminal_sizes() (PTY geometry, SKIPS collapsed) as a proxy for
+  drawn-timing; a collapsed strip renders idle{age} from output_idle
+  (deck.rs:999, pinned by a_folded_pane_states... asserting idle 6m) →
+  folded idle age FREEZES = #125 reintroduced on the folded strip; the new
+  test even asserts the false claim. 135-CORRECTION dispatched to codex:
+  Deck::timing_terminals(area) sibling (drawn set incl. collapsed+master),
+  corrected assertion+comment, engine→surface regression test (folded
+  Running output_idle advances across a shared tick), optional add/-
+  add_with_socket unconditional insert; keep ≤1 TimingChanged/pass.)
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
