@@ -1133,6 +1133,23 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   In flight: codex→123-correction. Audit closed: #117-122, 124, 125, 126.
   Remaining: #123 (correction), #129, #130, #131 + new #132.
 
+- 2026-09-05: #123 MERGED + CLOSED (e187720, gate 398 lib + 4; auto-close
+  via merge-message keyword again; closing comment posted). #123 RE-REVIEW's
+  residual nits queued (backlog 29): PS0-class-by-name filter (starship/
+  bash-preexec/atuin would still be recorded); bootstrap line echoed at first
+  prompt; fire-and-forget bootstrap (no hook-install verification); declare
+  -a pattern misses -ax/-ar; __systemd filter untested; regression runs
+  bash -i -l over pipes not production PTY bash -l; API-created-pane argv
+  test + DEBUG-trap one-time snapshot still open.
+- 2026-09-05: #129 SPLIT (user-approved parallelization): A) CLI/help code
+  (coord/129-cli-help — help for both binaries, errors-before-help, Cargo
+  default-run + repository) → codex WORKING; B) docs (coord/129-docs — README
+  + PLAN facts, research-brief overstatement corrections w/ dated amendment
+  notes, MIT LICENSE, Horizon scrub, canvas-doc sweep) → claude WORKING
+  (pointer needed a redispatch — /usage overlay ate the first; Esc+re-paste
+  landed, transcript-verified). Audit remaining: #129 (both parts), #130,
+  #131 (+#132).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
