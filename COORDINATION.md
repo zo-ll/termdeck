@@ -649,6 +649,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   astra-audit-pane.txt + tmux default:1 scrollback — ALL material content is
   in the issues themselves.
 
+- 2026-09-05 RESUME (same day, user: "we resume now"): env check — inbox
+  empty, no markers, relay DEAD (deck restart killed it) → restarted
+  (relay-termdeck.sh, detached); only master pane survived → worker panes
+  recreated. AUDIT WAVE 1 STARTED: #117 (nonblocking bounded control-socket
+  handling) worktree coord/117-socket-handling off f42b274, brief written,
+  codex pane relaunched (full session, gpt-5.6-terra, idle user-confirmed —
+  peek blind on its boot screen this time), #117 DISPATCHED + verified
+  Working. Critic pane recreated (pi muse-spark-1.3-contributor, skill-only,
+  booted). WAVE PLAN (audit order): #117→#118→#119→#120→#121 sequentially on
+  the codex lane (all engine/session/ctl — no UI overlap), each → critic →
+  user merge approval → next. Claude lane: holds unless user opts into a
+  parallel non-overlapping slice (candidates: #127 picker, #129 docs).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
