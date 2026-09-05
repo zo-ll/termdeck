@@ -585,6 +585,7 @@ mod tests {
         assert_eq!(workspace.projects.len(), 1);
         assert_eq!(workspace.projects[0].path, root);
         assert_eq!(workspace.projects[0].command, ["bash", "-l"]);
+        assert!(workspace.projects[0].shell_hook);
         fs::remove_dir_all(workspace.root).unwrap();
     }
 
@@ -626,6 +627,7 @@ mod tests {
                 .iter()
                 .all(|project| project.command == ["bash", "-l"])
         );
+        assert!(projects.iter().all(|project| project.shell_hook));
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -5,7 +5,7 @@ use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, encode_paste, master_terminal, mouse_action, now,
     open_terminals, request_close, resize_terminals, resized, route_wheel, schedule_expiry_repaint,
-    spawn_terminals, spawn_terminals_with_socket, terminal_sizes,
+    spawn_terminals, spawn_terminals_with_socket, terminal_sizes, workspace_of,
 };
 use crate::{
     contracts::{
@@ -13,7 +13,7 @@ use crate::{
         ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
-    ui::{DeckState, Input, Key, Modal, Notifications, Reaction, SheetState},
+    ui::{DeckState, Input, Key, Modal, Notifications, PickerState, Reaction, SheetState},
 };
 use ratatui::layout::Position;
 use std::collections::BTreeSet;
@@ -609,6 +609,20 @@ fn a_committed_sheet_opens_a_plain_folder() {
     assert_eq!(added.len(), 1);
     assert_eq!(added[0].terminal, TerminalId::new("archive"));
     assert_eq!(added[0].path, PathBuf::from("/code/archive"));
+    assert_eq!(added[0].command, ["bash", "-l"]);
+    assert!(added[0].shell_hook);
+}
+
+#[test]
+fn a_picker_launch_uses_the_login_shell_hook() {
+    let mut state = PickerState::new();
+    state.add(&crate::ui::Entry::folder("archive", "/code/archive"));
+
+    let workspace = workspace_of(&state);
+
+    assert_eq!(workspace.projects.len(), 1);
+    assert_eq!(workspace.projects[0].command, ["bash", "-l"]);
+    assert!(workspace.projects[0].shell_hook);
 }
 
 /// The sheet names the running panes in order beside paths they already
