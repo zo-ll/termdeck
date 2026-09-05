@@ -1102,6 +1102,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   command, real gate numbers; task slug 123-correction). In flight: critic→
   #125; codex→123-correction.
 
+- 2026-09-05: #125 CRITIC VERDICT = PASS → MERGED (395 lib + 4, verified
+  3x by the critic; issue CLOSED) + rebuilt. The critic confirmed the marker:
+  elapsed() takes observation instants, refresh_timing_if_due ≤1/s from
+  drain_events → MetadataChanged → dirty (quiet panes age); exited/failed
+  stop ticking with final capture; expiry edge-triggered (1499/1500/1501,
+  7999/8000/8001 pinned; zero sleeps). NITS (5, queued): (1) NEW BUG — the
+  #115 scrollbar keeps the same final-frame class (session.rs:572
+  deck.scrolling; one || from the helper) + N staggered idle redraws/s; (2)
+  no session-level tick test (helper-level only; drain_events chain verified
+  by inspection); (3) per-terminal deadlines (N redraws/s idle); (4) tick for
+  non-displayed panes; (5) decorative toasting assert. FILED as a new issue
+  (#132 - scrollbar final frame + idle-redraw nit, bug/astra-audit labels).
+  In flight: codex→123-correction. Audit closed: #117-122, 124, 125, 126.
+  Remaining: #123 (correction), #129, #130, #131 + new #132.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
