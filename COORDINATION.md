@@ -518,6 +518,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   always changes with a master present; (2) pinned().is_some() && …==active()
   double-call style nit in deck.rs. WAITING: user merge approval for #113;
   then merge + close + rebuild + dispatch #115 to claude.
+- 2026-09-05: #113 MERGED (user approval, "merge and dispatch") — --no-ff
+  merge (8a9be03), gate green 338 lib + 4 int, pushed; issue #113 CLOSED with
+  smoke comment (^g p; restart loads #111+#113+#116). Binary rebuilt.
+- 2026-09-05: #115 DISPATCHED to the claude lane — worktree
+  ~/.worktrees/termdeck/115-scrollbar (coord/115-scrollbar) created on
+  POST-#113 main (zero overlap by construction); brief
+  .scratch/tasks/115-scrollbar.brief.md (design-first: slice doc
+  docs/design/termdeck/scrollbar.md to settle panes/position/idle-timer/
+  scrollback-mode/live-tail/display-only + injected-clock determinism +
+  honest fixtures + full mode coverage). Claude verified idle (transcript: 1
+  prompt, no new work) BEFORE dispatch; pointer landed (one lost-Enter
+  retry; transcript shows the #115 prompt + 29 new entries) — WORKING.
+  In flight: claude→#115. Open set: #112 (user gate), #114, #94 (held), #33.
 - 2026-09-05: #116 CRITIC VERDICT = PASS (inbox 116-peek-active-screen.critic.ping):
   all 6 acceptance criteria met; active-suffix with history fallback; screen
   field derived from same adapter metadata (can't disagree with grid); error
