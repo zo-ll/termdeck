@@ -1205,6 +1205,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   transcript-verified; worktree coord/132-scrollbar-frame off d45c7db;
   folds into #125's schedule_expiry_repaint pattern, injected clock,
   shared-deadline perf item = do-the-cheap-or-note).
+- 2026-09-05: #132 DONE (claude, 6996312, +61/-6; marker: scrollbar
+  folded into the #125 edge helper, test pins 3999/4000/4001 fail-
+  pre-fix; shared-deadline perf DEFERRED with a real reason (engine-lane
+  real-clock state, not this helper) — tracked as incomplete; gate 402
+  lib + 4). Routed to CLAUDE critic (assignment 132.critic.md — edge
+  honesty, no #115 semantic change, deferral-never-drop, boundary,
+  gate). Verdict ping inbox 132-scrollbar-frame.critic.ping.
+  Codex quota reset 19:44 (~1h30m); #129-A resumes then (or handover).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
