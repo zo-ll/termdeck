@@ -605,6 +605,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   duplicates NOTIFY_WINDOW's 4000 with its own rationale.
   WAITING: user merge approval for #115 (then merge + close + rebuild).
 
+- 2026-09-05: #115 MERGED (user approval) — --no-ff merge, gate green
+  348 lib + 4 int, pushed; issue #115 CLOSED with smoke comment; binary
+  rebuilt (one restart loads #111+#113+#115+#116). WAVE COMPLETE — this
+  session shipped 4/4: #111 notify attribution, #113 ^g p pin, #115
+  scrollbar, #116 alt-aware peek. ALL LANES IDLE (claude, codex, critic).
+  Open set: #112 (persistent+agent-aware deck — USER DECISION GATE),
+  #94 (MCP held on coord/94-ctl-mcp — user handshake/merge/drop),
+  #114 (agent discovery — layer 1 = #94; non-MCP slices could start),
+  #33 (animations — parked/skip). Next candidates: #112 verdict → Pa/Pb/A
+  slices; or #114 non-MCP slices on the free codex lane; or #94 merge/drop.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
