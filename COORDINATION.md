@@ -1007,6 +1007,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   also queued for codex after #122; #126 stays OPEN until (integration +
   parser slice + second review).
 
+- 2026-09-05: #122 DONE (codex, commit 1840811 "report operation outcomes
+  truthfully", rebased to main; marker pass; truth table: input→exited/
+  failed/tombstoned/full-queue→refusal; input→missing terminal→unavailable;
+  notify attributed→delivered:true; notify outside/coalesced→delivered:false
+  + reason). Routed to CLAUDE critic (assignment .scratch/review/122.critic.md
+  — per-row codes/shapes, additive wire, #118/#121 coherence, failing-pre-fix
+  tests). #126-INTEGRATION dispatched to codex (native.rs rebase conflict vs
+  #121; resolve-keep-both; task slug 126-integration). QUEUE after: 126-
+  parser-bounds slice → then #123. In flight: critic→#122; codex→126-
+  integration.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
