@@ -769,6 +769,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (benign), old .write().unwrap() compile unchanged. Routed to CRITIC
   (assignment .scratch/review/118.critic.md). Verdict ping inbox
   118-pty-input.critic.ping. Worker lane idle at prompt.
+- 2026-09-05: #118 CRITIC VERDICT = PASS (inbox 118-pty-input.critic.ping).
+  AC1 stuck-child queue: bounded nonblocking (accepted=queued vs
+  written=nonblocking slices); refusal ATOMIC whole-or-nothing incl. ctl
+  path. AC2 backpressure: saturation → Refused, bound intact. AC3
+  truthful: Refused → InputDropped event → ctl code 3 "terminal input
+  queue is full..." (same refused family as the input gate), pane stays
+  Running at engine AND ctl levels; dead PTY → Failed as before; auto-
+  reply saturation drops the reply, not the pane. AC4 #117 non-regression:
+  ctl.v1 wire/codes unchanged; one-request-per-frame intact (dispatch
+  ≤1 event, pump dispatches nothing); no daemons. AC5 gate 358 lib + 4
+  green first run, no flake; 6 tests cover queued/saturated/flushed +
+  engine truth + pump delivery + ctl refusal. No nits. WAITING: user
+  merge approval for #118 → then #119 to the pi-worker lane.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
