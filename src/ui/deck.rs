@@ -1,5 +1,14 @@
 use super::*;
 
+/// One row of the toast: what to call it, what it says, and where it sits in
+/// the pane order for a stable tie-break. A session notice belongs to no
+/// pane, so it carries its own name and sorts last among its contemporaries.
+struct Toasted<'a> {
+    order: usize,
+    head: String,
+    notify: &'a Notify,
+}
+
 impl Deck<'_> {
     /// Draws the whole screen: master, preview stack, key hints, status row.
     pub fn render(&self, engine: &dyn TerminalEngine, frame: &mut Frame) {
@@ -91,11 +100,15 @@ impl Deck<'_> {
     /// The notifications the current layout has nowhere to draw: their pane is
     /// hidden, so the toast is the only place they can appear. Newest first,
     /// which is the order the batch is read in.
-    fn toast_items(&self, body: Rect) -> Vec<(usize, &Notify)> {
+    ///
+    /// A session notice is here on the same terms and for a stronger reason:
+    /// a terminal that never started has no pane in any layout, so the toast
+    /// is not merely the only place left but the only place there is (#128).
+    fn toast_items(&self, body: Rect) -> Vec<Toasted<'_>> {
         if self.notifies.is_empty() {
             return Vec::new();
         }
-        let mut items: Vec<(usize, &Notify)> = self
+        let mut items: Vec<Toasted<'_>> = self
             .hidden(body)
             .into_iter()
             .filter_map(|position| {
@@ -103,10 +116,31 @@ impl Deck<'_> {
                 let notify = self.notifies.pending(&project.terminal)?;
                 self.notifies
                     .toasting(&project.terminal, self.now)
-                    .then_some((position, notify))
+                    .then(|| Toasted {
+                        order: position,
+                        head: format!("{} {}", position + 1, project.terminal),
+                        notify,
+                    })
             })
             .collect();
-        items.sort_by(|left, right| right.1.at.cmp(&left.1.at).then(left.0.cmp(&right.0)));
+        // A notice belongs to no pane, so it sorts after the panes it shares
+        // its moment with rather than into the middle of them.
+        items.extend(
+            self.notifies
+                .toasting_notices(self.now)
+                .map(|notice| Toasted {
+                    order: usize::MAX,
+                    head: notice.head.clone(),
+                    notify: &notice.notify,
+                }),
+        );
+        items.sort_by(|left, right| {
+            right
+                .notify
+                .at
+                .cmp(&left.notify.at)
+                .then(left.order.cmp(&right.order))
+        });
         items
     }
 
@@ -1163,7 +1197,7 @@ impl Deck<'_> {
     /// box says less than none, but it dims nothing, takes no key and leaves
     /// the master its cursor. It lists the batch newest first and counts the
     /// rest, so a fifth notification lengthens no box.
-    fn toast(&self, buffer: &mut Buffer, area: Rect, items: &[(usize, &Notify)]) {
+    fn toast(&self, buffer: &mut Buffer, area: Rect, items: &[Toasted<'_>]) {
         let (width, tallest) = TOAST_SIZE;
         // The box is the width of the quit confirmation and as tall as it
         // needs: borders, the row it opens with, a row per notification, the
@@ -1220,15 +1254,12 @@ impl Deck<'_> {
         // than overrunning: the interior, less the rows the box opens and
         // closes with and the row the count may need.
         let listed = listed.min((rect.height as usize).saturating_sub(3));
-        for (row, (position, notify)) in items.iter().take(listed).enumerate() {
-            let Some(project) = self.projects.get(*position) else {
-                continue;
-            };
-            let head = format!("{} {}", position + 1, project.terminal);
+        for (row, item) in items.iter().take(listed).enumerate() {
+            let notify = item.notify;
             let age = age(self.now.unix_millis.saturating_sub(notify.at.unix_millis));
-            let taken = head.chars().count() + age.chars().count() + 6;
+            let taken = item.head.chars().count() + age.chars().count() + 6;
             let spans = vec![
-                Span::styled(head, Style::new().fg(MASTER_FG).bg(CANVAS)),
+                Span::styled(item.head.clone(), Style::new().fg(MASTER_FG).bg(CANVAS)),
                 Span::styled(" · ", separator),
                 Span::styled(
                     clip(

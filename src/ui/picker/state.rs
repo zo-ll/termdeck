@@ -23,8 +23,11 @@ pub struct Entry {
     pub path: PathBuf,
     /// A repository's branch, if the browser could read one.
     pub branch: Option<String>,
-    /// Uncommitted files, drawn as `+3` beside the branch.
-    pub dirty: usize,
+    /// Uncommitted files, drawn as `+3` beside the branch. `None` when
+    /// nobody counted them: counting is opening the repository, which the
+    /// browser does not do, and an absent `+3` therefore says "no count
+    /// here" rather than "clean" (#128).
+    pub dirty: Option<usize>,
     /// The last commit's age, already phrased ("2h ago", "just now").
     pub age: Option<String>,
     /// What a folder holds, drawn as `9 items` / `9 items · no repos`.
@@ -39,7 +42,7 @@ impl Entry {
             name: name.into(),
             path: path.into(),
             branch: None,
-            dirty: 0,
+            dirty: None,
             age: None,
             items: None,
             repos: None,
@@ -67,7 +70,12 @@ impl Entry {
         }
     }
 
-    pub fn git(mut self, branch: impl Into<String>, dirty: usize, age: impl Into<String>) -> Self {
+    pub fn git(
+        mut self,
+        branch: impl Into<String>,
+        dirty: Option<usize>,
+        age: impl Into<String>,
+    ) -> Self {
         self.branch = Some(branch.into());
         self.dirty = dirty;
         self.age = Some(age.into());

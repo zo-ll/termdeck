@@ -38,7 +38,7 @@ pub use picker::{
 };
 pub use state::{
     DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal, NOTIFY_WINDOW,
-    Notifications, Notify, SCROLLBAR_WINDOW, TOAST_WINDOW,
+    Notice, Notifications, Notify, SCROLLBAR_WINDOW, TOAST_WINDOW,
 };
 
 use crate::contracts::{
