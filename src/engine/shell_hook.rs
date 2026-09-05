@@ -6,21 +6,6 @@ use std::{
 
 use portable_pty::CommandBuilder;
 
-// Bash ignores `--rcfile` for interactive login shells. For Termdeck's
-// default `bash -l`, the generated file below therefore replays Bash's login
-// profile order after removing `-l` from argv. It never writes or replaces a
-// user profile: `/etc/profile` runs first, followed by the first readable
-// user login profile, exactly as Bash normally does.
-const BASH_LOGIN_RC: &str = r#"[ -r /etc/profile ] && . /etc/profile
-if [ -r "$HOME/.bash_profile" ]; then
-  . "$HOME/.bash_profile"
-elif [ -r "$HOME/.bash_login" ]; then
-  . "$HOME/.bash_login"
-elif [ -r "$HOME/.profile" ]; then
-  . "$HOME/.profile"
-fi
-"#;
-
 const BASH_NON_LOGIN_RC: &str = r#"[ -r "$HOME/.bashrc" ] && . "$HOME/.bashrc"
 "#;
 
@@ -37,7 +22,7 @@ __td_run_debug_trap() {
   eval "eval $__td_debug_action"
 }
 __td_preexec() {
-  case $BASH_COMMAND in __td_*) return;; esac
+  case $BASH_COMMAND in __td_*|__systemd_osc_context_*) return;; esac
   [ -n "${__td_prompting-}" ] || [ -n "$__td_start" ] || { __td_now; __td_start=$REPLY; __td_cmd=$BASH_COMMAND; }
   __td_run_debug_trap
 }
@@ -51,7 +36,10 @@ __td_prompt() {
 }
 __td_prompt_end() { __td_prompting=; }
 trap '__td_preexec' DEBUG
-PROMPT_COMMAND="__td_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __td_prompt_end"
+case "$(declare -p PROMPT_COMMAND 2>/dev/null)" in
+  "declare -a "*) PROMPT_COMMAND=(__td_prompt "${PROMPT_COMMAND[@]}" __td_prompt_end);;
+  *) PROMPT_COMMAND="__td_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __td_prompt_end";;
+esac
 "#;
 
 const ZSH_RC: &str = r#"[ -r "${TERMDECK_USER_ZDOTDIR:-$HOME}/.zshrc" ] && . "${TERMDECK_USER_ZDOTDIR:-$HOME}/.zshrc"
@@ -100,6 +88,7 @@ end
 /// A short-lived generated startup directory. Its lifetime is the owned PTY.
 pub(super) struct ShellHook {
     dir: PathBuf,
+    bootstrap: Option<Vec<u8>>,
 }
 
 impl ShellHook {
@@ -118,13 +107,24 @@ impl ShellHook {
             return Ok(None);
         }
         let dir = unique_dir()?;
+        let mut bootstrap = None;
         if name == "bash" {
             let rc = dir.join("bashrc");
-            let (login, arguments) = bash_init_arguments(arguments);
-            fs::write(&rc, bash_rc(login)).map_err(|error| error.to_string())?;
-            command.arg("--rcfile");
-            command.arg(rc);
-            command.args(&arguments);
+            let login = bash_is_login(arguments);
+            let contents = if login { BASH_HOOK } else { &bash_rc() };
+            fs::write(&rc, contents).map_err(|error| error.to_string())?;
+            if login {
+                // `--rcfile` is ignored by a login shell. Keep Bash's real
+                // `-l` startup (including `login_shell` and profile guards),
+                // then feed this source command to its PTY for the first
+                // prompt. Terminal input is buffered until startup is done.
+                command.args(arguments);
+                bootstrap = Some(source_command(&rc));
+            } else {
+                command.arg("--rcfile");
+                command.arg(rc);
+                command.args(arguments);
+            }
         } else if name == "zsh" {
             fs::write(dir.join(".zshrc"), ZSH_RC).map_err(|error| error.to_string())?;
             if let Some(user_zdotdir) = env::var_os("ZDOTDIR") {
@@ -145,51 +145,44 @@ impl ShellHook {
             command.env("XDG_DATA_DIRS", data_dirs);
             command.args(arguments);
         }
-        Ok(Some(Self { dir }))
+        Ok(Some(Self { dir, bootstrap }))
+    }
+
+    pub(super) fn bootstrap(&self) -> Option<&[u8]> {
+        self.bootstrap.as_deref()
     }
 }
 
-/// Replaces Bash's login flag with our generated init file. `--rcfile` is
-/// skipped by a real login shell, so the generated login init replays the
-/// normal profile order before it installs the hook.
-fn bash_init_arguments(arguments: &[String]) -> (bool, Vec<String>) {
-    let mut login = false;
+/// Whether Bash will treat these argv options as a login-shell invocation.
+fn bash_is_login(arguments: &[String]) -> bool {
     let mut options = true;
-    let mut rewritten = Vec::with_capacity(arguments.len());
     for argument in arguments {
         if options && argument == "--" {
             options = false;
-            rewritten.push(argument.clone());
         } else if options && argument == "--login" {
-            login = true;
+            return true;
         } else if options && !argument.starts_with("--") {
             if let Some(flags) = argument.strip_prefix('-') {
-                let rewritten_flags: String = flags.chars().filter(|flag| *flag != 'l').collect();
-                if rewritten_flags.len() != flags.len() {
-                    login = true;
-                    if !rewritten_flags.is_empty() {
-                        rewritten.push(format!("-{rewritten_flags}"));
-                    }
-                } else {
-                    rewritten.push(argument.clone());
+                if flags.contains('l') {
+                    return true;
                 }
+                // The string after `-c` is a command, not another option.
+                options = !flags.contains('c');
             } else {
-                rewritten.push(argument.clone());
+                options = false;
             }
-        } else {
-            rewritten.push(argument.clone());
         }
     }
-    (login, rewritten)
+    false
 }
 
-fn bash_rc(login: bool) -> String {
-    let profile = if login {
-        BASH_LOGIN_RC
-    } else {
-        BASH_NON_LOGIN_RC
-    };
-    format!("{profile}{BASH_HOOK}")
+fn bash_rc() -> String {
+    format!("{BASH_NON_LOGIN_RC}{BASH_HOOK}")
+}
+
+fn source_command(path: &Path) -> Vec<u8> {
+    let quoted = path.to_string_lossy().replace('\'', "'\\''");
+    format!(". '{quoted}'\n").into_bytes()
 }
 
 impl Drop for ShellHook {
@@ -210,26 +203,26 @@ fn unique_dir() -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, process::Command};
+    use std::{
+        fs,
+        io::Write,
+        process::{Command, Stdio},
+    };
 
     use portable_pty::CommandBuilder;
 
-    use super::{FISH_RC, ShellHook, bash_init_arguments, bash_rc, unique_dir};
+    use super::{FISH_RC, ShellHook, bash_is_login, bash_rc, unique_dir};
 
     #[test]
-    fn bash_login_arguments_use_the_generated_init_without_losing_other_flags() {
-        assert_eq!(
-            bash_init_arguments(&["-ilc".to_owned(), "echo hook".to_owned()]),
-            (true, vec!["-ic".to_owned(), "echo hook".to_owned()])
-        );
-        assert_eq!(
-            bash_init_arguments(&["--login".to_owned(), "--".to_owned(), "-l".to_owned()]),
-            (true, vec!["--".to_owned(), "-l".to_owned()])
-        );
-        assert_eq!(
-            bash_init_arguments(&["-i".to_owned()]),
-            (false, vec!["-i".to_owned()])
-        );
+    fn bash_login_detection_preserves_argv_and_stops_after_c() {
+        assert!(bash_is_login(&["-ilc".to_owned(), "echo hook".to_owned()]));
+        assert!(bash_is_login(&[
+            "--login".to_owned(),
+            "--".to_owned(),
+            "-l".to_owned()
+        ]));
+        assert!(!bash_is_login(&["-c".to_owned(), "echo -l".to_owned()]));
+        assert!(!bash_is_login(&["-i".to_owned()]));
     }
 
     #[test]
@@ -251,7 +244,7 @@ mod tests {
     fn bash_snippet_emits_error_and_long_rules_without_control_bytes_in_cmd() {
         let dir = unique_dir().unwrap();
         let rc = dir.join("rc");
-        fs::write(&rc, bash_rc(false)).unwrap();
+        fs::write(&rc, bash_rc()).unwrap();
         let output = Command::new("bash")
             .args([
                 "--noprofile",
@@ -277,47 +270,58 @@ mod tests {
     }
 
     #[test]
-    fn bash_login_hook_runs_profiles_and_chains_debug_and_prompt_commands() {
+    fn bash_login_hook_preserves_profiles_and_array_prompt_commands() {
         let mut command = CommandBuilder::new("bash");
-        let hook = ShellHook::install(
-            "bash",
-            &[
-                "-ilc".to_owned(),
-                "printf 'HOOK=%s PROFILE=%s\\n' \"$TERMDECK_SHELL_HOOK\" \"$PROFILE\"; eval \"$PROMPT_COMMAND\""
-                    .to_owned(),
-            ],
-            &mut command,
+        let hook = ShellHook::install("bash", &["-l".to_owned()], &mut command)
+            .unwrap()
+            .unwrap();
+        fs::write(
+            hook.dir.join("profile.d"),
+            "PROFILE_D_COUNT=$((PROFILE_D_COUNT + 1))\nunset PROMPT_COMMAND\ndeclare -a PROMPT_COMMAND=()\n__systemd_osc_context_precmdline() { printf PROFILE_PROMPT\\n; }\nPROMPT_COMMAND+=(__systemd_osc_context_precmdline)\n",
         )
-        .unwrap()
         .unwrap();
-        fs::write(hook.dir.join(".bashrc"), "printf BASHRC=kept\\n\n").unwrap();
+        fs::write(
+            hook.dir.join(".bashrc"),
+            "if ! shopt -q login_shell; then . \"$HOME/profile.d\"; fi\n",
+        )
+        .unwrap();
         fs::write(
             hook.dir.join(".bash_profile"),
-            "export PROFILE=kept\n. \"$HOME/.bashrc\"\ntrap 'printf DEBUG=kept\\n' DEBUG\nPROMPT_COMMAND='printf PROMPT=kept\\n'\n",
+            "PROFILE_D_COUNT=0\n. \"$HOME/profile.d\"\n. \"$HOME/.bashrc\"\ntrap 'printf DEBUG=kept\\n' DEBUG\n",
         )
         .unwrap();
+        fs::write(hook.dir.join(".bash_logout"), "printf LOGOUT=kept\\n").unwrap();
         let argv = command
             .get_argv()
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         assert_eq!(argv[0], "bash");
-        assert_eq!(argv[1], "--rcfile");
-        assert!(!argv.iter().any(|argument| argument == "-l"));
-        assert!(argv.iter().any(|argument| argument == "-ic"));
-
-        let output = Command::new(&argv[0])
-            .args(&argv[1..])
+        assert_eq!(argv, ["bash", "-l"]);
+        let mut child = Command::new("bash")
+            // The real production argv is `bash -l`; `-i` only makes this
+            // pipe-backed regression test interactive like a PTY.
+            .args(["-i", "-l"])
             .env("HOME", &hook.dir)
             .env("TERMDECK_SOCK", "test")
             .env("TERMDECK_PANE", "test")
-            .output()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .unwrap();
+        let stdin = child.stdin.as_mut().unwrap();
+        stdin.write_all(hook.bootstrap().unwrap()).unwrap();
+        stdin.write_all(b"printf 'HOOK=%s PROFILE_D=%s\\n' \"$TERMDECK_SHELL_HOOK\" \"$PROFILE_D_COUNT\"\nfalse\nTERMDECK_NOTIFY_LONG_SECS=0\nsleep 0.01\nexit\n").unwrap();
+        let output = child.wait_with_output().unwrap();
         assert!(output.status.success(), "{output:?}");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        assert!(stdout.contains("HOOK=1 PROFILE=kept"), "{stdout:?}");
-        assert_eq!(stdout.matches("BASHRC=kept").count(), 1, "{stdout:?}");
+        assert!(stdout.contains("HOOK=1 PROFILE_D=1"), "{stdout:?}");
         assert!(stdout.contains("DEBUG=kept"), "{stdout:?}");
-        assert!(stdout.contains("PROMPT=kept"), "{stdout:?}");
+        assert!(stdout.contains("PROFILE_PROMPT"), "{stdout:?}");
+        assert!(stdout.contains("cmd=false\x07"), "{stdout:?}");
+        assert!(stdout.contains("cmd=sleep 0.01\x07"), "{stdout:?}");
+        assert!(!stdout.contains("cmd=__systemd_osc_context_"), "{stdout:?}");
+        assert!(stdout.contains("LOGOUT=kept"), "{stdout:?}");
     }
 }

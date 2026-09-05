@@ -165,7 +165,7 @@ impl PtyTransport {
             .master
             .try_clone_reader()
             .map_err(|error| error.to_string())?;
-        let writer = pair
+        let mut writer = pair
             .master
             .take_writer()
             .map_err(|error| error.to_string())?;
@@ -173,6 +173,11 @@ impl PtyTransport {
             .slave
             .spawn_command(command)
             .map_err(|error| error.to_string())?;
+        if let Some(bootstrap) = shell_hook.as_ref().and_then(ShellHook::bootstrap) {
+            writer
+                .write_all(bootstrap)
+                .map_err(|error| error.to_string())?;
+        }
         let process_group = child.process_id();
         let killer = child.clone_killer();
         // Recorded before anything can exit: the reuse guard below
