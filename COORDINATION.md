@@ -885,6 +885,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   ownership/kill-mechanism verification, pid-reuse, bounded join, tests
   fail-pre-fix, non-Linux fallback). Verdict ping inbox
   119-job-cleanup.critic.ping. FIRST-priority: #120 #121 remaining.
+- 2026-09-05: #119 CRITIC VERDICT = PASS (no nits) → MERGED (standing
+  approval) — aa55591, gate 376 lib + 4 green first run, issue #119
+  CLOSED, binary rebuilt. PLAN.md Lifecycle AMENDED (user: "you update
+  the docs if needed") — b258a77: session-wide /proc enumeration, PID-
+  reuse guards, group-OR-session force, bounded join (grace+settle+join
+  ≤3s), non-Linux group-only note; acceptance line "confirmed exit
+  leaves no owned child processes" unchanged. DESIGN.md: no lifecycle
+  text to sync (checked). #120 (bracketed paste) DISPATCHED to the muse
+  worker (WORKING; worktree coord/120-bracketed-paste off aa55591).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
