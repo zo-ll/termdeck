@@ -1213,6 +1213,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   honesty, no #115 semantic change, deferral-never-drop, boundary,
   gate). Verdict ping inbox 132-scrollbar-frame.critic.ping.
   Codex quota reset 19:44 (~1h30m); #129-A resumes then (or handover).
+- 2026-09-05: #132-PART1 CRITIC VERDICT = PASS → MERGED (8ae14fc, 402
+  lib + 4; issue #132 STAYS OPEN for its second item); the one-|| edge
+  fold with the old level-triggered line REMOVED; boundary pins real
+  4000ms window (3999/4000/4001); shared was_active traced across
+  transients; render consumer checked (raised None at 4000 = the frame
+  that takes the bar away); #125 expiry test still passes. NITS (2, to
+  backlog 43): SCROLLBAR_WINDOW aliases NOTIFY_WINDOW so the pin is
+  really the notification const (derive from SCROLLBAR_WINDOW.millis);
+  shared was_active deserves a comment at the flag. SECOND ITEM filed
+  as NEW ISSUE #135 (staggered idle redraws + hidden-pane tick) —
+  queued to the engine lane; #132 closes when #135 lands.
+- 2026-09-05: #133 (check/list shadowing) DISPATCHED to the claude lane
+  (coordinator adjudication per the #130 pattern; WORKING,
+  transcript-verified; worktree coord/133-cli-shadow off 8ae14fc).
+  #129-A resumes at the 19:44 codex reset (~1h20m).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
