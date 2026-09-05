@@ -5,17 +5,17 @@
 │                                                                                                ││   ▸ 3 app · ✕ · exit 1                  ×   
 │  > idp-frontend@0.4.2 dev                                                                      ││                                             
 │  > vite --host                                                                                 ││   ▸ 4 worker · ○ · idle 6m              ×   
-│                                                                                                ││                                             
-│    VITE v5.4.8  ready in 412 ms         ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                          
+│                                         ┌─ help ──────────────────────────────────────────── ^g ? ─┐                                          
+│    VITE v5.4.8  ready in 412 ms         │                                                          │                                          
+│                                         │  NAVIGATE                                                │                                          
+│    ➜  Local:   http://localhost:5173/   │  ^g j  ^g k       promote next / previous                │                                          
+│    ➜  Network: http://192.168.1.24:5173/│  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
+│    ➜  press h + enter to show help      │  ^g N             promote terminal number                │                                          
 │                                         │                                                          │                                          
-│    ➜  Local:   http://localhost:5173/   │  NAVIGATE                                                │                                          
-│    ➜  Network: http://192.168.1.24:5173/│  ^g j  ^g k       promote next / previous                │                                          
-│    ➜  press h + enter to show help      │  ^g ↓  ^g ↑       same, with arrow keys                  │                                          
-│                                         │  ^g N             promote terminal number                │                                          
-│  12:03:58 [vite] page reload src/main.ts│                                                          │                                          
-│  12:04:12 [vite] hmr update /src/routes/│  VIEW                                                    │                                          
-│  12:04:12 [vite] hmr update /src/styles/│  ^g z             toggle zoom                            │                                          
-│  12:04:29 [vite] hmr update /src/routes/│  ^g c             collapse / expand previews             │                                          
+│  12:03:58 [vite] page reload src/main.ts│  VIEW                                                    │                                          
+│  12:04:12 [vite] hmr update /src/routes/│  ^g z             toggle zoom                            │                                          
+│  12:04:12 [vite] hmr update /src/styles/│  ^g c             collapse / expand previews             │                                          
+│  12:04:29 [vite] hmr update /src/routes/│  ^g p             pin / unpin at the stack top           │                                          
 │  12:04:41 [vite] optimized dependencies │  ^g pgup/pgdn     page the preview stack                 │                                          
 │                                         │  ^g -  ^g =       narrow / widen the master              │                                          
 │    VITE v5.4.8  ready in 268 ms         │  ^g a             open any folder / repo                 │                                          

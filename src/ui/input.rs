@@ -1,13 +1,13 @@
 //! Key handling for the outer interface.
 //!
 //! Every binding is reached through the `ctrl+g` prefix. Most map onto a frozen
-//! [`ActionCommand`]; `^g c` and `^g pgup`/`^g pgdn` are purely the deck's own
-//! geometry, so the first applies straight to [`DeckState`] and the second
-//! comes back for the caller that holds the rendered stack. Anything the deck
-//! can carry out itself — selection, zoom, collapse, scrollback, the modals —
-//! [`Input::press`] applies to the [`DeckState`] it is given; what is left over
-//! needs the engine, the process, or the geometry, and comes back as a
-//! [`Reaction`] for the caller.
+//! [`ActionCommand`]; `^g c`, `^g p` and `^g pgup`/`^g pgdn` are purely the
+//! deck's own arrangement, so the first two apply straight to [`DeckState`] and
+//! the last comes back for the caller that holds the rendered stack. Anything
+//! the deck can carry out itself — selection, zoom, collapse, pin, scrollback,
+//! the modals — [`Input::press`] applies to the [`DeckState`] it is given; what
+//! is left over needs the engine, the process, or the geometry, and comes back
+//! as a [`Reaction`] for the caller.
 //!
 //! Keys arrive already decoded: this module names no terminal backend, so the
 //! event loop can be written against any of them.
@@ -221,6 +221,14 @@ impl Input {
             // carries no frozen action of its own.
             Key::Char('c') => {
                 deck.toggle_collapse_all();
+                return None;
+            }
+            // Pinning is stack order, which is the deck's own arrangement
+            // too, so it applies itself here like collapse (#113). It acts on
+            // the pane in the master frame, the one every other prefixed
+            // command acts on; unpinning is the same key on the same pane.
+            Key::Char('p') => {
+                deck.toggle_pin();
                 return None;
             }
             // The keyboard half of the split divider (#41): the same
@@ -580,6 +588,32 @@ mod tests {
             ))))
         );
         assert_eq!(deck.master_ratio(), 0.80);
+    }
+
+    /// #113: the pin is stack order, which is the deck's own arrangement, so
+    /// like collapse it applies itself and carries no frozen action. It acts
+    /// on the master, and the same key on the same pane unpins it.
+    #[test]
+    fn the_pin_key_holds_the_master_at_the_stack_top_without_a_frozen_action() {
+        let mut session = Session::new();
+
+        assert_eq!(session.command(Key::Char('p')), None);
+        assert_eq!(session.deck.pinned(), Some(0));
+        assert_eq!(session.deck.active(), Some(0), "pinning promotes nothing");
+
+        // Promote another pane: the pinned one lands at the top of the stack.
+        session.command(Key::Char('3'));
+        assert_eq!(session.deck.stack(), [0, 1, 3]);
+
+        // Unpinning is the same key on the pane it is on, which means
+        // promoting that pane first.
+        session.command(Key::Char('1'));
+        assert_eq!(session.command(Key::Char('p')), None);
+        assert_eq!(session.deck.pinned(), None);
+
+        // Unprefixed it is ordinary input and reaches the shell untouched.
+        assert_eq!(session.press(Key::Char('p')), sent(b"p"));
+        assert_eq!(session.deck.pinned(), None);
     }
 
     /// The page keys are the keyboard half of the scrollable stack. Only the

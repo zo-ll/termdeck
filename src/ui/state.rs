@@ -235,6 +235,12 @@ pub enum Modal {
 /// workspace and survives promotion". Every terminal starts folded except the
 /// one that opens as master, per issue #39.
 ///
+/// `pinned` is the configured position of the terminal held at the top of the
+/// stack (#113), or `None`. It is a property of a terminal rather than of a
+/// slot: it holds while that terminal is master, and every reordering puts the
+/// pinned terminal back at `stack()[0]` the moment it is demoted. Runtime only,
+/// like the split ratio — nothing is written back to the configuration.
+///
 /// `stack_offset` is the index into `stack()` of the first preview the stack
 /// column draws. The list can hold more previews than the column has rows, so
 /// the column is a window onto it; the renderer clamps this to whatever the
@@ -250,6 +256,7 @@ pub enum Modal {
 pub struct DeckState {
     order: Vec<usize>,
     collapsed: Vec<bool>,
+    pinned: Option<usize>,
     zoomed: bool,
     scrollback: bool,
     modal: Option<Modal>,
@@ -279,6 +286,7 @@ impl DeckState {
         Self {
             order: (0..terminals).collect(),
             collapsed,
+            pinned: None,
             zoomed: false,
             scrollback: false,
             modal: None,
@@ -405,6 +413,13 @@ impl DeckState {
                 *index -= 1;
             }
         }
+        // A pin belongs to a terminal, so it goes when the terminal does and
+        // follows it down the renumbering otherwise (#113).
+        self.pinned = match self.pinned {
+            Some(pinned) if pinned == position => None,
+            Some(pinned) if pinned > position => Some(pinned - 1),
+            pinned => pinned,
+        };
         // A highlight belongs to a pane, so it goes when the pane does and
         // follows it down otherwise.
         self.demotion = match self.demotion {
@@ -420,6 +435,7 @@ impl DeckState {
             }
             self.scrollback = false;
         }
+        self.hold_pin();
         self.stack_offset = self.stack_offset.min(self.stack().len().saturating_sub(1));
         true
     }
@@ -432,6 +448,52 @@ impl DeckState {
     /// Configured positions of the stacked previews, top to bottom.
     pub fn stack(&self) -> &[usize] {
         self.order.get(1..).unwrap_or_default()
+    }
+
+    /// Configured position of the pinned terminal, if one is pinned (#113).
+    ///
+    /// Whenever it is not the master it is `stack()[0]`; while it is the
+    /// master the pin is held rather than spent, and the terminal drops
+    /// straight back into the pin slot when it is demoted.
+    pub fn pinned(&self) -> Option<usize> {
+        self.pinned
+    }
+
+    /// `^g p`: pins the terminal holding the master frame, or unpins it if it
+    /// is the one already pinned.
+    ///
+    /// Only one terminal is pinned at a time, so pinning a second moves the
+    /// pin. Like `^g c` this is the deck's own arrangement, so it carries no
+    /// frozen action; and like the split it lives for the session only.
+    ///
+    /// Returns whether anything changed — nothing does on an empty deck, which
+    /// has no master to pin.
+    pub fn toggle_pin(&mut self) -> bool {
+        let Some(active) = self.active() else {
+            return false;
+        };
+        self.pinned = (self.pinned != Some(active)).then_some(active);
+        self.hold_pin();
+        true
+    }
+
+    /// Re-establishes the pin's one invariant: a pinned terminal that is not
+    /// the master stands at the top of the stack.
+    ///
+    /// It lifts rather than swaps, so the panes it passes keep their order
+    /// among themselves and only shift down one slot — the demoted master
+    /// lands where an unpinned one would, one place lower.
+    fn hold_pin(&mut self) {
+        let Some(pinned) = self.pinned else {
+            return;
+        };
+        let Some(slot) = self.order.iter().position(|index| *index == pinned) else {
+            return;
+        };
+        if slot > 1 {
+            self.order.remove(slot);
+            self.order.insert(1, pinned);
+        }
     }
 
     pub fn zoomed(&self) -> bool {
@@ -613,6 +675,10 @@ impl DeckState {
         if let Some(flag) = self.collapsed.get_mut(position) {
             *flag = false;
         }
+        // A promotion is the reordering the pin exists to survive: whatever
+        // this swap did to the pinned terminal, it is back at the top of the
+        // stack before anything reads the order (#113).
+        self.hold_pin();
         // The mode belongs to the pane, and the new master is live.
         self.scrollback = false;
         true
@@ -1392,5 +1458,171 @@ mod tests {
             !notifies.toasting(&worker, later(3_000)),
             "the dismissed one stays dismissed"
         );
+    }
+
+    /// #113: the pin is a property of a terminal. Whenever the pinned one is
+    /// not the master it is the top of the stack, and promotions around it
+    /// never move it.
+    #[test]
+    fn a_pinned_terminal_holds_the_top_of_the_stack_across_promotions() {
+        let mut state = DeckState::new(4);
+        apply(&mut state, ActionCommand::SelectPosition(3));
+        assert!(state.toggle_pin(), "worker is master and now pinned");
+        assert_eq!(state.pinned(), Some(3));
+        assert_eq!(state.stack(), [1, 2, 0], "a pinned master holds no slot");
+
+        // Demoting it drops it straight into the pin slot, not into the slot
+        // the promoted pane vacated.
+        apply(&mut state, ActionCommand::SelectPosition(0));
+        assert_eq!(state.active(), Some(0));
+        assert_eq!(state.stack(), [3, 1, 2]);
+
+        // And every promotion around it leaves the slot alone.
+        for position in [2, 1, 2] {
+            apply(&mut state, ActionCommand::SelectPosition(position));
+            assert_eq!(state.stack()[0], 3, "promoting {position} moved the pin");
+        }
+        // Cycling walks configured positions, so it reaches the pinned pane
+        // like any other, and puts it back when it leaves.
+        apply(&mut state, ActionCommand::SelectNext);
+        apply(&mut state, ActionCommand::SelectNext);
+        assert_eq!(state.stack()[0], 3);
+    }
+
+    /// The pin is held rather than spent while its terminal holds the frame,
+    /// so the round trip is the whole of the model.
+    #[test]
+    fn promoting_the_pinned_terminal_holds_the_pin_rather_than_spending_it() {
+        let mut state = DeckState::new(4);
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        state.toggle_pin();
+
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        assert_eq!(
+            state.active(),
+            Some(2),
+            "already master: nothing to promote"
+        );
+        apply(&mut state, ActionCommand::SelectPosition(1));
+        assert_eq!(state.stack(), [2, 0, 3], "back in the pin slot");
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        assert_eq!(state.active(), Some(2), "and promotable again");
+        assert_eq!(state.pinned(), Some(2), "with the pin still on it");
+    }
+
+    /// One pin at a time: the key unpins the pane it is on, and pinning a
+    /// second terminal moves the pin rather than adding one.
+    #[test]
+    fn the_pin_key_toggles_the_master_and_only_one_pin_stands() {
+        let mut state = DeckState::new(4);
+
+        assert!(state.toggle_pin());
+        assert_eq!(state.pinned(), Some(0));
+        assert!(state.toggle_pin(), "the same key unpins it");
+        assert_eq!(state.pinned(), None);
+        assert_eq!(state.stack(), [1, 2, 3]);
+
+        state.toggle_pin();
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        assert_eq!(state.stack(), [0, 1, 3], "the old pin holds its slot");
+        state.toggle_pin();
+        assert_eq!(state.pinned(), Some(2), "the pin moved to the new master");
+        apply(&mut state, ActionCommand::SelectPosition(1));
+        assert_eq!(state.stack(), [2, 0, 3], "and the old one is ordinary");
+    }
+
+    /// A pin is a property of a terminal, so closing that terminal takes it,
+    /// and closing anything else renumbers it with everything else (#84).
+    #[test]
+    fn closing_takes_the_pin_with_its_terminal_and_renumbers_the_rest() {
+        let mut state = DeckState::new(4);
+        apply(&mut state, ActionCommand::SelectPosition(3));
+        state.toggle_pin();
+        apply(&mut state, ActionCommand::SelectPosition(0));
+        assert_eq!(state.stack(), [3, 1, 2]);
+
+        assert!(state.close(1), "the pane below the pinned one goes");
+        assert_eq!(state.pinned(), Some(2), "the old 4 is the new 3");
+        assert_eq!(state.stack(), [2, 1]);
+
+        assert!(state.close(2));
+        assert_eq!(state.pinned(), None, "the pinned terminal is gone");
+        assert_eq!(state.stack(), [1]);
+    }
+
+    /// Closing the master hands the frame on and the pin holds its slot in
+    /// whatever is left.
+    #[test]
+    fn closing_the_master_leaves_the_pin_at_the_top_of_what_remains() {
+        let mut state = DeckState::new(4);
+        apply(&mut state, ActionCommand::SelectPosition(3));
+        state.toggle_pin();
+        apply(&mut state, ActionCommand::SelectPosition(0));
+
+        assert!(state.close(0), "close the master, which is not pinned");
+
+        assert_eq!(state.active(), Some(2), "the old worker is the new 3");
+        assert_eq!(
+            state.pinned(),
+            Some(2),
+            "and it took the frame it was next to"
+        );
+
+        // Promote something else: the pin slot is waiting.
+        apply(&mut state, ActionCommand::SelectPosition(0));
+        assert_eq!(state.stack(), [2, 1]);
+    }
+
+    /// The modes the pin has to survive: zoom hides the stack, the narrow
+    /// fallback has none, scrollback is a mode of the master, and a fold is
+    /// disclosure rather than order. None of them touches the slot.
+    #[test]
+    fn zoom_scrollback_and_collapse_leave_the_pin_where_it_stands() {
+        let mut state = DeckState::new(4);
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        state.toggle_pin();
+        apply(&mut state, ActionCommand::SelectPosition(0));
+        assert_eq!(state.stack(), [2, 1, 3]);
+
+        apply(&mut state, ActionCommand::ToggleZoom);
+        assert_eq!(state.stack(), [2, 1, 3], "zoom only hides it");
+        apply(&mut state, ActionCommand::ToggleZoom);
+        apply(&mut state, ActionCommand::ToggleScrollback);
+        assert_eq!(state.stack(), [2, 1, 3]);
+        assert!(state.toggle_pin(), "and the key still reaches the master");
+        assert_eq!(state.pinned(), Some(0), "the pin moved to the master");
+        state.toggle_pin();
+        apply(&mut state, ActionCommand::SelectPosition(2));
+        state.toggle_pin();
+        apply(&mut state, ActionCommand::SelectPosition(0));
+
+        // A fold travels with its terminal and says nothing about order: the
+        // pinned pane folds and unfolds like any other and keeps its slot
+        // either way.
+        assert!(state.toggle_collapse(2));
+        assert!(state.collapsed(2), "the pinned pane folds like any other");
+        assert_eq!(state.stack(), [2, 1, 3]);
+        state.toggle_collapse_all();
+        assert!(!state.collapsed(2), "and opens with the rest of them");
+        assert_eq!(state.stack(), [2, 1, 3]);
+    }
+
+    /// Pinning is allowed before there is a stack to hold: a runtime-added
+    /// terminal lands at the end and the pin slot is waiting for it.
+    #[test]
+    fn a_pin_survives_a_runtime_add_and_an_empty_deck_has_none_to_take() {
+        let mut state = DeckState::new(1);
+        assert!(state.toggle_pin());
+        assert_eq!(state.pinned(), Some(0));
+        assert!(state.stack().is_empty(), "nothing to hold yet");
+
+        assert_eq!(state.push_terminal(), 1);
+        assert_eq!(state.stack(), [1], "the new pane lands behind the master");
+        apply(&mut state, ActionCommand::SelectPosition(1));
+        assert_eq!(state.stack(), [0], "and the pin takes the slot it made");
+
+        let mut empty = DeckState::new(0);
+        assert!(!empty.toggle_pin(), "no master, nothing to pin");
+        assert_eq!(empty.pinned(), None);
     }
 }
