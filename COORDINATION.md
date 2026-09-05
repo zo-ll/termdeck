@@ -923,6 +923,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   dispatch-ready but parked. IN FLIGHT: muse worker → #121 (pane IDs, ctx
   23.7%, no marker yet). On #121 completion: critic → standing-approval merge
   → close → comprehensive report to user. STOP.
+- 2026-09-05 (OPENCODE OUTAGE): muse worker hit persistent 503
+  [service_overloaded] from Console Go upstream (3 failed retries); pi
+  session healthy/idle at 23.7% ctx. #121 ZERO progress (no commits /
+  marker — stranded in-memory; re-runs from the brief cleanly once the
+  backend returns). Critic (also muse) idle — same outage would block
+  its next review. All else healthy (claude lane, relay, main 380+4).
+  NEXT: on backend recovery, re-prompt the same worker pointer for
+  #121 (session intact); the STOP-after-#121 instruction stands.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
