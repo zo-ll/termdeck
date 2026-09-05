@@ -992,6 +992,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   WORKING). Audit closed: #117 #118 #119 #120 #121 #124; in review #126;
   in flight #122. Remaining: #123 #125 #129 #130 #131.
 
+- 2026-09-05: #126 CRITIC VERDICT = PASS for the implemented scope (byte-
+  exact cumulative modifiers; DECCKM flows VT→metadata→press w/ SS3-for-plain-
+  arrows; mouse SGR>UTF8>X10 with X10 bytes hand-verified; contract strictly
+  additive; gate green 2x) — BUT #126 CANNOT CLOSE on it: sub-defect 1
+  (bounded/resilient KeyReader, session/input.rs:170-248) was DROPPED from
+  the slice's brief (my scope error — the audit's finding 10 had 3 sub-
+  defects; the brief shipped 2.5). Nits also: UTF-8 mouse test uses col 7/row
+  4 (UTF8≡X10 there — pin with coord ≥96); Input::press pub+mode-blind
+  (delegates false, test-only now); BOLD+DIM emitted 1;2 (harmless behind
+  [0m). ACTIONS: #126-slice REBASE conflicted in native.rs (vs #121's
+  metadata region) → integration queued for codex AFTER #122; #126-parser-
+  bounds follow-up slice filed (worktree + brief ready, off origin/main),
+  also queued for codex after #122; #126 stays OPEN until (integration +
+  parser slice + second review).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
