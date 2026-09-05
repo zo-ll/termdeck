@@ -2,6 +2,7 @@
 //! contracts and is polled by the session's existing single-threaded loop.
 
 use std::{
+    collections::VecDeque,
     env, fs,
     io::{self, Read, Write},
     os::{
@@ -12,6 +13,7 @@ use std::{
         },
     },
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
@@ -25,6 +27,18 @@ use crate::{
 
 pub const SCHEMA: &str = "ctl.v1";
 const MAX_LINE: usize = 64 * 1024;
+/// A session only keeps a small, fixed number of ctl peers alive at once.
+/// The kernel's listen queue absorbs the rest until one of these slots frees.
+const MAX_CLIENTS: usize = 16;
+/// No single ctl turn is allowed to monopolize the session loop.
+const IO_CHUNK: usize = 16 * 1024;
+/// The largest envelope the server will retain for a peer that has stopped
+/// reading.  This deliberately permits useful `peek` replies without making
+/// the session's memory depend on an untrusted client.
+const MAX_RESPONSE: usize = 2 * 1024 * 1024;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Request {
@@ -322,17 +336,24 @@ fn normalized_pane_path(path: &str, home: Option<&std::ffi::OsStr>) -> Option<Pa
 
 struct Pending {
     stream: UnixStream,
-    bytes: Vec<u8>,
     pane: Option<String>,
+    deadline: Instant,
+    phase: PendingPhase,
 }
 
-/// Session-owned listener.  `poll` accepts at most one connection and serves
-/// at most one request, so ctl work stays bounded by the UI frame cadence.
+enum PendingPhase {
+    Reading { bytes: Vec<u8> },
+    Writing { bytes: Vec<u8>, written: usize },
+}
+
+/// Session-owned listener. Connections remain nonblocking for their whole
+/// lifetime. Every poll advances one peer in round-robin order and dispatches
+/// at most one request, so a stalled client cannot freeze or starve the UI.
 pub struct Listener {
     listener: UnixListener,
     path: PathBuf,
     uid: u32,
-    pending: Option<Pending>,
+    pending: VecDeque<Pending>,
 }
 
 impl Listener {
@@ -355,7 +376,7 @@ impl Listener {
             listener,
             path,
             uid,
-            pending: None,
+            pending: VecDeque::new(),
         })
     }
 
@@ -363,9 +384,8 @@ impl Listener {
         &self.path
     }
 
-    /// Polls one client without blocking the UI.  A partial request remains
-    /// pending until its newline arrives; no second connection is accepted in
-    /// that frame.
+    /// Polls ctl clients without blocking the UI. Requests and replies have
+    /// independent deadlines; no more than one request is dispatched here.
     pub fn poll<E: TerminalEngine>(&mut self, state: State<'_, E>) -> io::Result<bool> {
         self.poll_with(move |request, caller| dispatch(request, State { caller, ..state }))
     }
@@ -376,40 +396,65 @@ impl Listener {
         &mut self,
         dispatch_request: impl FnOnce(Request, Option<&str>) -> Response,
     ) -> io::Result<bool> {
-        if self.pending.is_none() {
+        let now = Instant::now();
+        self.pending.retain(|pending| pending.deadline > now);
+
+        while self.pending.len() < MAX_CLIENTS {
             match self.listener.accept() {
                 Ok((stream, _)) if trusted_peer(&stream, self.uid) => {
                     stream.set_nonblocking(true)?;
-                    self.pending = Some(Pending {
+                    self.pending.push_back(Pending {
                         pane: caller_pane(&stream),
                         stream,
-                        bytes: Vec::new(),
+                        deadline: now + REQUEST_TIMEOUT,
+                        phase: PendingPhase::Reading { bytes: Vec::new() },
                     });
                 }
-                Ok((_stream, _)) => return Ok(false),
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(false),
+                // Do not leave an untrusted peer at the front of the kernel
+                // queue, but otherwise continue admitting ready peers.
+                Ok((_stream, _)) => continue,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                 Err(error) => return Err(error),
             }
         }
 
-        let Some(mut pending) = self.pending.take() else {
+        let Some(mut pending) = self.pending.pop_front() else {
             return Ok(false);
         };
-        let result = read_request(&mut pending);
-        let response = match result {
-            Ok(Some(request)) => dispatch_request(request, pending.pane.as_deref()),
-            Ok(None) => {
-                self.pending = Some(pending);
-                return Ok(false);
+        match &mut pending.phase {
+            PendingPhase::Reading { bytes } => match read_request(&mut pending.stream, bytes) {
+                Ok(Some(request)) => {
+                    let response = dispatch_request(request, pending.pane.as_deref());
+                    begin_response(&mut pending, response)?;
+                    let complete = write_response(&mut pending);
+                    if !complete {
+                        self.pending.push_back(pending);
+                    }
+                    Ok(true)
+                }
+                Ok(None) => {
+                    self.pending.push_back(pending);
+                    Ok(false)
+                }
+                Err(message) => {
+                    begin_response(
+                        &mut pending,
+                        Response::error(2, format!("bad request: {message}")),
+                    )?;
+                    let complete = write_response(&mut pending);
+                    if !complete {
+                        self.pending.push_back(pending);
+                    }
+                    Ok(true)
+                }
+            },
+            PendingPhase::Writing { .. } => {
+                if !write_response(&mut pending) {
+                    self.pending.push_back(pending);
+                }
+                Ok(false)
             }
-            Err(message) => Response::error(2, format!("bad request: {message}")),
-        };
-        pending.stream.set_nonblocking(false)?;
-        // The caller may abandon its one-shot connection after sending the
-        // request. Its EPIPE/ECONNRESET is local to that caller, never a
-        // reason to end the interactive session.
-        let _ = write_response(&mut pending.stream, &response);
-        Ok(true)
+        }
     }
 }
 
@@ -419,54 +464,166 @@ impl Drop for Listener {
     }
 }
 
-fn read_request(pending: &mut Pending) -> Result<Option<Request>, String> {
+fn read_request(stream: &mut UnixStream, bytes: &mut Vec<u8>) -> Result<Option<Request>, String> {
     let mut buffer = [0_u8; 4096];
     loop {
-        if let Some(end) = pending.bytes.iter().position(|byte| *byte == b'\n') {
+        if let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
             if end > MAX_LINE
-                || pending.bytes[end + 1..]
+                || bytes[end + 1..]
                     .iter()
                     .any(|byte| !byte.is_ascii_whitespace())
             {
                 return Err("request line exceeds protocol limits".to_owned());
             }
-            return serde_json::from_slice(&pending.bytes[..end])
+            return serde_json::from_slice(&bytes[..end])
                 .map(Some)
                 .map_err(|error| error.to_string());
         }
-        if pending.bytes.len() > MAX_LINE {
+        if bytes.len() > MAX_LINE {
             return Err("request line exceeds 64 KiB".to_owned());
         }
-        match pending.stream.read(&mut buffer) {
+        match stream.read(&mut buffer) {
             Ok(0) => return Err("connection closed before newline".to_owned()),
-            Ok(read) => pending.bytes.extend_from_slice(&buffer[..read]),
+            Ok(read) => bytes.extend_from_slice(&buffer[..read]),
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(None),
             Err(error) => return Err(error.to_string()),
         }
     }
 }
 
-fn write_response(stream: &mut UnixStream, response: &Response) -> io::Result<()> {
-    let mut encoded = serde_json::to_vec(response).map_err(io::Error::other)?;
+fn begin_response(pending: &mut Pending, response: Response) -> io::Result<()> {
+    let mut encoded = encode_response(&response).unwrap_or_else(|_| {
+        // This is still a ctl.v1 envelope: response size is an availability
+        // condition, not an excuse to silently drop a well-formed request.
+        encode_response(&Response::error(1, "response exceeds protocol limits"))
+            .expect("the fixed ctl error envelope fits MAX_RESPONSE")
+    });
     encoded.push(b'\n');
-    stream.write_all(&encoded)
+    pending.deadline = Instant::now() + RESPONSE_TIMEOUT;
+    pending.phase = PendingPhase::Writing {
+        bytes: encoded,
+        written: 0,
+    };
+    Ok(())
+}
+
+/// Serializes directly into a capped vector so an unusually large JSON value
+/// cannot transiently allocate an unbounded encoded response on the session
+/// thread.
+fn encode_response(response: &Response) -> io::Result<Vec<u8>> {
+    struct BoundedBuffer {
+        bytes: Vec<u8>,
+        limit: usize,
+    }
+
+    impl Write for BoundedBuffer {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.bytes.len().saturating_add(bytes.len()) > self.limit {
+                return Err(io::Error::other("response exceeds protocol limits"));
+            }
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut output = BoundedBuffer {
+        bytes: Vec::with_capacity(1024),
+        // Leave room for the newline added by the wire encoder.
+        limit: MAX_RESPONSE.saturating_sub(1),
+    };
+    serde_json::to_writer(&mut output, response).map_err(io::Error::other)?;
+    Ok(output.bytes)
+}
+
+/// Writes one bounded piece of a response. Socket errors are local to an
+/// abandoning caller; they only discard that caller's slot.
+fn write_response(pending: &mut Pending) -> bool {
+    let PendingPhase::Writing { bytes, written } = &mut pending.phase else {
+        return false;
+    };
+    let end = (*written + IO_CHUNK).min(bytes.len());
+    match pending.stream.write(&bytes[*written..end]) {
+        Ok(0) => true,
+        Ok(count) => {
+            *written += count;
+            *written == bytes.len()
+        }
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => false,
+        Err(_) => true,
+    }
 }
 
 /// Dials a running session using the same one-request ctl.v1 transport as
 /// `termctl`.  The caller owns formatting and exit-code selection.
 pub fn call(socket: &Path, request: &Request) -> Result<Response, String> {
+    call_with_limits(socket, request, CLIENT_TIMEOUT, MAX_RESPONSE)
+}
+
+fn call_with_limits(
+    socket: &Path,
+    request: &Request,
+    timeout: Duration,
+    max_response: usize,
+) -> Result<Response, String> {
     let mut stream = UnixStream::connect(socket).map_err(|error| error.to_string())?;
+    let deadline = Instant::now() + timeout;
     let mut encoded = serde_json::to_vec(request).map_err(|error| error.to_string())?;
     encoded.push(b'\n');
+    write_with_deadline(&mut stream, &encoded, deadline)?;
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        set_read_deadline(&stream, deadline)?;
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => {
+                if response.len().saturating_add(read) > max_response {
+                    return Err(format!("response exceeds {max_response} byte limit"));
+                }
+                response.extend_from_slice(&buffer[..read]);
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    let response = std::str::from_utf8(&response)
+        .map_err(|error| error.to_string())?
+        .trim();
+    serde_json::from_str(response).map_err(|error| error.to_string())
+}
+
+fn write_with_deadline(
+    stream: &mut UnixStream,
+    bytes: &[u8],
+    deadline: Instant,
+) -> Result<(), String> {
+    let mut written = 0;
+    while written < bytes.len() {
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .ok_or_else(|| "request deadline exceeded".to_owned())?;
+        stream
+            .set_write_timeout(Some(remaining))
+            .map_err(|error| error.to_string())?;
+        match stream.write(&bytes[written..]) {
+            Ok(0) => return Err("socket closed while writing request".to_owned()),
+            Ok(count) => written += count,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(())
+}
+
+fn set_read_deadline(stream: &UnixStream, deadline: Instant) -> Result<(), String> {
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| "response deadline exceeded".to_owned())?;
     stream
-        .write_all(&encoded)
-        .map_err(|error| error.to_string())?;
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|error| error.to_string())?;
-    let response = response.trim().to_owned();
-    serde_json::from_str(&response).map_err(|error| error.to_string())
+        .set_read_timeout(Some(remaining))
+        .map_err(|error| error.to_string())
 }
 
 pub fn socket_from_environment() -> Result<PathBuf, String> {
@@ -572,10 +729,17 @@ mod tests {
     use std::{
         fs,
         io::{Read, Write},
-        os::unix::{fs::PermissionsExt, net::UnixStream},
+        os::{
+            fd::AsRawFd,
+            unix::{
+                fs::PermissionsExt,
+                net::{UnixListener, UnixStream},
+            },
+        },
         path::PathBuf,
         sync::Mutex,
-        time::{SystemTime, UNIX_EPOCH},
+        thread,
+        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     };
 
     use crate::{
@@ -589,8 +753,8 @@ mod tests {
     };
 
     use super::{
-        Control, Listener, Request, SCHEMA, State, dispatch, normalized_pane_path, peer_uid,
-        socket_directory, trusted_peer,
+        Control, Listener, MAX_RESPONSE, Request, Response, SCHEMA, State, call_with_limits,
+        dispatch, normalized_pane_path, peer_uid, socket_directory, trusted_peer,
     };
 
     static LISTENER_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -960,6 +1124,134 @@ mod tests {
             &client,
             unsafe { libc::getuid() }.saturating_add(1)
         ));
+    }
+
+    #[test]
+    fn stalled_client_does_not_starve_a_later_complete_request() {
+        let _lock = LISTENER_TEST_LOCK.lock().unwrap();
+        let mut listener = Listener::bind().unwrap();
+        let _stalled = UnixStream::connect(listener.path()).unwrap();
+        let mut complete = UnixStream::connect(listener.path()).unwrap();
+        complete
+            .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"version\"}\n")
+            .unwrap();
+
+        // The first poll rotates the incomplete request. The next one must
+        // reach the complete peer rather than keeping a single pending slot.
+        assert!(
+            !listener
+                .poll_with(|_, _| panic!("the stalled request is incomplete"))
+                .unwrap()
+        );
+        assert!(
+            listener
+                .poll_with(|_, _| Response::ok(serde_json::json!({ "served": true })))
+                .unwrap()
+        );
+
+        let mut response = String::new();
+        complete.read_to_string(&mut response).unwrap();
+        assert!(response.contains("\"served\":true"));
+    }
+
+    #[test]
+    fn expired_request_slot_is_reclaimed_before_admitting_more_clients() {
+        let _lock = LISTENER_TEST_LOCK.lock().unwrap();
+        let mut listener = Listener::bind().unwrap();
+        let _stalled = UnixStream::connect(listener.path()).unwrap();
+        assert!(
+            !listener
+                .poll_with(|_, _| panic!("the request has no newline"))
+                .unwrap()
+        );
+        listener.pending.front_mut().unwrap().deadline = Instant::now();
+
+        let mut complete = UnixStream::connect(listener.path()).unwrap();
+        complete
+            .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"version\"}\n")
+            .unwrap();
+        assert!(
+            listener
+                .poll_with(|_, _| Response::ok(serde_json::json!({ "served": true })))
+                .unwrap()
+        );
+        let mut response = String::new();
+        complete.read_to_string(&mut response).unwrap();
+        assert!(response.contains("\"served\":true"));
+    }
+
+    #[test]
+    fn large_reply_to_a_nonreader_never_blocks_the_poll_loop() {
+        let _lock = LISTENER_TEST_LOCK.lock().unwrap();
+        let mut listener = Listener::bind().unwrap();
+        let client = UnixStream::connect(listener.path()).unwrap();
+        let receive_buffer: libc::c_int = 1024;
+        // SAFETY: the socket and option storage are both valid for setsockopt.
+        assert_eq!(
+            unsafe {
+                libc::setsockopt(
+                    client.as_raw_fd(),
+                    libc::SOL_SOCKET,
+                    libc::SO_RCVBUF,
+                    (&raw const receive_buffer).cast(),
+                    std::mem::size_of_val(&receive_buffer) as libc::socklen_t,
+                )
+            },
+            0
+        );
+        let mut client = client;
+        client
+            .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"version\"}\n")
+            .unwrap();
+
+        let started = Instant::now();
+        assert!(
+            listener
+                .poll_with(|_, _| {
+                    Response::ok(serde_json::json!({
+                        "payload": "x".repeat(MAX_RESPONSE - 1024),
+                    }))
+                })
+                .unwrap()
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "a non-reading peer stalled the session poll loop"
+        );
+    }
+
+    #[test]
+    fn client_call_has_a_deadline_and_response_cap() {
+        let timeout_path = test_path("client-timeout.sock");
+        let timeout_listener = UnixListener::bind(&timeout_path).unwrap();
+        let timeout_server = thread::spawn(move || {
+            let _client = timeout_listener.accept().unwrap();
+            thread::sleep(Duration::from_millis(100));
+        });
+        let request = Request {
+            schema: SCHEMA.to_owned(),
+            verb: "version".to_owned(),
+            ..Default::default()
+        };
+        let started = Instant::now();
+        let timeout = call_with_limits(&timeout_path, &request, Duration::from_millis(20), 1024);
+        assert!(timeout.is_err());
+        assert!(started.elapsed() < Duration::from_millis(80));
+        timeout_server.join().unwrap();
+        fs::remove_file(&timeout_path).unwrap();
+
+        let cap_path = test_path("client-cap.sock");
+        let cap_listener = UnixListener::bind(&cap_path).unwrap();
+        let cap_server = thread::spawn(move || {
+            let (mut client, _) = cap_listener.accept().unwrap();
+            let mut request = [0_u8; 256];
+            let _ = client.read(&mut request).unwrap();
+            client.write_all(&[b'x'; 128]).unwrap();
+        });
+        let capped = call_with_limits(&cap_path, &request, Duration::from_millis(100), 64);
+        assert!(capped.unwrap_err().contains("limit"));
+        cap_server.join().unwrap();
+        fs::remove_file(&cap_path).unwrap();
     }
 
     #[test]
