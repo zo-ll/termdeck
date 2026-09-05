@@ -731,6 +731,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   regression, gate 353+4). Verdict ping inbox 127-picker-cache.critic.ping.
   NABE (=next after #127 merges): #128 picker Git metadata + silent run-add
   failures (claude lane; same files ⇒ after merge).
+- 2026-09-05: #127 CRITIC VERDICT = PASS (inbox 127-picker-cache.critic.ping).
+  AC1 idle-stops-rescanning: roots/listing/rows hoisted; dirty on input+
+  resize; FsBrowse single-slot Stamp::of cache; invalidate: direct-child
+  add/rm/rename → mtime miss, navigation miss by path, refresh() drops
+  all (each tested; tests discriminate pre-fix). AC2 loop discipline:
+  rebuild+follow_cursor+autoresize+draw all inside if dirty; idle pass
+  = one screen_size ioctl + 20ms keys.read. AC3 resize repaint: dirty |=
+  resized(...) w/ unit test (same/different/remembered/once). AC4 no
+  input/state/render changes; existing picker tests untouched. AC5
+  measurement plausible (21.6%→0.2%; 50Hz full-tree walk removed). AC6
+  gate 353 lib + 4 green first run; RefCell borrow safe. No nits
+  reported. WAITING: user merge approval for #127 → then #128 to
+  claude.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
