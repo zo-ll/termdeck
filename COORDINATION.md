@@ -813,6 +813,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   #128 (dependency/base order; NB branch based pre-#118 — rebase at merge).
   Then: #119 to the pi worker; UI NB batch (#113/#115) to claude.
 
+- 2026-09-05 (USER standing approval): merge slices on critic PASS with NO
+  non-blocking notes ("merge if there are no nb") — coordinator may execute
+  the pending merge queue (#118 → NB batch → #128, dependency order) itself
+  when verdicts land nit-free; surface to the user for a go if any nits
+  appear. Critic currently reviewing #128 (hit the KNOWN shutdown_…_threads
+  sandbox flake once during its gate run; expected — assignment covers
+  clean-re-run).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
