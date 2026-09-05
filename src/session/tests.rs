@@ -1763,8 +1763,8 @@ fn timing_visibility_matches_the_panes_the_deck_renders() {
     resize_terminals(&mut engine, &projects, &deck, area);
     assert_eq!(
         engine.timing_visible(),
-        &BTreeSet::from([projects[0].terminal.clone()]),
-        "the folded preview has no rendered timing metadata"
+        &BTreeSet::from([projects[0].terminal.clone(), projects[1].terminal.clone()]),
+        "the folded strip renders timing metadata"
     );
 
     assert!(deck.toggle_collapse(1));

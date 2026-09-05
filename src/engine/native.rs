@@ -756,6 +756,8 @@ mod tests {
         NotifyKind, ProcessInfo, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
         TerminalMetadata, TerminalStatus,
     };
+    use crate::ui::{Deck, DeckState, Notifications};
+    use ratatui::layout::Rect;
 
     use super::{
         NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter, scan_notify,
@@ -1499,47 +1501,47 @@ mod tests {
         );
     }
 
+    fn timing_terminal(terminal: TerminalId, observed: Instant) -> NativeTerminal {
+        let project = Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: Vec::new(),
+            shell_hook: false,
+        };
+        let adapter = VtFrameAdapter::new(terminal, ScreenSize::new(80, 24), DEFAULT_SCROLLBACK);
+        let frame = adapter.frame();
+        NativeTerminal {
+            project,
+            socket: None,
+            transport: None,
+            adapter,
+            frame,
+            status: TerminalStatus::Running,
+            metadata: TerminalMetadata {
+                process: Some(ProcessInfo {
+                    pid: 7,
+                    uptime: Elapsed::default(),
+                }),
+                ..TerminalMetadata::default()
+            },
+            started: observed.checked_sub(Duration::from_millis(2_000)).unwrap(),
+            scrollback: DEFAULT_SCROLLBACK,
+            last_output: Some(observed.checked_sub(Duration::from_millis(1_500)).unwrap()),
+            notify_carry: Vec::new(),
+        }
+    }
+
     #[test]
     fn timing_metadata_uses_one_visible_shared_tick() {
         let observed = Instant::now();
         let visible = TerminalId::new("visible");
         let also_visible = TerminalId::new("also-visible");
         let hidden = TerminalId::new("hidden");
-        let timing_terminal = |terminal: TerminalId| {
-            let project = Project {
-                terminal: terminal.clone(),
-                path: PathBuf::from("/"),
-                command: Vec::new(),
-                shell_hook: false,
-            };
-            let adapter =
-                VtFrameAdapter::new(terminal, ScreenSize::new(80, 24), DEFAULT_SCROLLBACK);
-            let frame = adapter.frame();
-            NativeTerminal {
-                project,
-                socket: None,
-                transport: None,
-                adapter,
-                frame,
-                status: TerminalStatus::Running,
-                metadata: TerminalMetadata {
-                    process: Some(ProcessInfo {
-                        pid: 7,
-                        uptime: Elapsed::default(),
-                    }),
-                    ..TerminalMetadata::default()
-                },
-                started: observed.checked_sub(Duration::from_millis(2_000)).unwrap(),
-                scrollback: DEFAULT_SCROLLBACK,
-                last_output: Some(observed.checked_sub(Duration::from_millis(1_500)).unwrap()),
-                notify_carry: Vec::new(),
-            }
-        };
         let mut engine = NativeEngine {
             terminals: vec![
-                timing_terminal(visible.clone()),
-                timing_terminal(also_visible.clone()),
-                timing_terminal(hidden.clone()),
+                timing_terminal(visible.clone(), observed),
+                timing_terminal(also_visible.clone(), observed),
+                timing_terminal(hidden.clone(), observed),
             ],
             scrollback: DEFAULT_SCROLLBACK,
             last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
@@ -1578,7 +1580,7 @@ mod tests {
                 .and_then(|metadata| metadata.process)
                 .map(|process| process.uptime),
             Some(Elapsed::default()),
-            "a folded, zoom-hidden, or narrow-hidden pane is not refreshed"
+            "a zoom-hidden or narrow-hidden pane is not refreshed"
         );
         assert_eq!(
             engine.refresh_timing_if_due(observed + Duration::from_millis(999)),
@@ -1605,6 +1607,72 @@ mod tests {
             engine.refresh_timing_if_due(observed + Duration::from_secs(2)),
             None,
             "no hidden terminal schedules a timing redraw"
+        );
+    }
+
+    #[test]
+    fn a_folded_strip_keeps_its_idle_age_on_the_shared_tick() {
+        let observed = Instant::now();
+        let master = TerminalId::new("master");
+        let folded = TerminalId::new("folded");
+        let projects = [
+            Project {
+                terminal: master.clone(),
+                path: PathBuf::from("/"),
+                command: Vec::new(),
+                shell_hook: false,
+            },
+            Project {
+                terminal: folded.clone(),
+                path: PathBuf::from("/"),
+                command: Vec::new(),
+                shell_hook: false,
+            },
+        ];
+        let deck = DeckState::new(projects.len());
+        let notifies = Notifications::new();
+        let timing_visible = Deck {
+            workspace: "",
+            projects: &projects,
+            state: &deck,
+            notifies: &notifies,
+            master_ratio: deck.master_ratio(),
+            now: crate::contracts::Timestamp::default(),
+        }
+        .timing_terminals(Rect::new(0, 0, 144, 42))
+        .into_iter()
+        .collect();
+        let mut engine = NativeEngine {
+            terminals: vec![
+                timing_terminal(master, observed),
+                timing_terminal(folded.clone(), observed),
+            ],
+            scrollback: DEFAULT_SCROLLBACK,
+            last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
+            timing_visible,
+        };
+
+        assert_eq!(
+            engine.refresh_timing_if_due(observed),
+            Some(EngineEvent::TimingChanged)
+        );
+        assert_eq!(
+            engine
+                .metadata(&folded)
+                .and_then(|metadata| metadata.output_idle),
+            Some(Elapsed { millis: 1_500 }),
+            "the folded strip draws this idle age"
+        );
+        assert_eq!(
+            engine.refresh_timing_if_due(observed + Duration::from_secs(1)),
+            Some(EngineEvent::TimingChanged)
+        );
+        assert_eq!(
+            engine
+                .metadata(&folded)
+                .and_then(|metadata| metadata.output_idle),
+            Some(Elapsed { millis: 2_500 }),
+            "the drawn folded strip keeps advancing"
         );
     }
 
