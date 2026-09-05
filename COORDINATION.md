@@ -1271,6 +1271,22 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   docs, gate real numbers). Verdict ping inbox 129-cli-help.critic
   .ping. On pass: merge → close #129 → dispatch #135 → close #132/#131
   = asterisk audit complete.
+- 2026-09-05 20:0x: #129 RE-REVIEW = PASS → MERGED + #129 CLOSED
+  (c4cb5ad; 406 lib + 5 termctl + 1 main; recording comment posted;
+  rebuilt). Critic verified EVERY handback item on built binaries: exit
+  separation with assert_ne!(usage,refusal) (stronger than asked);
+  termdeck-3-vs-termctl divergence written at cli/mod.rs:208; six-case
+  literal-path matrix incl. folder named help; README 4 cargo-run lines
+  reconciled; all 3 help-page nits fixed. DISCLOSURE: the critic
+  accidentally hit the LIVE session with termctl -- status + notify on
+  probing the `--` page claim (one toast delivered); disclosed + stopped
+  + noted as a process caveat (reviewers should not call termctl against
+  a live socket). NITS (3, backlog 51): termctl -- help 'unknown verb'
+  despite help listed (advertise `--` only for arguments there);
+  termdeck --help -- check short-circuit quirk; termctl `--` beyond
+  brief (observation). #135 (shared timing deadline + visibility gate)
+  DISPATCHED to codex (WORKING; closes #132 on merge). Remaining:
+  #135 → #131 umbrella → DONE.
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
