@@ -34,6 +34,14 @@ pub enum CliCommand {
     Picker,
     Check,
     List,
+    Help(Option<CliHelp>),
+}
+
+/// The command-specific page requested through `termdeck help COMMAND`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CliHelp {
+    Check,
+    List,
 }
 
 /// Fully-owned CLI intent. Launch remains an intent until the composition
@@ -55,17 +63,35 @@ impl CliIntent {
 }
 
 #[derive(Debug)]
-pub struct CliError(String);
+pub struct CliError {
+    message: String,
+    exit_code: u8,
+}
 
 impl CliError {
     fn new(message: impl Into<String>) -> Self {
-        Self(message.into())
+        Self {
+            message: message.into(),
+            exit_code: 2,
+        }
+    }
+
+    fn usage(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            exit_code: 3,
+        }
+    }
+
+    /// Exit status for errors reported directly by the `termdeck` binary.
+    pub const fn exit_code(&self) -> u8 {
+        self.exit_code
     }
 }
 
 impl fmt::Display for CliError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
+        self.message.fmt(formatter)
     }
 }
 
@@ -89,6 +115,7 @@ pub fn parse_with_environment(
     // there has to be a way to say "this token is a name", and `--` is the
     // one every shell user already knows.
     let mut literal = false;
+    let mut help = false;
     while let Some(argument) = arguments.next() {
         if argument == "--" {
             // Everything after it is positional, a leading `-` included:
@@ -99,30 +126,52 @@ pub fn parse_with_environment(
         }
         if argument == "--config" {
             if config_path.is_some() {
-                return Err(CliError::new("--config can only be specified once"));
+                return Err(CliError::usage("--config can only be specified once"));
             }
-            config_path = Some(PathBuf::from(
-                arguments
-                    .next()
-                    .ok_or_else(|| CliError::new("--config requires a path"))?,
-            ));
+            config_path =
+                Some(PathBuf::from(arguments.next().ok_or_else(|| {
+                    CliError::usage("--config requires a path")
+                })?));
+        } else if matches!(argument.as_str(), "--help" | "-h") {
+            help = true;
         } else if argument.starts_with('-') {
-            return Err(CliError::new(format!("unknown option: {argument}")));
+            return Err(CliError::usage(format!("unknown option: {argument}")));
         } else {
             remaining.push(argument);
         }
     }
 
+    let help_topic = |topic: &str| match topic {
+        "check" => Ok(CliHelp::Check),
+        "list" => Ok(CliHelp::List),
+        _ => Err(CliError::usage(format!("unknown command: {topic}"))),
+    };
+    if help {
+        let topic = match remaining.as_slice() {
+            [] => None,
+            [topic] => Some(help_topic(topic)?),
+            _ => return Err(CliError::usage("help accepts at most one command")),
+        };
+        return Ok(CliIntent {
+            config_path: None,
+            command: CliCommand::Help(topic),
+        });
+    }
+
     let command = match remaining.as_slice() {
         [] if config_path.is_some() => CliCommand::Launch { workspace: None },
         [] => CliCommand::Picker,
+        [command] if !literal && command == "help" => CliCommand::Help(None),
+        [command, topic] if !literal && command == "help" => {
+            CliCommand::Help(Some(help_topic(topic)?))
+        }
         [command] if !literal && command == "check" => CliCommand::Check,
         [command] if !literal && command == "list" => CliCommand::List,
         [workspace] if config_path.is_some() => CliCommand::Launch {
             workspace: Some(workspace.clone()),
         },
         [path] if config_path.is_none() => resolve_path(path, &mut config_path)?,
-        _ => return Err(CliError::new(usage())),
+        _ => return Err(CliError::usage("too many arguments")),
     };
     let config_path = match &command {
         CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
@@ -131,7 +180,7 @@ pub fn parse_with_environment(
                 None => default_config_path(&environment)?,
             })
         }
-        CliCommand::Folder { .. } | CliCommand::Picker => None,
+        CliCommand::Folder { .. } | CliCommand::Picker | CliCommand::Help(_) => None,
     };
     Ok(CliIntent {
         config_path,
@@ -155,9 +204,28 @@ fn default_config_path(environment: &CliEnvironment) -> Result<PathBuf, CliError
         .ok_or_else(|| CliError::new("cannot locate config: set XDG_CONFIG_HOME or HOME"))
 }
 
-const fn usage() -> &'static str {
-    "usage: termdeck [FOLDER|CONFIG_FILE|--config PATH|check|list]; \
-     `--` ends the verbs, so `termdeck -- check` names a path or a workspace"
+pub const fn usage() -> &'static str {
+    // Termdeck has no protocol-level refusal result. It reserves 3 for a
+    // malformed invocation, while a resolved path/configuration failure stays
+    // 2; termctl instead reserves 3 for a well-formed request the session
+    // declines and therefore keeps parser failures at 2.
+    "usage: termdeck [OPTIONS] [FOLDER|CONFIG_FILE|COMMAND]"
+}
+
+/// Man-page-shaped command help. It describes the present positional resolver
+/// rather than the older named-workspace invocation documented elsewhere.
+pub const fn help(topic: Option<CliHelp>) -> &'static str {
+    match topic {
+        Some(CliHelp::Check) => {
+            "TERMDECK-CHECK\n\nUSAGE\n  termdeck [--config PATH] check\n\nValidates the selected configuration without opening a terminal session.\n\nOPTIONS\n  --config PATH  Read this configuration file.\n  -h, --help     Show this help page.\n\nRun `termdeck --help` for environment variables and examples."
+        }
+        Some(CliHelp::List) => {
+            "TERMDECK-LIST\n\nUSAGE\n  termdeck [--config PATH] list\n\nLists resolved terminals in the selected configuration.\n\nOPTIONS\n  --config PATH  Read this configuration file.\n  -h, --help     Show this help page.\n\nRun `termdeck --help` for environment variables and examples."
+        }
+        None => {
+            "TERMDECK\n\nUSAGE\n  termdeck [OPTIONS] [FOLDER|CONFIG_FILE|COMMAND]\n  termdeck --config PATH [WORKSPACE]\n  termdeck -- NAME\n\nOpen a terminal workspace. With no positional argument, opens the folder picker. A directory opens a discovered workspace; a configuration file opens its configured workspace.\n\nCOMMANDS\n  check          Validate configuration without opening a session.\n  list           List resolved configured terminals.\n  help [COMMAND] Show general or command-specific help.\n\nOPTIONS\n  --config PATH  Use PATH instead of the default configuration file.\n  -- NAME        End option and command parsing; treat NAME as a path or workspace.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  XDG_CONFIG_HOME, HOME       Locate the default configuration file.\n  TERMDECK_SOCK               Session socket provided to child panes.\n  TERMDECK_PANE               Current pane identity provided to child panes.\n  TERMDECK_NOTIFY             Enable automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permit termctl input requests from this pane.\n\nEXAMPLES\n  termdeck\n  termdeck ./project\n  termdeck ./termdeck.yaml\n  termdeck --config ./termdeck.yaml workspace\n  termdeck --config ./termdeck.yaml list\n  termdeck -- check\n  termdeck help check"
+        }
+    }
 }
 
 pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>, Box<dyn Error>> {
@@ -167,6 +235,7 @@ pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>
         // The binary owns the interactive picker, so this helper does not
         // attempt to open one.
         CliCommand::Picker => Ok(None),
+        CliCommand::Help(topic) => Ok(Some(help(*topic).to_owned())),
         CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
             let config_path = intent.required_config_path()?;
             let config = load(config_path)?;
@@ -360,7 +429,7 @@ pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, Cl
                 .collect::<Vec<_>>()
                 .join("\n"),
         )),
-        CliCommand::Folder { .. } | CliCommand::Picker => Err(CliError::new(
+        CliCommand::Folder { .. } | CliCommand::Picker | CliCommand::Help(_) => Err(CliError::new(
             "folder and picker commands do not inspect configuration",
         )),
     }
@@ -375,7 +444,7 @@ mod tests {
     };
 
     use super::{
-        CliCommand, CliEnvironment, CliIntent, discover, discover_workspace,
+        CliCommand, CliEnvironment, CliHelp, CliIntent, discover, discover_workspace, help,
         parse_with_environment, run,
     };
 
@@ -448,10 +517,12 @@ mod tests {
     /// the working directory would be worse than the shadowing — so `--`
     /// ends the verbs and whatever follows is a name.
     #[test]
-    fn a_folder_named_like_a_verb_is_reachable_after_a_double_dash() {
+    fn a_folder_named_like_a_command_is_reachable_after_a_double_dash() {
         let root = test_root();
         let shadowed = root.join("check");
+        let help = root.join("help");
         fs::create_dir_all(&shadowed).unwrap();
+        fs::create_dir_all(&help).unwrap();
 
         // The bare verb is still the verb, wherever it is run.
         assert_eq!(
@@ -468,6 +539,17 @@ mod tests {
         .unwrap();
         assert_eq!(intent.command, CliCommand::Folder { root: shadowed });
         assert_eq!(intent.config_path, None, "a folder reads no configuration");
+
+        let literal_help =
+            parse_with_environment(["--".to_owned(), help.display().to_string()], environment())
+                .unwrap();
+        assert_eq!(literal_help.command, CliCommand::Folder { root: help });
+
+        let literal_flag =
+            parse_with_environment(["--".to_owned(), "--help".to_owned()], environment())
+                .unwrap_err();
+        assert_eq!(literal_flag.to_string(), "--help: path does not exist");
+        assert_eq!(literal_flag.exit_code(), 2, "a literal path is not help");
 
         fs::remove_dir_all(&root).unwrap();
     }
@@ -538,6 +620,23 @@ mod tests {
         );
 
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn general_and_command_help_parse_without_loading_configuration() {
+        let general = parse_with_environment(["--help".to_owned()], environment()).unwrap();
+        assert_eq!(general.command, CliCommand::Help(None));
+        assert_eq!(general.config_path, None);
+
+        let check =
+            parse_with_environment(["help", "check"].map(str::to_owned), environment()).unwrap();
+        assert_eq!(check.command, CliCommand::Help(Some(CliHelp::Check)));
+
+        let list =
+            parse_with_environment(["list", "--help"].map(str::to_owned), environment()).unwrap();
+        assert_eq!(list.command, CliCommand::Help(Some(CliHelp::List)));
+        assert!(help(None).contains("TERMDECK_SOCK"));
+        assert!(help(Some(CliHelp::Check)).contains("USAGE"));
     }
 
     #[test]
@@ -681,11 +780,10 @@ mod tests {
 
     #[test]
     fn an_unknown_option_names_the_option() {
-        let error = parse_with_environment(["--unknown".to_owned()], environment())
-            .unwrap_err()
-            .to_string();
+        let error = parse_with_environment(["--unknown".to_owned()], environment()).unwrap_err();
 
-        assert_eq!(error, "unknown option: --unknown");
+        assert_eq!(error.to_string(), "unknown option: --unknown");
+        assert_eq!(error.exit_code(), 3);
     }
 
     #[test]

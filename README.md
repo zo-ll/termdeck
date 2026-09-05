@@ -41,11 +41,11 @@ appears before `/usr/bin` in `PATH` so the rustup-managed toolchain is selected.
 
 ## Running Termdeck
 
-The repository builds two binaries, `termdeck` and `termctl`, so `cargo run`
-has to be told which one:
+The repository builds two binaries, `termdeck` and `termctl`. `termdeck` is
+the default Cargo run target; choose `termctl` explicitly when needed:
 
 ```bash
-cargo run --bin termdeck -- [ARGUMENTS]
+cargo run -- [ARGUMENTS]
 cargo run --bin termctl -- [ARGUMENTS]
 ```
 
@@ -86,8 +86,8 @@ The example configurations under `examples/` can be validated and listed
 without starting any terminals:
 
 ```bash
-cargo run --bin termdeck -- --config examples/<example>.yaml check
-cargo run --bin termdeck -- --config examples/<example>.yaml list
+cargo run -- --config examples/<example>.yaml check
+cargo run -- --config examples/<example>.yaml list
 ```
 
 `check` validates workspace roots, required terminal paths, and command argv

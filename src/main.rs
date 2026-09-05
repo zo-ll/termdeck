@@ -4,13 +4,28 @@ fn main() {
         Ok(None) => {}
         Err(error) => {
             eprintln!("termdeck: {error}");
-            std::process::exit(2);
+            let exit_code = error
+                .downcast_ref::<termdeck::cli::CliError>()
+                .map_or(2, termdeck::cli::CliError::exit_code);
+            if exit_code == 3 {
+                eprintln!(
+                    "\n{}\nTry `termdeck --help` for more information.",
+                    termdeck::cli::usage()
+                );
+            }
+            std::process::exit(i32::from(exit_code));
         }
     }
 }
 
 fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let intent = termdeck::cli::parse(std::env::args().skip(1))?;
+    run_with_arguments(std::env::args().skip(1))
+}
+
+fn run_with_arguments(
+    arguments: impl IntoIterator<Item = String>,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let intent = termdeck::cli::parse(arguments)?;
     match &intent.command {
         termdeck::cli::CliCommand::Folder { root } => {
             let workspace = termdeck::cli::discover_workspace(root)?;
@@ -29,6 +44,7 @@ fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
                 None => Ok(Some("picker cancelled".to_owned())),
             }
         }
+        termdeck::cli::CliCommand::Help(topic) => Ok(Some(termdeck::cli::help(*topic).to_owned())),
         termdeck::cli::CliCommand::Launch { workspace } => {
             let config_path = intent.required_config_path()?;
             let config = termdeck::config::load(config_path)?;
@@ -41,6 +57,28 @@ fn run() -> Result<Option<String>, Box<dyn std::error::Error>> {
             let config_path = intent.required_config_path()?;
             let config = termdeck::config::load(config_path)?;
             termdeck::cli::inspect(&intent, &config).map_err(Into::into)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_with_arguments;
+
+    #[test]
+    fn general_and_command_help_do_not_need_a_configuration() {
+        for arguments in [
+            vec!["--help"],
+            vec!["help"],
+            vec!["check", "--help"],
+            vec!["help", "list"],
+        ] {
+            let output = run_with_arguments(arguments.into_iter().map(str::to_owned))
+                .unwrap()
+                .unwrap();
+
+            assert!(output.contains("USAGE"), "{output}");
+            assert!(output.contains("TERMDECK"), "{output}");
         }
     }
 }
