@@ -585,6 +585,26 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   115-scrollbar.critic.ping. Claude lane idle; queue is near-empty after #115
   (open: #112 gate, #114, #94 held, #33 parked).
 
+- 2026-09-05: #115 CRITIC VERDICT = PASS (inbox 115-scrollbar.critic.ping).
+  Doc settles all five design points (master-only, border-track, 4s restartable
+  window, mode-pins-no-countdown, output-is-not-a-scroll, overflow-only,
+  display-only) with rejected alternatives; code matches every load-bearing
+  claim: zero-cost draw overwrites rendered border cells (no reflow), zero
+  wall-time in diff (injected clock), overflow-only even in mode, tail
+  anchoring preserved corner, per-pane arming + master-only draw (preview
+  wheels raise nothing). ONE justified boundary exception: src/session.rs
+  (+27/-4) calls the new DeckState::{mark_scrolled,scrolling} API at the 3
+  existing scroll dispatch sites (keyboard Reaction::Scroll, esc-to-live,
+  wheel) — no contract/engine/ctl change (ScrollbackPosition reused).
+  Coexistence with #113 pin mark + stack gutter proven; fixtures honest
+  (scrollbar.txt new; scrollback.txt 1-cell rebless; byte-identical settled
+  frames). 10 deterministic tests, full matrix, fail pre-fix. Gate: first run
+  hit the documented sandbox flake; clean re-run green 348 lib + 4 int
+  exactly as expected. NITS: (1) session.rs second UI-lane exception worth
+  a lane-note line (first was #13's rule-row helper); (2) SCROLLBAR_WINDOW
+  duplicates NOTIFY_WINDOW's 4000 with its own rationale.
+  WAITING: user merge approval for #115 (then merge + close + rebuild).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
