@@ -616,6 +616,27 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   #33 (animations — parked/skip). Next candidates: #112 verdict → Pa/Pb/A
   slices; or #114 non-MCP slices on the free codex lane; or #94 merge/drop.
 
+- 2026-09-05: ASTRA REPO AUDIT (user-requested, tmux `default:1`, codex
+  gpt-6-astra; hit its ChatGPT usage cap while self-filing — coordinator took
+  over). Verdict: KEEP the project, prioritize HARDENING over new features;
+  five high-priority boundaries (#117-#121) first. 15 findings filed as issues
+  #117-#131 (label `astra-audit`; bug for 1-10, enhancement for 11-15), each
+  with locations + reproductions + fix direction. Priorities: FIRST #117-#121
+  (blocking socket/PTY UI freezes, job cleanup, bracketed paste, reusable pane
+  IDs); SECOND #122-#126 (API lies, bash -l hook, scrollback config, timing
+  metadata, ANSI/mode-aware input); THIRD #127-#131 (picker CPU/resize, Git
+  metadata, CLI/docs/README + research-brief overstatements, tests/CI, resume
+  #112/#114/#94 on a hardened baseline). LOAD-BEARING for #112: the audit
+  flags agent-aware-deck-research.md overstatements (persistence blocked
+  "only" by policy; tmux "cannot" support approval; false universals) —
+  correct the brief BEFORE the decision gate leans on it. Also: "integration
+  tests" label is inaccurate (4 termctl unit tests); termdeck IS a multiplexer
+  (multiplexes PTYs; detach/reattach is separate). Transcript saved:
+  /tmp/astra-audit-pane.txt (2003 lines) + tmux default:1 scrollback.
+  SUGGESTED WAVE ORDER: audit findings first (#117-#121 → critic → merge
+  each), then #122-#126, then #127-#131; #112/#114/#94 resume after.
+  No dispatch made — awaiting user direction on the audit queue.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
