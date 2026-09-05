@@ -841,6 +841,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   too). NO NITS → pre-approved to merge (standing approval); executes after
   #128 lands: rebase NB onto post-#118 post-#128 main, re-gate, merge.
 
+- 2026-09-05: MERGE QUEUE COMPLETE: #118 (f27fe25) + #128 (2ca10c3, claude
+  integration 8c93913 kept both EngineEvent+NotifyKind behaviors) + NB batch
+  (bfecf7b: fake None-fallback, 10x deadline margins, zero-write requeue) —
+  all closed (118/128), main 372 lib + 4 green, binary rebuilt. The
+  shutdown_terms_all_groups… flake re-verified on the rebased NB gate
+  (oscillates 372 ✓ / 371+1 ✗; fails on pristine main — environmental).
+  DISPATCHED (both lanes): #119 job/process cleanup → pi worker (WORKING);
+  UI NB batch (#113 toggle_pin doc + pinned/active is_some_and; #115
+  SCROLLBAR_WINDOW dedupe) → claude (WORKING, transcript-verified).
+  Audit progress: #117 #118 #127 #128 + 2 NB batches shipped; #119 in flight;
+  #120 #121 remaining in FIRST; then #122-#126, #129-#131.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
