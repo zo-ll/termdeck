@@ -1236,6 +1236,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   — --convention across flag positions by RUNNING the binaries, design
   honesty of the cwd rejection, edge cases (-- alone, -- --help), exit-
   code contract, gate). Verdict ping inbox 133-cli-shadow.critic.ping.
+- 2026-09-05: #133 CRITIC VERDICT = PASS → MERGED + CLOSED (8cdf93b,
+  405 lib + 4; matrix run against the real binary; bare verbs unchanged;
+  cwd-design rejection documented both places + guarded; my AC5 exit-
+  code premise was WRONG (termdeck exits 2 on all CliErrors; termctl 3
+  is a propagated refusal, usage=2 pinned) — contract preserved either
+  way. NITS (5, backlog 48): exit-code premise correction; `--` also
+  stops option parsing for leading-dash tokens (README lacks the clause;
+  interacts with the #129-A help work when it lands); `termdeck --`
+  with nothing opens the picker (defensible, undoc'd in usage);
+  shadowed FILE named check untested (folder/workspace only); doubled
+  `--` usage-error correct+untested. NOTE: `termdeck --help` STILL
+  errors 'unknown option' — the #129-A help blocker remains open
+  (quota-bound at 19:44). Review-born issues accounted: #132 (open,
+  waits #135), #133 (closed), #134 (tracked, CI), #135 (queued engine).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
