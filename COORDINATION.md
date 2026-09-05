@@ -916,6 +916,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   f390ef4; brief guards TERMDECK_PANE/list/peek coherence + additive-only
   wire). NEXT after: SECOND batch #122-#126.
 
+- 2026-09-05 (USER: hit weekly usage limit — STOP AFTER #121): autonomous
+  run halts at #121's close; NO further dispatches until user returns. #122-
+  #126 worktrees + briefs PREPPED (coord/{122-api-truth,123-shell-hook-login,
+  124-scrollback-config,125-timing-meta,126-ansi-mode-aware} off cbc3889) —
+  dispatch-ready but parked. IN FLIGHT: muse worker → #121 (pane IDs, ctx
+  23.7%, no marker yet). On #121 completion: critic → standing-approval merge
+  → close → comprehensive report to user. STOP.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
