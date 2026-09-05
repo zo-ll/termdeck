@@ -18,13 +18,35 @@ pub(super) fn spawn_terminals(
         .into_iter()
         .map(|size| size.unwrap_or(fallback))
         .collect::<Vec<_>>();
-    NativeEngine::spawn_sized(projects, &sizes)
+    NativeEngine::spawn_sized(projects, &sizes, crate::contracts::DEFAULT_SCROLLBACK)
+}
+
+#[cfg(not(unix))]
+pub(super) fn spawn_terminals_with_scrollback(
+    projects: &[Project],
+    deck: &DeckState,
+    size: ScreenSize,
+    scrollback: usize,
+) -> Result<NativeEngine, String> {
+    let sizes = terminal_sizes(projects, deck, size);
+    let fallback = sizes
+        .iter()
+        .flatten()
+        .copied()
+        .next()
+        .unwrap_or(ScreenSize::new(1, 1));
+    let sizes = sizes
+        .into_iter()
+        .map(|size| size.unwrap_or(fallback))
+        .collect::<Vec<_>>();
+    NativeEngine::spawn_sized(projects, &sizes, scrollback)
 }
 
 pub(super) fn spawn_terminals_with_socket(
     projects: &[Project],
     deck: &DeckState,
     size: ScreenSize,
+    scrollback: usize,
     socket: &Path,
 ) -> Result<NativeEngine, String> {
     let sizes = terminal_sizes(projects, deck, size);
@@ -38,7 +60,7 @@ pub(super) fn spawn_terminals_with_socket(
         .into_iter()
         .map(|size| size.unwrap_or(fallback))
         .collect::<Vec<_>>();
-    NativeEngine::spawn_sized_with_socket(projects, &sizes, socket)
+    NativeEngine::spawn_sized_with_socket(projects, &sizes, scrollback, socket)
 }
 
 pub(super) fn resize_terminals(

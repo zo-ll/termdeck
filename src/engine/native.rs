@@ -119,14 +119,20 @@ struct NativeTerminal {
     status: TerminalStatus,
     metadata: TerminalMetadata,
     started: Instant,
+    scrollback: usize,
     last_output: Option<Instant>,
     notify_carry: Vec<u8>,
 }
 
 impl NativeTerminal {
-    fn spawn(project: Project, size: ScreenSize, socket: Option<&Path>) -> Result<Self, String> {
+    fn spawn(
+        project: Project,
+        size: ScreenSize,
+        scrollback: usize,
+        socket: Option<&Path>,
+    ) -> Result<Self, String> {
         let transport = PtyTransport::spawn_with_socket(&project, size, socket)?;
-        let adapter = VtFrameAdapter::new(project.terminal.clone(), size);
+        let adapter = VtFrameAdapter::new(project.terminal.clone(), size, scrollback);
         let frame = adapter.frame();
 
         Ok(Self {
@@ -144,6 +150,7 @@ impl NativeTerminal {
             frame,
             status: TerminalStatus::Running,
             started: Instant::now(),
+            scrollback,
             last_output: None,
             notify_carry: Vec::new(),
         })
@@ -277,7 +284,11 @@ impl NativeTerminal {
             self.frame.size,
             self.socket.as_deref(),
         )?;
-        self.adapter = VtFrameAdapter::new(self.project.terminal.clone(), self.frame.size);
+        self.adapter = VtFrameAdapter::new(
+            self.project.terminal.clone(),
+            self.frame.size,
+            self.scrollback,
+        );
         self.frame = self.adapter.frame();
         self.status = TerminalStatus::Running;
         self.metadata = TerminalMetadata {
@@ -314,17 +325,22 @@ impl NativeTerminal {
 /// select them by their stable [`TerminalId`].
 pub struct NativeEngine {
     terminals: Vec<NativeTerminal>,
+    scrollback: usize,
 }
 
 impl NativeEngine {
     /// Starts one or more configured terminals at the requested cell dimensions.
     pub fn spawn(projects: &[Project], size: ScreenSize) -> Result<Self, String> {
         let sizes = vec![size; projects.len()];
-        Self::spawn_sized(projects, &sizes)
+        Self::spawn_sized(projects, &sizes, crate::contracts::DEFAULT_SCROLLBACK)
     }
 
     /// Starts configured terminals at their rendered viewport dimensions.
-    pub fn spawn_sized(projects: &[Project], sizes: &[ScreenSize]) -> Result<Self, String> {
+    pub fn spawn_sized(
+        projects: &[Project],
+        sizes: &[ScreenSize],
+        scrollback: usize,
+    ) -> Result<Self, String> {
         if projects.is_empty() {
             return Err("native engine requires at least one terminal".to_owned());
         }
@@ -343,9 +359,12 @@ impl NativeEngine {
             .iter()
             .cloned()
             .zip(sizes.iter().copied())
-            .map(|(project, size)| NativeTerminal::spawn(project, size, None))
+            .map(|(project, size)| NativeTerminal::spawn(project, size, scrollback, None))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { terminals })
+        Ok(Self {
+            terminals,
+            scrollback,
+        })
     }
 
     /// Starts one more terminal in an already-running engine (#50 A3).
@@ -365,7 +384,7 @@ impl NativeEngine {
             ));
         }
         self.terminals
-            .push(NativeTerminal::spawn(project, size, None)?);
+            .push(NativeTerminal::spawn(project, size, self.scrollback, None)?);
         Ok(())
     }
 
@@ -386,8 +405,12 @@ impl NativeEngine {
                 project.terminal
             ));
         }
-        self.terminals
-            .push(NativeTerminal::spawn(project, size, Some(socket))?);
+        self.terminals.push(NativeTerminal::spawn(
+            project,
+            size,
+            self.scrollback,
+            Some(socket),
+        )?);
         Ok(())
     }
 
@@ -395,6 +418,7 @@ impl NativeEngine {
     pub fn spawn_sized_with_socket(
         projects: &[Project],
         sizes: &[ScreenSize],
+        scrollback: usize,
         socket: &Path,
     ) -> Result<Self, String> {
         if projects.is_empty() {
@@ -414,9 +438,12 @@ impl NativeEngine {
             .iter()
             .cloned()
             .zip(sizes.iter().copied())
-            .map(|(project, size)| NativeTerminal::spawn(project, size, Some(socket)))
+            .map(|(project, size)| NativeTerminal::spawn(project, size, scrollback, Some(socket)))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { terminals })
+        Ok(Self {
+            terminals,
+            scrollback,
+        })
     }
 
     /// Removes one terminal from a running engine (#84): the counterpart of
@@ -655,8 +682,8 @@ mod tests {
     };
 
     use crate::contracts::{
-        CellContent, EngineCommand, EngineEvent, NotifyKind, Project, ScreenSize, ScrollCommand,
-        TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
+        CellContent, DEFAULT_SCROLLBACK, EngineCommand, EngineEvent, NotifyKind, Project,
+        ScreenSize, ScrollCommand, TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
     };
 
     use super::{
@@ -1055,6 +1082,42 @@ mod tests {
         engine.dispatch(EngineCommand::Shutdown);
     }
 
+    /// The configured capacity belongs to the engine session. Initial panes,
+    /// runtime additions, and respawns all construct their adapters through
+    /// this path. As in `VtFrameAdapter`, a complete peek contains at most
+    /// `scrollback + viewport_rows` lines: the limit itself is off-screen
+    /// history only.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn configured_scrollback_is_preserved_for_initial_added_and_respawned_panes() {
+        const HISTORY: usize = 1;
+        let size = ScreenSize::new(20, 2);
+        let initial = TerminalId::new("initial");
+        let added = TerminalId::new("added");
+        let script = |label: &str| {
+            format!("i=0; while [ $i -lt 8 ]; do printf '{label}-%s\\n' \"$i\"; i=$((i + 1)); done")
+        };
+        let initial_project = project(initial.clone(), &script("initial"));
+        let mut engine =
+            NativeEngine::spawn_sized(std::slice::from_ref(&initial_project), &[size], HISTORY)
+                .unwrap();
+
+        wait_for_exit(&mut engine, &initial, 0);
+        assert_retained_history(&engine, &initial, "initial-7", HISTORY, size);
+
+        engine.dispatch(EngineCommand::Respawn {
+            terminal: initial.clone(),
+        });
+        wait_for_exit(&mut engine, &initial, 0);
+        assert_retained_history(&engine, &initial, "initial-7", HISTORY, size);
+
+        engine
+            .add(project(added.clone(), &script("added")), size)
+            .unwrap();
+        wait_for_exit(&mut engine, &added, 0);
+        assert_retained_history(&engine, &added, "added-7", HISTORY, size);
+    }
+
     /// #118, the accepted half: a large paste to a reading child is queued
     /// without blocking and the frame pump delivers it — no `InputDropped`,
     /// and the tail arrives on screen.
@@ -1184,6 +1247,7 @@ mod tests {
         let mut engine = NativeEngine::spawn_sized_with_socket(
             &projects,
             &[ScreenSize::new(80, 4)],
+            DEFAULT_SCROLLBACK,
             std::path::Path::new("/tmp/termdeck-hook-test.sock"),
         )
         .unwrap();
@@ -1245,6 +1309,7 @@ mod tests {
         let mut engine = NativeEngine::spawn_sized_with_socket(
             &projects,
             &[ScreenSize::new(80, 4)],
+            DEFAULT_SCROLLBACK,
             std::path::Path::new("/tmp/termdeck-hook-test.sock"),
         )
         .unwrap();
@@ -1308,7 +1373,11 @@ mod tests {
             command: Vec::new(),
             shell_hook: false,
         };
-        let mut adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(80, 24));
+        let mut adapter = VtFrameAdapter::new(
+            terminal.clone(),
+            ScreenSize::new(80, 24),
+            DEFAULT_SCROLLBACK,
+        );
         adapter.feed(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h");
         let frame = adapter.frame();
         let mut engine = NativeEngine {
@@ -1321,9 +1390,11 @@ mod tests {
                 status: TerminalStatus::Running,
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
+                scrollback: DEFAULT_SCROLLBACK,
                 last_output: None,
                 notify_carry: Vec::new(),
             }],
+            scrollback: DEFAULT_SCROLLBACK,
         };
         engine.dispatch(EngineCommand::Scroll {
             terminal: terminal.clone(),
@@ -1393,7 +1464,8 @@ mod tests {
             command: Vec::new(),
             shell_hook: false,
         };
-        let mut adapter = VtFrameAdapter::new(terminal.clone(), ScreenSize::new(4, 2));
+        let mut adapter =
+            VtFrameAdapter::new(terminal.clone(), ScreenSize::new(4, 2), DEFAULT_SCROLLBACK);
         let frame = adapter.feed(b"0\r\n1\r\n2\r\n3\r\n");
         let mut engine = NativeEngine {
             terminals: vec![NativeTerminal {
@@ -1405,9 +1477,11 @@ mod tests {
                 status: TerminalStatus::Running,
                 metadata: TerminalMetadata::default(),
                 started: Instant::now(),
+                scrollback: DEFAULT_SCROLLBACK,
                 last_output: None,
                 notify_carry: Vec::new(),
             }],
+            scrollback: DEFAULT_SCROLLBACK,
         };
         engine.dispatch(EngineCommand::Scroll {
             terminal: terminal.clone(),
@@ -1470,6 +1544,30 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         panic!("{terminal} did not print {expected}");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn assert_retained_history(
+        engine: &NativeEngine,
+        terminal: &TerminalId,
+        last_line: &str,
+        history: usize,
+        size: ScreenSize,
+    ) {
+        let lines = engine.history_lines(terminal, usize::MAX).unwrap();
+        assert!(
+            lines.len() <= history + usize::from(size.rows),
+            "{terminal} retained more than history plus viewport: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains(last_line)),
+            "{terminal} lost its latest output: {lines:?}"
+        );
+        assert_eq!(
+            engine.metadata(terminal).unwrap().scrollback.lines_above,
+            history as u32,
+            "{terminal} must retain exactly the configured off-screen history once full"
+        );
     }
 
     #[cfg(target_os = "linux")]
