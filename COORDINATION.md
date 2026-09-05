@@ -795,6 +795,24 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   double-call; #115 SCROLLBAR_WINDOW ≡ NOTIFY_WINDOW const dedupe.
   In flight: worker→NB batch; claude→#128. #118 merge follows the batch.
 
+- 2026-09-05: #128 DONE (claude, 2 commits ac3d637 "tell the truth about a
+  repository's git facts" + 3b9d191 "say when a terminal the sheet added never
+  started"; marker pass: worktree gitdir resolved, commit age from branch
+  reflog (unknown when unreadable), dirty count → Option/None, failed adds
+  surface as a bounded toast; 365 lib + 4 green; worktree clean; claude idle).
+  Routed to CRITIC (assignment .scratch/review/128.critic.md — reflog-vs-
+  commit-ts correctness, dirty Option semantics, worktree indirection, unknown
+  rendering, toast non-modality + pane preservation, cache staleness on
+  commit, gate 365+4). Verdict ping inbox 128-picker-git.critic.ping.
+- 2026-09-05: NB-CLEANUP batch DONE (pi-worker muse, commit a71e842 "resolve
+  #116/#117 critic non-blocking notes"; marker pass: "fake fallback fidelity,
+  hardened deadline test, zero-write requeue [chose FIX over document-only];
+  gate green"; worktree clean). REVIEW QUEUED after #128's verdict (same
+  critic pane; assignment .scratch/review/nb-cleanup.critic.md to be written
+  now). After both verdicts + user approvals: merge order #118 → NB batch →
+  #128 (dependency/base order; NB branch based pre-#118 — rebase at merge).
+  Then: #119 to the pi worker; UI NB batch (#113/#115) to claude.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
