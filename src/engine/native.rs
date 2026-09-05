@@ -601,6 +601,11 @@ impl TerminalEngine for NativeEngine {
         self.terminal(terminal)
             .map(|item| item.adapter.history_lines(max))
     }
+
+    fn active_screen_lines(&self, terminal: &TerminalId, max: usize) -> Option<Vec<String>> {
+        self.terminal(terminal)
+            .map(|item| item.adapter.active_screen_lines(max))
+    }
 }
 
 fn elapsed(instant: Instant) -> Elapsed {

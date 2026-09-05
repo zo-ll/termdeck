@@ -9,6 +9,7 @@ use crate::contracts::{
 struct FakeTerminalState {
     frame: TerminalFrame,
     history: Vec<String>,
+    screen: Vec<String>,
     metadata: TerminalMetadata,
     status: TerminalStatus,
 }
@@ -35,6 +36,7 @@ impl FakeEngine {
                         FakeTerminalState {
                             frame,
                             history: Vec::new(),
+                            screen: Vec::new(),
                             metadata: TerminalMetadata::default(),
                             status: TerminalStatus::Starting,
                         },
@@ -169,6 +171,15 @@ impl FakeEngine {
         state.history = lines;
         true
     }
+
+    /// Supplies active-grid content to ctl tests without emulating VT state.
+    pub fn set_active_screen_lines(&mut self, terminal: &TerminalId, lines: Vec<String>) -> bool {
+        let Some(state) = self.terminals.get_mut(terminal) else {
+            return false;
+        };
+        state.screen = lines;
+        true
+    }
 }
 
 impl TerminalEngine for FakeEngine {
@@ -288,6 +299,12 @@ impl TerminalEngine for FakeEngine {
         let state = self.terminals.get(terminal)?;
         let first = state.history.len().saturating_sub(max);
         Some(state.history[first..].to_vec())
+    }
+
+    fn active_screen_lines(&self, terminal: &TerminalId, max: usize) -> Option<Vec<String>> {
+        let state = self.terminals.get(terminal)?;
+        let first = state.screen.len().saturating_sub(max);
+        Some(state.screen[first..].to_vec())
     }
 }
 
