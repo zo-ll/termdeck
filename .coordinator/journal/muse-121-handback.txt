@@ -1,0 +1,60 @@
+ /tmp/shipwright/inbox/121-pane-ids.ping
+
+ done TS=2026-09-05 14:54:36 TASK=121-pane-ids RESULT=pass
+ SUMMARY=session-monotonic pane identities plus shared tombstone primitive, 3
+ failing-pre-fix tests, gate green
+ worker: finished 121-pane-ids session-monotonic pane identities plus shared
+ tombstone primitive, gate green (383 lib + 4 integration)
+
+ Took 0.0s
+
+
+ Completed
+
+ Non-reusable pane identities with tombstones on every close path (#121),
+ committed as 711eb1d (3 files, worktree clean, marker + ping written).
+
+ Files Changed
+
+ - src/session.rs — new alloc_identity (session-monotonic allocator over a used
+    set seeded from initial projects); chosen/opened allocate through it;
+   dispatch_control takes used; run() owns used + closed (now unconditional,
+   was unix-only); keyboard/mouse/API close sites pass closed through.
+ - src/session/lifecycle.rs — close_terminal tombstones every removal;
+   request_close passes the set through (both take closed: &mut
+   BTreeSet<String>).
+ - src/session/tests.rs — updated 15 existing call sites; 3 new tests.
+
+ Identity model chosen (documented in code + commit): display name and runtime
+ id stay ONE string — no render, engine-contract, or wire changes;
+ TERMDECK_PANE/list/peek stay coherent and agent id↔path workflows keep
+ working. Uniqueness comes from session-monotonic allocation (reopen yields
+ base-2, never the tombstoned original). Deliberately not opaque: opacity would
+ strand TERMDECK_PANE and agent workflows the brief requires keeping; non-reuse
+ — not unpredictability — is what defeats the stale-ID hazard. Tombstone
+ consistency holds by construction (single funnel primitive), not per-site
+ discipline. Stale-ID answers unchanged and truthful: close on tombstone →
+ ok/already:true (idempotent, existing contract); peek/input/promote/close on
+ unknown → error 2; none can resolve to a different live terminal.
+
+ Notes
+
+ - Fail-pre-fix proof (temporary behavior simulations, then byte-exact
+   restored): allocator ignoring history → reopen reuses id, cycles collide
+   (both tests fail); tombstone insert removed → primitive test fails.
+   Restoration verified with diff before the gate.
+ - Visible behavior note: reopened panes now show a -2 suffix where they
+   previously reused the bare name — display code untouched, noted for the
+   critic.
+ - Deviation: none from scope; no ctl/engine/ui/output-path changes.
+   close_terminal tombstones before engine.close — valid since session-list
+   removal is what retires resolvability.
+ - Exact gate: cargo fmt --check clean, cargo clippy --all-targets
+   --all-features -- -D warnings clean, cargo test --all-targets green — 383
+   lib + 4 integration, 0 failed; new tests re-ran 2× stable.
+
+────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────
+~/.worktrees/termdeck/118-pty-input (coord/118-pty-input) • worker
+↑6.8M ↓175k R36M CH99.9% $0.791 26.9%/1.0M (auto)  muse-spark-1.3-contributor •
