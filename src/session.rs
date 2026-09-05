@@ -36,7 +36,7 @@ use ratatui::{
 use crate::{
     config::Workspace,
     contracts::{
-        EngineCommand, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
+        EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
         TerminalMetadata, Timestamp, UserCommand,
     },
     engine::NativeEngine,
@@ -361,7 +361,19 @@ fn dispatch_control(
             else {
                 return crate::ctl::Response::error(2, "bad request: unknown terminal");
             };
-            dispatch_live_input(engine, project.terminal.clone(), bytes);
+            let events = dispatch_live_input(engine, project.terminal.clone(), bytes);
+            // Truthful acknowledgement (#118): an accepted input is `ok` as
+            // before, but a saturated queue refuses instead of hanging, and
+            // the caller learns the bytes went nowhere.
+            if events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::InputDropped { .. }))
+            {
+                return crate::ctl::Response::error(
+                    3,
+                    "refused: terminal input queue is full; child is not reading",
+                );
+            }
             crate::ctl::Response::ok(serde_json::json!({ "id": id }))
         }
     }

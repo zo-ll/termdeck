@@ -9,7 +9,7 @@ use crate::{
         Elapsed, EngineCommand, EngineEvent, NotifyKind, ProcessInfo, Project, ScreenSize,
         TerminalEngine, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
     },
-    engine::{PtyEvent, PtyTransport, VtFrameAdapter},
+    engine::{InputOutcome, PtyEvent, PtyTransport, VtFrameAdapter},
 };
 
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
@@ -241,9 +241,14 @@ impl NativeTerminal {
                 let replies = self.adapter.take_pty_replies();
                 if !replies.is_empty()
                     && let Some(transport) = self.transport.as_mut()
-                    && let Err(message) = transport.write(&replies)
                 {
-                    events.extend(self.status_changed(TerminalStatus::Failed { message }));
+                    // A saturated queue drops one auto-reply rather than
+                    // blocking the loop or failing the pane: the child is
+                    // stuck either way, and the query the app sends after it
+                    // recovers is answered then.
+                    if let Err(message) = transport.write(&replies) {
+                        events.extend(self.status_changed(TerminalStatus::Failed { message }));
+                    }
                 }
             }
             PtyEvent::StatusChanged { terminal, status } if self.owns(&terminal) => {
@@ -517,7 +522,11 @@ impl TerminalEngine for NativeEngine {
                     .as_mut()
                     .map(|transport| transport.write(&bytes))
                 {
-                    Some(Ok(())) | None => Vec::new(),
+                    // Backpressure is an answer, not a failure (#118): the
+                    // pane stays alive and the caller learns the bytes went
+                    // nowhere.
+                    Some(Ok(InputOutcome::Refused)) => vec![EngineEvent::InputDropped { terminal }],
+                    Some(Ok(_)) | None => Vec::new(),
                     Some(Err(message)) => item.status_changed(TerminalStatus::Failed { message }),
                 }
             }
@@ -573,6 +582,15 @@ impl TerminalEngine for NativeEngine {
     fn drain_events(&mut self) -> Vec<EngineEvent> {
         let mut events = Vec::new();
         for terminal in &mut self.terminals {
+            // The per-frame input pump (#118): whatever `dispatch` queued
+            // while the child was slow goes out in nonblocking slices here,
+            // so queued bytes need no new keystroke to reach the PTY. A
+            // failed flush means the child is gone; its waiter reports the
+            // exit, so the error is dropped rather than failing the pane
+            // from the drain path.
+            if let Some(transport) = terminal.transport.as_mut() {
+                let _ = transport.flush_input();
+            }
             let pty_events = terminal
                 .transport
                 .as_ref()
@@ -916,6 +934,109 @@ mod tests {
             }),
             "nothing is orphaned, the addition included"
         );
+    }
+
+    /// #118 at the engine seam: a terminal whose child stopped reading
+    /// refuses input truthfully instead of hanging the loop — and the
+    /// refusal is backpressure, not failure, so the pane stays `Running`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn input_to_a_terminal_that_stopped_reading_is_dropped_truthfully() {
+        let terminal = TerminalId::new("wedged");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "stty raw -echo; exec sleep 30".to_owned(),
+            ],
+            shell_hook: false,
+        }];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        let chunk = vec![b'x'; 64 * 1024];
+        let started = Instant::now();
+        let mut dropped = false;
+        for _ in 0..64 {
+            let events = engine.dispatch(EngineCommand::Input {
+                terminal: terminal.clone(),
+                bytes: chunk.clone(),
+            });
+            if events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::InputDropped { .. }))
+            {
+                dropped = true;
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "saturating dispatches must return, not block"
+            );
+        }
+        assert!(dropped, "a wedged terminal must report its backpressure");
+        assert_eq!(
+            engine.status(&terminal),
+            Some(&TerminalStatus::Running),
+            "a refused input is not a failed terminal"
+        );
+        // The queue stays saturated while the child is stuck: the next
+        // full chunk is refused the same way, still without blocking or
+        // failing.
+        let events = engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: chunk.clone(),
+        });
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::InputDropped { .. })),
+            "a full queue stays full"
+        );
+        assert_eq!(engine.status(&terminal), Some(&TerminalStatus::Running));
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    /// #118, the accepted half: a large paste to a reading child is queued
+    /// without blocking and the frame pump delivers it — no `InputDropped`,
+    /// and the tail arrives on screen.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn large_paste_to_a_reading_child_is_accepted_and_echoed() {
+        let terminal = TerminalId::new("reader");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "stty raw -echo; exec cat".to_owned(),
+            ],
+            shell_hook: false,
+        }];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        let mut paste = vec![b'q'; 256 * 1024];
+        paste.extend_from_slice(b"PUMP-TAIL-118\n");
+        let started = Instant::now();
+        let events = engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: paste,
+        });
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "a 256 KiB paste must be accepted without blocking"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, EngineEvent::InputDropped { .. })),
+            "a reading child leaves room in the queue"
+        );
+        wait_for_frame(&mut engine, &terminal, "PUMP-TAIL-118");
+        assert_eq!(engine.status(&terminal), Some(&TerminalStatus::Running));
+        engine.dispatch(EngineCommand::Shutdown);
     }
 
     #[cfg(target_os = "linux")]
