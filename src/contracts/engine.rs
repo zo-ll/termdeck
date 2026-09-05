@@ -57,6 +57,11 @@ pub enum EngineEvent {
     /// queued, so it never refuses. Additive like `Notify`: engines that
     /// never saturate never emit it, and consumers may ignore it.
     InputDropped { terminal: TerminalId },
+    /// A terminal accepted input into its bounded queue, but the PTY could
+    /// not flush every byte immediately. Returned from `dispatch` so ctl can
+    /// distinguish queued input from input that reached the PTY at once.
+    /// Consumers that do not need that acknowledgement may ignore it.
+    InputQueued { terminal: TerminalId },
 }
 
 /// The narrow UI-to-engine seam. Implementations retain state and emit changes

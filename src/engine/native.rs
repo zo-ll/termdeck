@@ -560,7 +560,10 @@ impl TerminalEngine for NativeEngine {
                     // pane stays alive and the caller learns the bytes went
                     // nowhere.
                     Some(Ok(InputOutcome::Refused)) => vec![EngineEvent::InputDropped { terminal }],
-                    Some(Ok(_)) | None => Vec::new(),
+                    Some(Ok(InputOutcome::Queued)) => {
+                        vec![EngineEvent::InputQueued { terminal }]
+                    }
+                    Some(Ok(InputOutcome::Flushed)) | None => Vec::new(),
                     Some(Err(message)) => item.status_changed(TerminalStatus::Failed { message }),
                 }
             }
