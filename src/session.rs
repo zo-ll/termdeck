@@ -218,14 +218,25 @@ fn open_terminals(projects: &[Project]) -> Vec<crate::ui::Open> {
         .collect()
 }
 
-/// The projects a committed sheet adds, named against what is already
-/// running so a second instance of an open path becomes `-2` rather than a
-/// duplicate identity the engine would refuse.
-fn chosen(sheet: &SheetState, projects: &[Project]) -> Vec<Project> {
-    let mut taken: Vec<String> = projects
-        .iter()
-        .map(|project| project.terminal.to_string())
-        .collect();
+/// Allocates one runtime identity (#121): the path's base name made unique
+/// against every id the session has EVER used — open or closed — and
+/// recorded in `used` before returning. Display name and runtime id are one
+/// string (no render or wire change), but the session-monotonic set means a
+/// closed name is never handed out again: reopening a directory yields
+/// `base-2`, never the tombstoned original, so a stale id cannot resolve
+/// to a different live terminal.
+fn alloc_identity(used: &mut BTreeSet<String>, base: &str) -> String {
+    let taken: Vec<&str> = used.iter().map(String::as_str).collect();
+    let name = picker::unique_name(&taken, base);
+    used.insert(name.clone());
+    name
+}
+
+/// The projects a committed sheet adds, named against every identity the
+/// session has ever used so a reopened path becomes `base-2` rather than
+/// reusing a tombstoned id the engine — or a stale agent retry — could
+/// confuse with a live terminal (#121).
+fn chosen(sheet: &SheetState, used: &mut BTreeSet<String>) -> Vec<Project> {
     let mut added = Vec::new();
     for instance in sheet.marked() {
         let base = instance
@@ -233,9 +244,7 @@ fn chosen(sheet: &SheetState, projects: &[Project]) -> Vec<Project> {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| instance.name.clone());
-        let names: Vec<&str> = taken.iter().map(String::as_str).collect();
-        let name = picker::unique_name(&names, &base);
-        taken.push(name.clone());
+        let name = alloc_identity(used, &base);
         added.push(Project {
             terminal: TerminalId::new(name),
             path: instance.path.clone(),
@@ -247,7 +256,10 @@ fn chosen(sheet: &SheetState, projects: &[Project]) -> Vec<Project> {
 }
 
 /// Builds the ordinary runtime-add project used by the ctl `open` verb.
-fn opened(path: &str, projects: &[Project]) -> Result<Project, crate::ctl::Response> {
+/// The identity is session-unique (#121): a reopened directory never
+/// reuses a tombstoned name, so a stale agent id cannot land on the new
+/// pane.
+fn opened(path: &str, used: &mut BTreeSet<String>) -> Result<Project, crate::ctl::Response> {
     let path = std::fs::canonicalize(path).map_err(|error| {
         crate::ctl::Response::error(2, format!("bad request: open path: {error}"))
     })?;
@@ -263,13 +275,8 @@ fn opened(path: &str, projects: &[Project]) -> Result<Project, crate::ctl::Respo
         .unwrap_or(path.as_os_str())
         .to_string_lossy()
         .into_owned();
-    let names = projects
-        .iter()
-        .map(|project| project.terminal.to_string())
-        .collect::<Vec<_>>();
-    let names = names.iter().map(String::as_str).collect::<Vec<_>>();
     Ok(Project {
-        terminal: TerminalId::new(picker::unique_name(&names, &base)),
+        terminal: TerminalId::new(alloc_identity(used, &base)),
         path,
         command: vec!["bash".to_owned(), "-l".to_owned()],
         shell_hook: true,
@@ -291,6 +298,7 @@ fn dispatch_control(
     socket: &std::path::Path,
     allow_input: bool,
     closed: &mut BTreeSet<String>,
+    used: &mut BTreeSet<String>,
     quit: &mut bool,
 ) -> crate::ctl::Response {
     if request.schema != crate::ctl::SCHEMA {
@@ -321,7 +329,7 @@ fn dispatch_control(
             if sheet_open {
                 return crate::ctl::Response::error(3, "refused: runtime-add sheet is open");
             }
-            let project = match opened(&path, projects) {
+            let project = match opened(&path, used) {
                 Ok(project) => project,
                 Err(response) => return response,
             };
@@ -365,8 +373,9 @@ fn dispatch_control(
                 }
                 *quit = true;
             } else {
-                request_close(engine, projects, deck, position);
-                closed.insert(id.clone());
+                // The tombstone lands inside `request_close` (#121), the
+                // same primitive keyboard and mouse closes share.
+                request_close(engine, projects, deck, position, closed);
             }
             crate::ctl::Response::ok(serde_json::json!({ "id": id, "last": last }))
         }
@@ -500,8 +509,15 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut close_press: Option<usize> = None;
     // The runtime-add sheet, while it is open. It owns every key it sees.
     let mut sheet: Option<SheetState> = None;
-    #[cfg(unix)]
+    // Closed pane identities, tombstoned on every close path (#121).
     let mut closed = BTreeSet::new();
+    // Every identity ever allocated this session, open or closed (#121):
+    // the allocator draws from this set, so a name is never handed out
+    // twice and a stale id cannot resolve to a different live terminal.
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
     let browser = FsBrowse::new(crate::cli::picker_roots());
     let roots = Browse::roots(&browser);
 
@@ -554,6 +570,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     &socket,
                     allow_input,
                     &mut closed,
+                    &mut used,
                     &mut quit,
                 )
             })?;
@@ -604,7 +621,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 match reaction {
                     Some(PickerReaction::Launch) => {
                         let mut failed = Vec::new();
-                        for project in chosen(open_sheet, &projects) {
+                        for project in chosen(open_sheet, &mut used) {
                             #[cfg(unix)]
                             let result = add_terminal_with_socket(
                                 &mut engine,
@@ -732,7 +749,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         // confirmation instead, and leaves by that door (#84).
                         Some(Reaction::Close) => {
                             if let Some(active) = deck.active() {
-                                request_close(&mut engine, &mut projects, &mut deck, active);
+                                request_close(
+                                    &mut engine,
+                                    &mut projects,
+                                    &mut deck,
+                                    active,
+                                    &mut closed,
+                                );
                             }
                         }
                         Some(Reaction::Quit) => break 'session,
@@ -913,7 +936,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             (MouseAction::Up, _, Some(pressed)) => {
                                 close_press = None;
                                 if close == Some(pressed) {
-                                    request_close(&mut engine, &mut projects, &mut deck, pressed);
+                                    request_close(
+                                        &mut engine,
+                                        &mut projects,
+                                        &mut deck,
+                                        pressed,
+                                        &mut closed,
+                                    );
                                 }
                                 true
                             }

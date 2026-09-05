@@ -129,15 +129,23 @@ pub(super) fn add_terminal_with_socket(
 /// stays its place in the live list and `^g N` never points at a terminal
 /// that has gone. An empty list afterwards is the caller's cue to end the
 /// session; nothing here decides that.
+///
+/// The removed identity is tombstoned (#121): runtime ids are never reused
+/// in a session, so a stale id held by an agent or retry can never resolve
+/// to a different live terminal afterwards. Every close flows through here
+/// — keyboard, mouse, and API alike — so the tombstone set is consistent
+/// by construction rather than by per-site discipline.
 pub(super) fn close_terminal(
     engine: &mut NativeEngine,
     projects: &mut Vec<Project>,
     deck: &mut DeckState,
     position: usize,
+    closed: &mut BTreeSet<String>,
 ) -> bool {
     let Some(project) = projects.get(position) else {
         return false;
     };
+    closed.insert(project.terminal.to_string());
     engine.close(&project.terminal);
     projects.remove(position);
     deck.close(position)
@@ -159,6 +167,7 @@ pub(super) fn request_close(
     projects: &mut Vec<Project>,
     deck: &mut DeckState,
     position: usize,
+    closed: &mut BTreeSet<String>,
 ) -> bool {
     if projects.get(position).is_none() {
         return false;
@@ -171,7 +180,7 @@ pub(super) fn request_close(
         );
         return false;
     }
-    close_terminal(engine, projects, deck, position)
+    close_terminal(engine, projects, deck, position, closed)
 }
 
 /// The renderer owns pane geometry, so PTYs always receive precisely the
