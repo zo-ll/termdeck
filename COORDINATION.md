@@ -1090,6 +1090,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   untouched, fmt+clippy clean. #123 STAYS OPEN. Correction queued — cannot
   steer codex (on #125); deliver after #125's marker.
 
+- 2026-09-05: #125 DONE (codex, commit 570418a; marker pass: "live timing
+  metadata refreshes once per second and expiry transitions draw their final
+  frame"; worktree clean). Routed to CLAUDE critic (assignment .scratch/
+  review/125.critic.md — derived-instants determinism, 1s tick, demotion+toast
+  final-frame scheduling, #113/#115/#71 non-regression; explicit real-gate-
+  numbers demand after the #123 lesson). #123-CORRECTION DELIVERED to codex
+  (same session, now idle; correction brief .scratch/tasks/123-correction.
+  brief.md — array-aware PROMPT_COMMAND, wrong-command filter, profile.d
+  single-source, PROMPT_COMMAND+=() regression test asserting the user
+  command, real gate numbers; task slug 123-correction). In flight: critic→
+  #125; codex→123-correction.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
