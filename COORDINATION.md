@@ -573,6 +573,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (transcript-verified mid-implementation). #115 queued on claude lane after
   #113 merges. RELAY lesson: verify relay alive (log tail) when a ping is late.
 
+- 2026-09-05: #115 DONE (claude, 2 commits: 80e1412 feat(ui) + 34d49f0 docs;
+  marker RESULT=pass: "master-only scrollbar drawn into the pane border
+  (zero-cost), raised by a scroll for 4s or by ^g [ mode, overflow-only,
+  display-only; doc + 10 tests; gate green 352 (348 lib + 4 integration)").
+  Design doc committed: docs/design/termdeck/scrollbar.md. Base = post-#113
+  main (current; no rebase needed). Routed to CRITIC (assignment
+  .scratch/review/115.critic.md — doc-vs-code agreement, zero-content-cost
+  border draw, injected-clock determinism, coexistence with #113 pin mark +
+  stack gutter, boundary check, full-mode test matrix). Verdict ping inbox
+  115-scrollbar.critic.ping. Claude lane idle; queue is near-empty after #115
+  (open: #112 gate, #114, #94 held, #33 parked).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
