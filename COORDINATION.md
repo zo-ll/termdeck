@@ -1055,6 +1055,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   single-shot only; 5-byte exhaustive stream (fuzz carries coverage).
   In flight: codex→#123. Remaining audit: #123, #125, #129, #130, #131.
 
+- 2026-09-05: #123 DONE (codex, commit ceea442; marker pass: "bash -l
+  replays normal login profiles before the chained notification hook"; after
+  a transient model-capacity stall, resumed + completed). Routed to CLAUDE
+  critic (assignment .scratch/review/123.critic.md — production-argv tests,
+  profile-preservation mechanism, DEBUG/PROMPT_COMMAND chaining with+without
+  pre-set, non-login + zsh/fish non-regression, gate). #125 (timing metadata
+  + expiry repaints) rebased to main + DISPATCHED to codex (WORKING).
+  Remaining audit: #125 (in flight), #129, #130, #131.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
