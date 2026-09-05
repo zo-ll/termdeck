@@ -691,6 +691,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   gate). Verdict ping inbox 117-socket-handling.critic.ping. Codex lane back
   at prompt, idle. #118 (nonblocking PTY input) NEXT — lane choice pending
   user (codex tokens <10% vs pi+muse switch).
+- 2026-09-05: #117 CRITIC VERDICT = PASS (inbox 117-socket-handling.critic.ping).
+  AC1a starve: fixed — VecDeque<Pending> (MAX_CLIENTS 16), round-robin,
+  test asserts ordering (pre-fix single slot would fail). AC1b block:
+  fixed — blocking write_all gone; begin_response ≤2MB cap; ≤16KiB
+  nonblocking writes, WouldBlock→requeue; test discriminates pre-fix
+  (2MB−1K payload, 1K RCVBUF, <500ms assert). AC2 nonblocking both
+  directions + 2s request/response deadlines + bounded buffers (64K
+  line/16K chunk/2M response/16 peers). AC3 termctl call_with_limits
+  (2s deadline, 2M cap), bin/termctl.rs unchanged, exit codes + parse
+  tests untouched. AC4 ctl.v1 envelope + codes 1/2/3 intact; oversize→
+  code 1 'exceeds protocol limits'. AC5 gate: 352 lib + 4 + 0 green
+  FIRST run (no flake). One-request-per-frame preserved. NB notes:
+  zero-write-as-complete (harmless), one test's wall-clock margins
+  (load-sensitive, acceptable), no binary-level deadline test (thin
+  wrapper, justified). WAITING: user merge approval for #117.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
