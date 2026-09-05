@@ -679,6 +679,116 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     engine.dispatch(EngineCommand::Shutdown);
 }
 
+/// #118: the agent `input` verb tells the truth about a wedged pane. Once
+/// its bounded queue is saturated the request is refused with code 3 — the
+/// same `refused` family as the input gate — instead of hanging the loop,
+/// and the pane stays live behind the refusal.
+#[cfg(target_os = "linux")]
+#[test]
+fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
+    use std::collections::BTreeSet;
+    use std::time::{Duration, Instant};
+
+    let size = ScreenSize::new(144, 42);
+    // A raw-mode sleeper: it never reads stdin, and raw mode keeps the
+    // kernel from absorbing input into the line discipline, so the queue
+    // saturates instead of draining into the kernel (canonical mode would
+    // swallow megabytes without backpressure).
+    let mut projects = vec![Project {
+        terminal: TerminalId::new("t1".to_owned()),
+        path: PathBuf::from("/"),
+        command: vec![
+            "/bin/sh".to_owned(),
+            "-c".to_owned(),
+            "stty raw -echo; exec sleep 30".to_owned(),
+        ],
+        shell_hook: false,
+    }];
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut quit = false;
+    let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
+
+    let chunk = vec![b'x'; 64 * 1024];
+    let started = Instant::now();
+    let mut dropped = false;
+    for _ in 0..64 {
+        let events = engine.dispatch(EngineCommand::Input {
+            terminal: projects[0].terminal.clone(),
+            bytes: chunk.clone(),
+        });
+        if events
+            .iter()
+            .any(|event| matches!(event, EngineEvent::InputDropped { .. }))
+        {
+            dropped = true;
+            break;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "saturating dispatches must return, not block"
+        );
+    }
+    assert!(dropped, "the sleeper must saturate its input queue");
+    // Top up to the last byte: chunk saturation leaves up to one chunk of
+    // slack, and the ctl probe below is only twelve bytes. Nothing drains
+    // in between — the sleeper never reads — so this converges exactly.
+    let mut filled = false;
+    for _ in 0..128 * 1024 {
+        let events = engine.dispatch(EngineCommand::Input {
+            terminal: projects[0].terminal.clone(),
+            bytes: b"x".to_vec(),
+        });
+        if events
+            .iter()
+            .any(|event| matches!(event, EngineEvent::InputDropped { .. }))
+        {
+            filled = true;
+            break;
+        }
+    }
+    assert!(filled, "the queue must fill to its last byte");
+
+    let request = crate::ctl::Request {
+        schema: crate::ctl::SCHEMA.to_owned(),
+        verb: "input".to_owned(),
+        id: Some("t1".to_owned()),
+        text: Some("echo wedged\n".to_owned()),
+        ..Default::default()
+    };
+    let response = dispatch_control(
+        request,
+        None,
+        &workspace,
+        &mut projects,
+        &mut deck,
+        &mut engine,
+        &mut notifies,
+        size,
+        false,
+        socket,
+        true,
+        &mut closed,
+        &mut quit,
+    );
+    let error = response.error.expect("a wedged pane refuses input");
+    assert_eq!(error.code, 3);
+    assert!(
+        error.message.contains("queue"),
+        "the refusal names the queue: {}",
+        error.message
+    );
+    assert_eq!(
+        engine.status(&projects[0].terminal),
+        Some(&crate::contracts::TerminalStatus::Running),
+        "a refused input is not a failed terminal"
+    );
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
 /// A position no pane holds closes nothing and asks nothing, whatever is
 /// left in the list.
 #[cfg(target_os = "linux")]

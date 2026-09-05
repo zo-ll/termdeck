@@ -8,5 +8,5 @@ mod vt;
 
 pub use fake::FakeEngine;
 pub use native::NativeEngine;
-pub use pty::{PtyEvent, PtyTransport};
+pub use pty::{InputOutcome, PtyEvent, PtyTransport};
 pub use vt::VtFrameAdapter;

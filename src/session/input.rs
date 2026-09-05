@@ -2,13 +2,18 @@ use super::*;
 
 /// Live shell input always resumes the active terminal at its tail. Wheel
 /// scrolling deliberately has no modal state, unlike keyboard scrollback.
+///
+/// Returns what the engine answered, so the ctl `input` verb can tell an
+/// accepted input from a refused one (#118). Live keystroke and paste paths
+/// ignore it: dropping a keystroke against a wedged child is correct as
+/// long as the loop never blocks for it.
 pub(super) fn dispatch_live_input(
     engine: &mut dyn TerminalEngine,
     terminal: crate::contracts::TerminalId,
     bytes: Vec<u8>,
-) {
+) -> Vec<crate::contracts::EngineEvent> {
     dispatch_scroll(engine, terminal.clone(), ScrollCommand::Bottom);
-    engine.dispatch(EngineCommand::Input { terminal, bytes });
+    engine.dispatch(EngineCommand::Input { terminal, bytes })
 }
 
 pub(super) fn dispatch_scroll(

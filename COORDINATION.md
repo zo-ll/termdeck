@@ -745,6 +745,82 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   reported. WAITING: user merge approval for #127 → then #128 to
   claude.
 
+- 2026-09-05: #127 MERGED (user approval) — --no-ff merge (db64abd), gate
+  green 357 lib + 4 int (base 352 + 5 new from the slice), pushed; issue #127
+  CLOSED; binary rebuilt. Audit progress: FIRST-priority 1/5, THIRD 1/4 done.
+- 2026-09-05: #128 (picker Git metadata honesty + runtime-add failure
+  surfacing) DISPATCHED to claude (WORKING — worktree coord/128-picker-git on
+  post-#127 main; brief reuses the #127 Stamp cache pattern for Git metadata,
+  handles worktree .git indirection, surfaces failures non-modally via the
+  #71 surface; session.rs add-flow cross-lane touch approved; no overlap with
+  #118). In flight: claude→#128, pi-worker(muse)→#118. Critic idle.
+
+- 2026-09-05: #118 DONE (PI-WORKER muse, commit ea10642; marker pass:
+  "nonblocking bounded PTY input: queue+refuse, truthful ctl refusal, gate
+  green"; worktree clean; hand-back detailed). Semantics chosen: accepted =
+  queued (caller never blocks); written = nonblocking slices as child reads;
+  refusal ATOMIC (whole-or-nothing, never silent prefix); refusal never fails
+  the pane, only dead PTY (EIO) errors. Truthful outcome wired: ctl code 3
+  naming the queue on refusal, pane live. 6 tests (3 pty: audit repro ≤2s+
+  Queued, saturation→Refused, reading→Flushed+echo; 2 native: wedged drops
+  truthfully/stays Running, 256KiB paste <2s; 1 session: wedged→ctl code 3).
+  Gate 358 lib + 4 green, no flake. NBs: canonical-mode absorption (wedge
+  tests use stty raw -echo), portable-pty Drop EOT write_all now nonblocking
+  (benign), old .write().unwrap() compile unchanged. Routed to CRITIC
+  (assignment .scratch/review/118.critic.md). Verdict ping inbox
+  118-pty-input.critic.ping. Worker lane idle at prompt.
+- 2026-09-05: #118 CRITIC VERDICT = PASS (inbox 118-pty-input.critic.ping).
+  AC1 stuck-child queue: bounded nonblocking (accepted=queued vs
+  written=nonblocking slices); refusal ATOMIC whole-or-nothing incl. ctl
+  path. AC2 backpressure: saturation → Refused, bound intact. AC3
+  truthful: Refused → InputDropped event → ctl code 3 "terminal input
+  queue is full..." (same refused family as the input gate), pane stays
+  Running at engine AND ctl levels; dead PTY → Failed as before; auto-
+  reply saturation drops the reply, not the pane. AC4 #117 non-regression:
+  ctl.v1 wire/codes unchanged; one-request-per-frame intact (dispatch
+  ≤1 event, pump dispatches nothing); no daemons. AC5 gate 358 lib + 4
+  green first run, no flake; 6 tests cover queued/saturated/flushed +
+  engine truth + pump delivery + ctl refusal. No nits. WAITING: user
+  merge approval for #118 → then #119 to the pi-worker lane.
+
+- 2026-09-05 (USER: "fix the nb first"): #118 MERGE HELD (critic pass stands,
+  but merge deferred until the NB batch lands — user ordering). NB CLEANUP
+  dispatched to the pi-worker lane (task nb-cleanup-2026-09-05, worktree
+  coord/nb-cleanup-2026-09-05): (1) #116 fake-engine active_screen_lines
+  Some([]) fallback shadow — make None-when-unset; (2) #117 wall-clock
+  deadline test margins — harden against CI load, keep discriminating;
+  (3) #117 zero-write-as-complete in write_response — fix-or-document with
+  comment. Each NB = fix OR explicit decide+document. UI-lane NBs queued for
+  claude after #128: #113 toggle_pin doc overpromise + pinned()/active()
+  double-call; #115 SCROLLBAR_WINDOW ≡ NOTIFY_WINDOW const dedupe.
+  In flight: worker→NB batch; claude→#128. #118 merge follows the batch.
+
+- 2026-09-05: #128 DONE (claude, 2 commits ac3d637 "tell the truth about a
+  repository's git facts" + 3b9d191 "say when a terminal the sheet added never
+  started"; marker pass: worktree gitdir resolved, commit age from branch
+  reflog (unknown when unreadable), dirty count → Option/None, failed adds
+  surface as a bounded toast; 365 lib + 4 green; worktree clean; claude idle).
+  Routed to CRITIC (assignment .scratch/review/128.critic.md — reflog-vs-
+  commit-ts correctness, dirty Option semantics, worktree indirection, unknown
+  rendering, toast non-modality + pane preservation, cache staleness on
+  commit, gate 365+4). Verdict ping inbox 128-picker-git.critic.ping.
+- 2026-09-05: NB-CLEANUP batch DONE (pi-worker muse, commit a71e842 "resolve
+  #116/#117 critic non-blocking notes"; marker pass: "fake fallback fidelity,
+  hardened deadline test, zero-write requeue [chose FIX over document-only];
+  gate green"; worktree clean). REVIEW QUEUED after #128's verdict (same
+  critic pane; assignment .scratch/review/nb-cleanup.critic.md to be written
+  now). After both verdicts + user approvals: merge order #118 → NB batch →
+  #128 (dependency/base order; NB branch based pre-#118 — rebase at merge).
+  Then: #119 to the pi worker; UI NB batch (#113/#115) to claude.
+
+- 2026-09-05 (USER standing approval): merge slices on critic PASS with NO
+  non-blocking notes ("merge if there are no nb") — coordinator may execute
+  the pending merge queue (#118 → NB batch → #128, dependency order) itself
+  when verdicts land nit-free; surface to the user for a go if any nits
+  appear. Critic currently reviewing #128 (hit the KNOWN shutdown_…_threads
+  sandbox flake once during its gate run; expected — assignment covers
+  clean-re-run).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
