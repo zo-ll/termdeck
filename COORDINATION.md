@@ -1101,6 +1101,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   single-source, PROMPT_COMMAND+=() regression test asserting the user
   command, real gate numbers; task slug 123-correction). In flight: critic→
   #125; codex→123-correction.
+- 2026-09-05: #123-CORRECTION DONE (codex, c637560 on top of ceea442;
+  marker: "real bash -l bootstrap preserves login profiles and array
+  prompt command titles; gate 393 lib + 4" — but 393 vs main 395
+  suggests a stale base; rebase-to-main CONFLICTED in session/tests.rs
+  (vs #121/#122/#125/#126 test churn) → 123-INTEGRATION routed to codex
+  (same session, idle; resolve keeping all behaviors, REAL gate numbers,
+  task slug 123-integration). #123 re-review (claude critic) fires after
+  the integration. Audit: closed #117-122,124,125,126; #123 mid-close;
+  remaining #129 #130 #131 (+#132).
 
 - 2026-09-05: #125 CRITIC VERDICT = PASS → MERGED (395 lib + 4, verified
   3x by the critic; issue CLOSED) + rebuilt. The critic confirmed the marker:
