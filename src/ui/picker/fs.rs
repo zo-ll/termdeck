@@ -1,10 +1,19 @@
 use std::cell::RefCell;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use super::render::display_path;
 use super::{Browse, Entry, Listing};
 
-use std::{fs, time::SystemTime};
+use std::{
+    fs,
+    time::{Duration, SystemTime},
+};
+
+/// What a row says when the fact it would otherwise state cannot be read. A
+/// picker that guesses is worse than one that admits the gap: the note's
+/// detail block is read as fact.
+const UNKNOWN: &str = "unknown";
 
 /// The real browser: `read_dir` plus what `.git` can be asked cheaply.
 ///
@@ -89,13 +98,16 @@ impl FsBrowse {
     }
 
     fn entry(path: &Path, name: String) -> Entry {
-        if is_repository(path) {
+        if let Some(git) = git_dir(path) {
             let entry = Entry::repository(name, path);
-            let branch = head_branch(path);
-            match branch {
-                Some(branch) => {
-                    let age = commit_age(path).unwrap_or_else(|| "unknown".to_owned());
-                    entry.git(branch, 0, age)
+            match head(&git) {
+                Some(head) => {
+                    let age = commit_age(&git, &head).unwrap_or_else(|| UNKNOWN.to_owned());
+                    // Nothing here can count what is uncommitted without
+                    // opening the repository, and the picker opens nothing.
+                    // So it says it does not know, rather than drawing the
+                    // clean state a hardcoded zero used to claim (#128).
+                    entry.git(head.label(), None, age)
                 }
                 None => entry,
             }
@@ -286,25 +298,145 @@ fn canonical(path: &Path) -> PathBuf {
 }
 
 fn is_repository(path: &Path) -> bool {
-    path.join(".git").is_dir() || path.join(".git").is_file()
+    git_dir(path).is_some()
 }
 
-/// The checked-out branch, read straight out of `.git/HEAD`.
-fn head_branch(path: &Path) -> Option<String> {
-    let head = fs::read_to_string(path.join(".git/HEAD")).ok()?;
+/// Where a repository keeps its administrative files.
+///
+/// Usually the `.git` folder itself. A linked worktree's `.git` is a *file*
+/// holding `gitdir: <path>`, and a submodule's says the same — the
+/// indirection the picker used to walk straight past. It recognised the
+/// worktree as a repository and then looked for a HEAD that was not there,
+/// so every worktree drew as a repository with no branch at all (#128).
+fn git_dir(path: &Path) -> Option<PathBuf> {
+    let git = path.join(".git");
+    if git.is_dir() {
+        return Some(git);
+    }
+    let pointer = fs::read_to_string(&git).ok()?;
+    let target = Path::new(pointer.trim().strip_prefix("gitdir:")?.trim());
+    if target.as_os_str().is_empty() {
+        return None;
+    }
+    // The pointer is written relative to the worktree when it is relative at
+    // all. A pointer at nothing is not a repository: the folder it named has
+    // been thrown away, and no branch will ever be read out of it.
+    let target = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        path.join(target)
+    };
+    target.is_dir().then_some(target)
+}
+
+/// The folder every worktree of a repository shares, which is where the
+/// branches and their logs live. A worktree's own gitdir names it in
+/// `commondir`; an ordinary repository is already its own.
+fn common_dir(git: &Path) -> PathBuf {
+    let Ok(common) = fs::read_to_string(git.join("commondir")) else {
+        return git.to_path_buf();
+    };
+    let common = Path::new(common.trim());
+    if common.is_absolute() {
+        common.to_path_buf()
+    } else {
+        git.join(common)
+    }
+}
+
+/// What HEAD points at. A detached HEAD names no branch, and the two are
+/// read out of different logs, so the difference is kept rather than
+/// flattened into one string.
+enum Head {
+    Branch(String),
+    Detached(String),
+}
+
+impl Head {
+    /// What the row draws where a branch goes: the branch, or the short
+    /// commit a detached HEAD sits on — which is what it drew before.
+    fn label(&self) -> String {
+        match self {
+            Self::Branch(branch) | Self::Detached(branch) => branch.clone(),
+        }
+    }
+}
+
+/// The checked-out branch, read straight out of the gitdir's `HEAD`.
+fn head(git: &Path) -> Option<Head> {
+    let head = fs::read_to_string(git.join("HEAD")).ok()?;
     let head = head.trim();
     Some(match head.strip_prefix("ref: refs/heads/") {
-        Some(branch) => branch.to_owned(),
-        None => head.chars().take(7).collect(),
+        Some(branch) => Head::Branch(branch.to_owned()),
+        None => Head::Detached(head.chars().take(7).collect()),
     })
 }
 
-/// How long ago the branch last moved, from the ref's own mtime — one stat,
-/// no repository opened. It is the last commit for any ordinary workflow.
-fn commit_age(path: &Path) -> Option<String> {
-    let head = path.join(".git/HEAD");
-    let modified = fs::metadata(&head).and_then(|meta| meta.modified()).ok()?;
-    let elapsed = SystemTime::now().duration_since(modified).ok()?.as_secs();
+/// How long ago the checked-out branch last took a commit.
+///
+/// Git writes a line into a ref's reflog every time its tip moves, and the
+/// timestamp on a `commit` line is that commit's own committer date, written
+/// as the commit was made. Without decompressing an object — which would
+/// mean opening the repository, which the picker does not do — that is the
+/// only commit time there is to read, so a tip that arrived any other way (a
+/// clone, a pull, a reset, a rebase) has no age here and says so.
+///
+/// What was drawn before was `.git/HEAD`'s modification time, which is when
+/// the branch was last *checked out*: a repository untouched for a year read
+/// `just now` the moment you switched to it, and a commit made on the branch
+/// you were already on moved it not at all (#128).
+fn commit_age(git: &Path, head: &Head) -> Option<String> {
+    let common = common_dir(git);
+    let branch_log = match head {
+        Head::Branch(branch) => Some(common.join("logs/refs/heads").join(branch)),
+        Head::Detached(_) => None,
+    };
+    // The branch's own log first; the worktree's HEAD log is the same
+    // event seen from the other side, and is all there is when the branch
+    // keeps no log of its own.
+    let when = branch_log
+        .and_then(|log| last_commit(&log))
+        .or_else(|| last_commit(&git.join("logs/HEAD")))?;
+    age(when)
+}
+
+/// The time on the last line of a reflog, when that line is a commit.
+fn last_commit(log: &Path) -> Option<SystemTime> {
+    let line = last_line(log)?;
+    // `<old> <new> <who> <email> <seconds> <zone>\t<action>: <message>`
+    let (entry, action) = line.split_once('\t')?;
+    if !action.starts_with("commit") {
+        return None;
+    }
+    let mut fields = entry.split_whitespace().rev();
+    let _zone = fields.next()?;
+    let seconds: u64 = fields.next()?.parse().ok()?;
+    Some(SystemTime::UNIX_EPOCH + Duration::from_secs(seconds))
+}
+
+/// The last non-empty line of a file, reading only the tail of it: a reflog
+/// grows without bound, and the picker promises one small read per row.
+fn last_line(path: &Path) -> Option<String> {
+    const TAIL: u64 = 4_096;
+    let mut file = fs::File::open(path).ok()?;
+    let end = file.seek(SeekFrom::End(0)).ok()?;
+    file.seek(SeekFrom::Start(end.saturating_sub(TAIL))).ok()?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail).ok()?;
+    // The window can open in the middle of a character, which is a reason to
+    // drop that character and not the line it was in.
+    String::from_utf8_lossy(&tail)
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .map(str::to_owned)
+}
+
+/// How long ago something happened, phrased the way the tail column draws
+/// it. A time in the future — a clock that disagrees with the one that
+/// wrote it — is not an age, and says nothing rather than a wrong something.
+fn age(when: SystemTime) -> Option<String> {
+    let elapsed = SystemTime::now().duration_since(when).ok()?.as_secs();
     Some(match elapsed {
         0..=59 => "just now".to_owned(),
         60..=3599 => format!("{}m ago", elapsed / 60),

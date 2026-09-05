@@ -38,18 +38,21 @@ impl Browse for Fixture {
             Entry::parent("/home/dev"),
             Entry::folder("archive", code().join("archive")).holding(3, 0),
             Entry::repository("horizon-frontend", code().join("horizon-frontend"))
-                .git("main", 0, "2h ago"),
-            Entry::repository("horizon-backend", code().join("horizon-backend"))
-                .git("main", 3, "18m ago"),
+                .git("main", None, "2h ago"),
+            Entry::repository("horizon-backend", code().join("horizon-backend")).git(
+                "main",
+                Some(3),
+                "18m ago",
+            ),
             Entry::repository("horizon-app", code().join("horizon-app")).git(
                 "feat/rn-0.75",
-                0,
+                None,
                 "4d ago",
             ),
             Entry::repository("horizon-infra", code().join("horizon-infra"))
-                .git("main", 0, "3w ago"),
+                .git("main", None, "3w ago"),
             Entry::folder("notes", code().join("notes")).holding(14, 0),
-            Entry::repository("termdeck", code().join("termdeck")).git("main", 0, "just now"),
+            Entry::repository("termdeck", code().join("termdeck")).git("main", None, "just now"),
             Entry::folder("vendor", code().join("vendor")).holding(6, 0),
             Entry::file("README.md", code().join("README.md")),
         ];
@@ -65,7 +68,7 @@ impl Browse for Fixture {
             .collect();
         found.push(
             Entry::repository("horizon-docs", "/home/dev/work/archive/horizon-docs")
-                .git("main", 0, "1y ago"),
+                .git("main", None, "1y ago"),
         );
         found
     }
@@ -1156,6 +1159,184 @@ fn wait_past(probe: &Path, stamp: std::time::SystemTime) {
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
     panic!("filesystem timestamps never moved past {stamp:?}");
+}
+
+/// A linked worktree's `.git` is a file pointing at the folder the main
+/// repository keeps for it. The picker recognised the worktree as a
+/// repository and then read `<worktree>/.git/HEAD`, which is not a path at
+/// all, so every worktree drew with no branch (#128). Both forms of the
+/// pointer git writes — absolute, and relative to the worktree — resolve.
+#[test]
+fn a_worktree_reports_the_branch_its_gitdir_holds() {
+    let root = temp_root("worktree");
+    let main = root.join("main");
+    repository(&main);
+    reflog(&main.join(".git"), "feature", "commit: something", 7_200);
+    worktree(&main, &root.join("absolute"), "absolute", "feature", true);
+    worktree(&main, &root.join("relative"), "relative", "feature", false);
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let listing = browser.list(&root);
+
+    for name in ["absolute", "relative"] {
+        let entry = row(&listing.entries, name);
+        assert_eq!(entry.kind, EntryKind::Repository, "{name}");
+        assert_eq!(entry.branch.as_deref(), Some("feature"), "{name}");
+        assert_eq!(entry.age.as_deref(), Some("2h ago"), "{name}");
+    }
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// The age was `.git/HEAD`'s modification time, which is when the branch was
+/// last checked out — a repository whose last commit was days ago read
+/// `just now` the moment you switched to it. It is now the commit's own
+/// time, which git wrote into the branch's reflog as the commit was made.
+#[test]
+fn the_age_is_the_commit_time_and_not_the_checkout_time() {
+    let root = temp_root("commit-time");
+    let repo = root.join("repo");
+    repository(&repo);
+    // `.git/HEAD` was written a moment ago, which is exactly the reading the
+    // old age gave: `just now`, for a branch whose tip is three days old.
+    reflog(
+        &repo.join(".git"),
+        "main",
+        "commit: three days back",
+        3 * 86_400,
+    );
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let listing = browser.list(&root);
+    let entry = row(&listing.entries, "repo");
+
+    assert_eq!(entry.age.as_deref(), Some("3d ago"));
+    assert!(
+        modified(&repo.join(".git/HEAD"))
+            > std::time::SystemTime::now() - std::time::Duration::from_secs(60),
+        "the file the old age read is minutes-fresh, and says nothing"
+    );
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// A tip that arrived any other way — a clone, a pull, a reset — is a commit
+/// somebody else made at a time no reflog records. Reading it out of an
+/// object would mean opening the repository, which the picker does not do,
+/// so the row says it does not know rather than dating the pull.
+#[test]
+fn a_tip_that_did_not_arrive_by_commit_says_it_does_not_know() {
+    let root = temp_root("unknown-age");
+    let pulled = root.join("pulled");
+    let quiet = root.join("quiet");
+    repository(&pulled);
+    reflog(&pulled.join(".git"), "main", "pull: Fast-forward", 600);
+    // And a repository with no reflog at all knows even less.
+    repository(&quiet);
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let listing = browser.list(&root);
+
+    for name in ["pulled", "quiet"] {
+        let entry = row(&listing.entries, name);
+        assert_eq!(entry.branch.as_deref(), Some("main"), "{name}");
+        assert_eq!(entry.age.as_deref(), Some("unknown"), "{name}");
+    }
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// The changed-file count was a hardcoded zero, which drew every repository
+/// as clean — a fact nothing had checked. Counting means opening the
+/// repository, so the browser reports no count at all, and the row draws no
+/// `+3` rather than a `+0` it cannot stand behind.
+#[test]
+fn no_row_claims_a_clean_worktree_nobody_counted() {
+    let root = temp_root("dirty");
+    let repo = root.join("repo");
+    repository(&repo);
+    reflog(&repo.join(".git"), "main", "commit: whatever", 60);
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let listing = browser.list(&root);
+    let entry = row(&listing.entries, "repo");
+
+    assert_eq!(entry.dirty, None, "unknown, which is not zero");
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// A `.git` file whose folder has been thrown away points at nothing: the
+/// worktree it belonged to is gone, and no branch will ever come out of it.
+/// It is a folder again, not a repository with no facts.
+#[test]
+fn a_pointer_at_a_folder_that_is_gone_is_not_a_repository() {
+    let root = temp_root("dangling");
+    let stale = root.join("stale");
+    std::fs::create_dir_all(&stale).unwrap();
+    std::fs::write(
+        stale.join(".git"),
+        format!(
+            "gitdir: {}\n",
+            root.join("main/.git/worktrees/stale").display()
+        ),
+    )
+    .unwrap();
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let listing = browser.list(&root);
+    let entry = row(&listing.entries, "stale");
+
+    assert_eq!(entry.kind, EntryKind::Folder);
+    assert_eq!(entry.branch, None);
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// The row a listing draws for a named child.
+fn row<'a>(entries: &'a [Entry], name: &str) -> &'a Entry {
+    entries
+        .iter()
+        .find(|entry| entry.name == name)
+        .unwrap_or_else(|| panic!("no row for {name} in {:?}", names(entries)))
+}
+
+/// The line git writes into a branch's reflog when its tip moves: two object
+/// names, who moved it, when, and what they did.
+fn reflog(git: &Path, branch: &str, action: &str, ago: u64) {
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - ago;
+    let log = git.join("logs/refs/heads").join(branch);
+    std::fs::create_dir_all(log.parent().unwrap()).unwrap();
+    std::fs::write(
+        &log,
+        format!(
+            "{zero} {tip} Someone <someone@example.com> {at} +0000\t{action}\n",
+            zero = "0".repeat(40),
+            tip = "a".repeat(40),
+        ),
+    )
+    .unwrap();
+}
+
+/// A linked worktree, as `git worktree add` leaves one: a folder the main
+/// repository keeps for it, and a `.git` file in the tree pointing at that
+/// folder — absolutely, or relative to the tree.
+fn worktree(main: &Path, tree: &Path, name: &str, branch: &str, absolute: bool) {
+    let git = main.join(".git/worktrees").join(name);
+    std::fs::create_dir_all(&git).unwrap();
+    std::fs::write(git.join("HEAD"), format!("ref: refs/heads/{branch}\n")).unwrap();
+    std::fs::write(git.join("commondir"), "../..\n").unwrap();
+    std::fs::create_dir_all(tree).unwrap();
+    let pointer = if absolute {
+        git.display().to_string()
+    } else {
+        format!("../main/.git/worktrees/{name}")
+    };
+    std::fs::write(tree.join(".git"), format!("gitdir: {pointer}\n")).unwrap();
 }
 
 /// Mouse parity's other half (§7): the secondary button is the `-`.

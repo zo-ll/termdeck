@@ -579,11 +579,8 @@ impl Picker<'_> {
                     return Vec::new();
                 };
                 let mut spans = vec![Span::styled(format!("git · {branch}"), muted)];
-                if entry.dirty > 0 {
-                    spans.push(Span::styled(
-                        format!(" +{}", entry.dirty),
-                        Style::new().fg(WARNING),
-                    ));
+                if let Some(dirty) = entry.dirty.filter(|count| *count > 0) {
+                    spans.push(Span::styled(format!(" +{dirty}"), Style::new().fg(WARNING)));
                 }
                 spans
             }
@@ -664,8 +661,8 @@ impl Picker<'_> {
         if let Some(age) = entry.age.as_deref() {
             facts.push(format!("last commit {age}"));
         }
-        if entry.dirty > 0 {
-            facts.push(format!("{} uncommitted", entry.dirty));
+        if let Some(dirty) = entry.dirty.filter(|count| *count > 0) {
+            facts.push(format!("{dirty} uncommitted"));
         }
         match instances {
             0 => {}
