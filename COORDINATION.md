@@ -666,6 +666,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   this session); claude pane recreated at the 113-pin worktree (full
   session, opus, idle) so the canonical env (coord|critic|claude|codex)
   is whole.
+- 2026-09-05 (PARALLEL + TOKEN CONTINGENCY): user: parallelize — #127
+  (picker CPU cache + resize repaint) DISPATCHED to claude (WORKING;
+  worktree coord/127-picker-cache off main; cross-lane minimal touch at
+  src/session.rs:80-85 coordinator-approved; zero overlap with #117's
+  ctl/termctl files). USER DECISION (token plan): codex weekly usage
+  <10% — when terra runs out, the WORKER LANE becomes PI with
+  muse-spark-1.3-contributor (critic-style launch: pi --provider
+  opencode-go --model muse-spark-1.3-contributor), single-line pointers
+  only, same finish protocol — NOT codex pointed at muse (codex 0.153
+  has no opencode-go provider surface; user explicitly wants pi+muse).
+  Switch timing: complete #117 on codex first (never kill mid-slice),
+  then relaunch the lane as pi+muse for #118+ if tokens are gone.
+  Note: muse is critic-grade — worker quality may drop; user owns this
+  tradeoff. In flight now: codex→#117, claude→#127 (parallel).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
