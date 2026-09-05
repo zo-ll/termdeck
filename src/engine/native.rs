@@ -1394,6 +1394,74 @@ mod tests {
         engine.dispatch(EngineCommand::Shutdown);
     }
 
+    /// The same for Fish, whose hook is a `vendor_conf.d` file rather than an
+    /// rc: three shells are advertised and only two were ever exercised, so a
+    /// green suite said nothing about the third (#130). Fish assigns with
+    /// `set -x` and measures the command in `$CMD_DURATION`, so the input is
+    /// its own dialect of the same three commands.
+    ///
+    /// Skips where Fish is absent, the way the Zsh case does. CI installs
+    /// both, which is what turns these two from a promise into a check.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fish_hook_reports_errors_when_fish_is_available() {
+        if std::process::Command::new("fish")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return;
+        }
+        let terminal = TerminalId::new("fish-hook");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec!["fish".to_owned()],
+            shell_hook: true,
+        }];
+        let mut engine = NativeEngine::spawn_sized_with_socket(
+            &projects,
+            &[ScreenSize::new(80, 4)],
+            DEFAULT_SCROLLBACK,
+            std::path::Path::new("/tmp/termdeck-hook-test.sock"),
+        )
+        .unwrap();
+        engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: b"false\nset -x TERMDECK_NOTIFY_LONG_SECS 0\nsleep 0.01\n".to_vec(),
+        });
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut messages = Vec::new();
+        while Instant::now() < deadline && messages.len() < 3 {
+            messages.extend(
+                engine
+                    .drain_events()
+                    .into_iter()
+                    .filter_map(|event| match event {
+                        EngineEvent::Notify {
+                            terminal: rung,
+                            kind: NotifyKind::Message { title, body },
+                        } if rung == terminal => Some((title, body)),
+                        _ => None,
+                    }),
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            messages
+                .iter()
+                .any(|(title, body)| title == "false" && body.starts_with("exit 1 · ")),
+            "{messages:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|(title, body)| title == "sleep 0.01" && body.starts_with("done · ")),
+            "{messages:?}"
+        );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
     #[test]
     fn requires_at_least_one_terminal() {
         assert_eq!(

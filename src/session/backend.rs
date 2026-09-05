@@ -136,7 +136,34 @@ mod tests {
         style::{Modifier, Style},
     };
 
+    use ratatui::style::Color;
+
     use super::write_cell;
+
+    /// The other half of what a cell can carry. Attributes were pinned to
+    /// their bytes below; the colour conversions — 24-bit, the 256-colour
+    /// palette, the bright half of the named set, and the reset that is not a
+    /// colour at all — were not, and each is a different escape shape (#130).
+    #[test]
+    fn a_cell_emits_true_colour_indexed_and_named_palettes() {
+        let mut output = Vec::new();
+        let mut cell = Cell::new("T");
+        cell.set_style(Style::new().fg(Color::Rgb(1, 2, 3)).bg(Color::Indexed(200)));
+
+        write_cell(&mut output, 0, 0, &cell).unwrap();
+
+        assert_eq!(output, b"\x1b[1;1H\x1b[0m\x1b[38;2;1;2;3m\x1b[48;5;200mT");
+
+        // A bright name is the 90/100 range, not 30/40, and `Reset` asks the
+        // terminal for its own default rather than naming a colour.
+        let mut output = Vec::new();
+        let mut cell = Cell::new("N");
+        cell.set_style(Style::new().fg(Color::LightCyan).bg(Color::Reset));
+
+        write_cell(&mut output, 9, 4, &cell).unwrap();
+
+        assert_eq!(output, b"\x1b[5;10H\x1b[0m\x1b[96m\x1b[49mN");
+    }
 
     /// Assert the bytes written to a real `Write`, rather than the Ratatui
     /// buffer state that precedes this backend conversion.

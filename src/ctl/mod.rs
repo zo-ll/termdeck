@@ -372,6 +372,15 @@ enum PendingPhase {
     Writing { bytes: Vec<u8>, written: usize },
 }
 
+/// One listener at a time, for tests.
+///
+/// [`Listener::bind`] names its socket after the process, so every listener a
+/// test binds wants the same path: two of them racing would unlink each
+/// other's socket. The lock lives here rather than in this module's own test
+/// module because the session's end-to-end test binds one too (#130).
+#[cfg(test)]
+pub(crate) static LISTENER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Session-owned listener. Connections remain nonblocking for their whole
 /// lifetime. Every poll advances one peer in round-robin order and dispatches
 /// at most one request, so a stalled client cannot freeze or starve the UI.
@@ -766,7 +775,6 @@ mod tests {
             },
         },
         path::PathBuf,
-        sync::Mutex,
         thread,
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     };
@@ -782,11 +790,9 @@ mod tests {
     };
 
     use super::{
-        Control, Listener, MAX_RESPONSE, Request, Response, SCHEMA, State, call_with_limits,
-        dispatch, normalized_pane_path, peer_uid, socket_directory, trusted_peer,
+        Control, LISTENER_TEST_LOCK, Listener, MAX_RESPONSE, Request, Response, SCHEMA, State,
+        call_with_limits, dispatch, normalized_pane_path, peer_uid, socket_directory, trusted_peer,
     };
-
-    static LISTENER_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn state<'a>(
         workspace: &'a Workspace,

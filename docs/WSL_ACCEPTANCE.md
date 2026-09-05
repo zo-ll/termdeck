@@ -1,12 +1,32 @@
 # WSL manual acceptance
 
-**Status (2026-09-05): this is the procedure, not a record of a run.** No pass
-against any revision is recorded here or in COORDINATION.md, where the
-integration-and-acceptance issue (#4) is still open; the audit that raised
-#129 read the file as evidence and found none. Whoever runs it should replace
-this paragraph with what they ran, on what revision, and what failed —
-"verified against main @ `<commit>` on `<date>`, all steps passed except …" —
-so the next reader can tell a procedure from a result.
+## Evidence
+
+What has actually been run, against which revision. A procedure with no
+stamp is a promise; the audit behind #129/#130 read this file as evidence
+and found none, so the stamp is now part of the file and is expected to move
+whenever the procedure is run.
+
+| Checked | Verified against | Date | Result |
+| --- | --- | --- | --- |
+| Automated gate (`cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, `cargo test --locked --all-targets`) | `f77e2a5` (branch `coord/130-tests-ci`, off `main`) | 2026-09-05 | Pass — 401 lib + 4 bin tests, 0 failed |
+| Manual WSL pass (everything below this section) | — | — | **Never recorded.** Issue #4 is still open. |
+| Shell-hook compatibility, Zsh and Fish | — | — | Not on this machine: neither shell is installed, so both tests skip. CI installs them (`.github/workflows/ci.yml`), which is where the claim is checked. |
+
+**To refresh the stamp**, run the gate and then this procedure on the commit
+you are certifying, and rewrite the rows:
+
+```bash
+git rev-parse --short HEAD          # the revision the stamp names
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-targets   # record the counts, not just "green"
+```
+
+Then work through the steps below in a real WSL terminal and record what
+passed and what did not — a row saying "all steps passed except the orphan
+check" is worth more than a missing row. A stamp naming a commit that is no
+longer an ancestor of `main` is stale: treat it as unverified.
 
 Run these steps from WSL in a real terminal. Build the binary first, then
 keep a second WSL shell available for the CPU, signal, and orphan checks.
