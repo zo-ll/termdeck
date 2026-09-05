@@ -484,10 +484,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     // still pending after the promotion, the resize and the fold that follow.
     let mut notifies = Notifications::new();
     #[cfg(unix)]
-    let mut engine = spawn_terminals_with_socket(&projects, &deck, size, control.path())
-        .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
+    let mut engine =
+        spawn_terminals_with_socket(&projects, &deck, size, workspace.scrollback, control.path())
+            .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     #[cfg(not(unix))]
-    let mut engine = spawn_terminals(&projects, &deck, size)
+    let mut engine = spawn_terminals_with_scrollback(&projects, &deck, size, workspace.scrollback)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     let mut input = Input::new(size.rows.saturating_sub(4));

@@ -4,7 +4,7 @@ use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, encode_paste, master_terminal, mouse_action, now,
     open_terminals, request_close, resize_terminals, resized, route_wheel, spawn_terminals,
-    terminal_sizes,
+    spawn_terminals_with_socket, terminal_sizes,
 };
 use crate::{
     contracts::{
@@ -207,6 +207,71 @@ fn a_child_with_paste_mode_receives_the_bracketed_region() {
         recorded, expected,
         "the child must receive the region, not stripped bytes"
     );
+}
+
+/// A validated workspace carries its scrollback setting through the session
+/// startup boundary. The capacity is off-screen history, so a whole-grid
+/// peek may include it plus the visible rows.
+#[cfg(target_os = "linux")]
+#[test]
+fn workspace_scrollback_reaches_the_initial_engine() {
+    use std::time::{Duration, Instant};
+
+    const HISTORY: usize = 1;
+    let size = ScreenSize::new(80, 24);
+    let terminal = TerminalId::new("limited");
+    let project = Project {
+        terminal: terminal.clone(),
+        path: PathBuf::from("/"),
+        command: vec![
+            "/bin/sh".to_owned(),
+            "-c".to_owned(),
+            "i=0; while [ $i -lt 32 ]; do printf 'line-%s\\n' \"$i\"; i=$((i + 1)); done"
+                .to_owned(),
+        ],
+        shell_hook: false,
+    };
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), vec![project]);
+    workspace.scrollback = HISTORY;
+    let deck = DeckState::new(workspace.projects.len());
+    let mut engine = spawn_terminals_with_socket(
+        &workspace.projects,
+        &deck,
+        size,
+        workspace.scrollback,
+        std::path::Path::new("/tmp/termdeck-scrollback-test.sock"),
+    )
+    .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline
+        && !matches!(
+            engine.status(&terminal),
+            Some(crate::contracts::TerminalStatus::Exited { code: Some(0) })
+        )
+    {
+        engine.drain_events();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(matches!(
+        engine.status(&terminal),
+        Some(crate::contracts::TerminalStatus::Exited { code: Some(0) })
+    ));
+    let lines = engine.history_lines(&terminal, usize::MAX).unwrap();
+    let viewport_rows = usize::from(engine.frame(&terminal).unwrap().size.rows);
+    assert!(
+        lines.len() <= HISTORY + viewport_rows,
+        "peek exceeded history plus viewport: {lines:?}"
+    );
+    assert!(
+        lines.iter().any(|line| line.contains("line-31")),
+        "latest output was lost: {lines:?}"
+    );
+    assert!(
+        !lines.iter().any(|line| line.contains("line-0")),
+        "evicted history remained visible: {lines:?}"
+    );
+    engine.dispatch(EngineCommand::Shutdown);
 }
 
 /// The raw terminal sends CR for `⏎` and LF for `ctrl+j`. Merging them made

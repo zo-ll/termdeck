@@ -12,8 +12,8 @@ use alacritty_terminal::{
 };
 
 use crate::contracts::{
-    CellContent, CellStyle, CellWidth, Cursor, DEFAULT_SCROLLBACK, Rgb, ScreenCell, ScreenSize,
-    ScrollCommand, ScrollbackPosition, TerminalFrame, TerminalId,
+    CellContent, CellStyle, CellWidth, Cursor, Rgb, ScreenCell, ScreenSize, ScrollCommand,
+    ScrollbackPosition, TerminalFrame, TerminalId,
 };
 
 /// Current-thread adapter from recorded VT output to an owned frame.
@@ -50,7 +50,10 @@ impl EventListener for PtyReplyListener {
 }
 
 impl VtFrameAdapter {
-    pub fn new(terminal: TerminalId, size: ScreenSize) -> Self {
+    /// Builds a terminal with a bounded primary-screen history. The limit is
+    /// the number of off-screen lines; callers that inspect the whole grid
+    /// may additionally receive the visible viewport rows.
+    pub fn new(terminal: TerminalId, size: ScreenSize, scrollback: usize) -> Self {
         let dimensions = VtSize::from(size);
         let replies = Rc::new(RefCell::new(Vec::new()));
         let bells = Rc::new(Cell::new(0));
@@ -58,7 +61,7 @@ impl VtFrameAdapter {
             terminal,
             term: Term::new(
                 Config {
-                    scrolling_history: DEFAULT_SCROLLBACK,
+                    scrolling_history: scrollback,
                     ..Config::default()
                 },
                 &dimensions,
@@ -357,12 +360,14 @@ fn indexed_color(index: u8) -> Option<alacritty_terminal::vte::ansi::Rgb> {
 
 #[cfg(test)]
 mod tests {
-    use crate::contracts::{CellContent, CellWidth, Rgb, ScreenSize, ScrollCommand, TerminalId};
+    use crate::contracts::{
+        CellContent, CellWidth, DEFAULT_SCROLLBACK, Rgb, ScreenSize, ScrollCommand, TerminalId,
+    };
 
     use super::VtFrameAdapter;
 
     fn adapter(size: ScreenSize) -> VtFrameAdapter {
-        VtFrameAdapter::new(TerminalId::new("recording"), size)
+        VtFrameAdapter::new(TerminalId::new("recording"), size, DEFAULT_SCROLLBACK)
     }
 
     /// #97: BEL is the one notification an untaught tool sends for free, and
@@ -465,6 +470,29 @@ mod tests {
         assert_eq!(adapter.scrollback_position().lines_below, 0);
         adapter.scroll(ScrollCommand::Up(1));
         assert_eq!(adapter.scrollback_position().lines_below, 1);
+    }
+
+    /// `scrollback` is the capacity of off-screen history, not the capacity
+    /// of a whole peek. A complete primary-screen peek can include that
+    /// history plus the visible viewport rows.
+    #[test]
+    fn configured_scrollback_bounds_history_but_keeps_the_viewport() {
+        const HISTORY: usize = 1;
+        let size = ScreenSize::new(16, 2);
+        let mut adapter = VtFrameAdapter::new(TerminalId::new("recording"), size, HISTORY);
+        adapter.feed(b"line-0\r\nline-1\r\nline-2\r\nline-3\r\nline-4\r\n");
+
+        let lines = adapter.history_lines(usize::MAX);
+        assert!(
+            lines.len() <= HISTORY + usize::from(size.rows),
+            "history plus viewport exceeded the configured capacity: {lines:?}"
+        );
+        assert!(lines.iter().any(|line| line.contains("line-4")));
+        assert!(
+            !lines.iter().any(|line| line.contains("line-0")),
+            "evicted history remained visible: {lines:?}"
+        );
+        assert_eq!(adapter.scrollback_position().lines_above, HISTORY as u32);
     }
 
     #[test]
