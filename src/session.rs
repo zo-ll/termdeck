@@ -394,7 +394,12 @@ fn dispatch_control(
             }
             crate::ctl::Response::ok(serde_json::json!({ "zoom": deck.zoomed() }))
         }
-        crate::ctl::Control::Input { id, bytes, force } => {
+        crate::ctl::Control::Input {
+            id,
+            bytes,
+            force,
+            paste,
+        } => {
             if !allow_input && !force {
                 return crate::ctl::Response::error(3, "refused: input is disabled; use --force");
             }
@@ -403,6 +408,15 @@ fn dispatch_control(
                 .find(|project| project.terminal.to_string() == id)
             else {
                 return crate::ctl::Response::error(2, "bad request: unknown terminal");
+            };
+            // Agent `paste` stays a paste operation end to end (#120); the
+            // wire is unchanged, only the internal flag distinguishes it.
+            let bytes = if paste {
+                let text = String::from_utf8(bytes)
+                    .expect("ctl input bytes are built from UTF-8 request text");
+                encode_paste(engine, &project.terminal, text)
+            } else {
+                bytes
             };
             let events = dispatch_live_input(engine, project.terminal.clone(), bytes);
             // Truthful acknowledgement (#118): an accepted input is `ok` as
@@ -659,10 +673,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     match reaction {
                         Some(Reaction::Send(UserCommand::Input(command))) => {
                             if let Some(active) = deck.active() {
+                                // A keyboard paste stays a paste operation:
+                                // bracketed while the child holds DEC 2004
+                                // (#120), raw typed bytes otherwise.
                                 let bytes = match command {
                                     crate::contracts::InputCommand::Bytes(bytes) => bytes,
                                     crate::contracts::InputCommand::Paste(text) => {
-                                        text.into_bytes()
+                                        encode_paste(&engine, &projects[active].terminal, text)
                                     }
                                 };
                                 dispatch_live_input(
@@ -945,11 +962,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         && deck.modal().is_none()
                         && !deck.scrollback()
                     {
-                        dispatch_live_input(
-                            &mut engine,
-                            projects[active].terminal.clone(),
-                            text.into_bytes(),
-                        );
+                        // The outer paste stays a paste operation: bracketed
+                        // while the child holds DEC 2004 (#120).
+                        let bytes = encode_paste(&engine, &projects[active].terminal, text);
+                        dispatch_live_input(&mut engine, projects[active].terminal.clone(), bytes);
                     }
                 }
             }

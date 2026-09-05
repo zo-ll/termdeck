@@ -172,6 +172,12 @@ impl VtFrameAdapter {
         self.term.mode().intersects(TermMode::MOUSE_MODE)
     }
 
+    /// Whether the child enabled bracketed paste (DEC 2004): the session
+    /// re-emits pastes as delimited regions while this holds (#120).
+    pub fn bracketed_paste(&self) -> bool {
+        self.term.mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
     /// The retained primary-screen lines, oldest to newest.
     pub fn history_lines(&self, max: usize) -> Vec<String> {
         if self.alt_screen() {
