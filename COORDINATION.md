@@ -1234,6 +1234,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   gate + commit + handoff'). Working. Next: #129-A done → critic (pre-
   written assignment incl. the README cargo-run reconcile with
   default-run) → merge → close #129 → #135 → close #132/#131.
+- 2026-09-05 19:47: #129-A DONE (codex, 571f0da: Cargo.toml +
+  cli/mod.rs + main.rs + bin/termctl.rs; help for both binaries +
+  per-verb, unknown-flag error+usage hint, default-run=termdeck,
+  repository metadata; gate 399 lib + 5 termctl + 1 main ON ITS BASE;
+  worktree clean). REVIEW FLAG: hand-back says 'usage exit code 3' —
+  but #133's critic pinned termdeck usage=2 (termctl 3 = ctl-refusal
+  propagation); assignment patched with the corrected premise before
+  dispatch. #129-A routed to CLAUDE critic (patched assignment incl.
+  README default-run reconcile). Verdict ping inbox 129-cli-help.critic
+  .ping.
 - 2026-09-05: #133 DONE (claude, fb37af3, +125/-3: cli/mod.rs +
   README; marker: `--` ends the verbs — termdeck -- check, --config
   f.yaml -- check; bare verbs unchanged; cwd-dependent resolution
