@@ -174,7 +174,16 @@ impl VtFrameAdapter {
 
     /// The retained primary-screen lines, oldest to newest.
     pub fn history_lines(&self, max: usize) -> Vec<String> {
-        if self.alt_screen() || max == 0 {
+        if self.alt_screen() {
+            return Vec::new();
+        }
+        self.active_screen_lines(max)
+    }
+
+    /// Lines from the grid currently displayed by the terminal, whether that
+    /// is the primary screen or an application-owned alternate screen.
+    pub fn active_screen_lines(&self, max: usize) -> Vec<String> {
+        if max == 0 {
             return Vec::new();
         }
         let grid = self.term.grid();
@@ -466,6 +475,37 @@ mod tests {
         assert_eq!(
             adapter.history_lines(1),
             vec![history.last().unwrap().clone()]
+        );
+    }
+
+    #[test]
+    fn active_screen_lines_follow_the_main_and_alternate_grids() {
+        let mut adapter = adapter(ScreenSize::new(8, 2));
+        adapter.feed(b"main");
+        assert!(
+            adapter
+                .active_screen_lines(2)
+                .iter()
+                .any(|line| line.contains("main"))
+        );
+
+        adapter.feed(b"\x1b[?1049h");
+        adapter.feed(b"alt");
+        assert!(adapter.alt_screen());
+        assert!(adapter.history_lines(2).is_empty());
+        assert!(
+            adapter
+                .active_screen_lines(2)
+                .iter()
+                .any(|line| line.contains("alt"))
+        );
+
+        adapter.feed(b"\x1b[?1049l");
+        assert!(
+            adapter
+                .active_screen_lines(2)
+                .iter()
+                .any(|line| line.contains("main"))
         );
     }
 

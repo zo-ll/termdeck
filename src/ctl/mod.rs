@@ -224,17 +224,23 @@ pub fn dispatch<E: TerminalEngine>(request: Request, mut state: State<'_, E>) ->
             else {
                 return Response::error(2, "bad request: unknown terminal");
             };
+            let max = request.lines.unwrap_or(30);
             let Some(lines) = state
                 .engine
-                .history_lines(&project.terminal, request.lines.unwrap_or(30))
+                .active_screen_lines(&project.terminal, max)
+                .or_else(|| state.engine.history_lines(&project.terminal, max))
             else {
-                return Response::error(1, "history is unavailable for this terminal");
+                return Response::error(1, "active screen is unavailable for this terminal");
             };
+            let alt_screen = state
+                .engine
+                .metadata(&project.terminal)
+                .is_some_and(|metadata| metadata.alt_screen);
             Response::ok(json!({
                 "id": project.terminal.to_string(),
                 "lines": lines,
-                "alt_screen": state.engine.metadata(&project.terminal)
-                    .is_some_and(|metadata| metadata.alt_screen),
+                "alt_screen": alt_screen,
+                "screen": if alt_screen { "alt" } else { "main" },
             }))
         }
         "notify" => match request.msg {
@@ -658,14 +664,13 @@ mod tests {
         let projects = vec![project("one")];
         let terminal = projects[0].terminal.clone();
         let mut engine = FakeEngine::new([terminal.clone()]);
-        engine.set_history_lines(
+        engine.set_active_screen_lines(
             &terminal,
             vec!["before viewport".to_owned(), "tail".to_owned()],
         );
         engine.set_metadata(
             &terminal,
             TerminalMetadata {
-                alt_screen: true,
                 ..Default::default()
             },
         );
@@ -691,7 +696,8 @@ mod tests {
         );
         let data = peek.data.unwrap();
         assert_eq!(data["lines"], serde_json::json!(["tail"]));
-        assert_eq!(data["alt_screen"], true);
+        assert_eq!(data["alt_screen"], false);
+        assert_eq!(data["screen"], "main");
         let version = dispatch(
             Request {
                 schema: SCHEMA.to_owned(),
@@ -709,6 +715,44 @@ mod tests {
             state(&workspace, &engine, &projects, &deck, &mut notifies),
         );
         assert!(version.ok);
+    }
+
+    #[test]
+    fn peek_returns_active_alternate_screen_lines() {
+        let projects = vec![project("one")];
+        let terminal = projects[0].terminal.clone();
+        let mut engine = FakeEngine::new([terminal.clone()]);
+        engine.set_history_lines(&terminal, vec!["main history".to_owned()]);
+        engine.set_active_screen_lines(
+            &terminal,
+            vec!["vim · src/main.rs".to_owned(), "fn main() {}".to_owned()],
+        );
+        engine.set_metadata(
+            &terminal,
+            TerminalMetadata {
+                alt_screen: true,
+                ..Default::default()
+            },
+        );
+        let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
+        let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
+
+        let peek = dispatch(
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "peek".to_owned(),
+                id: Some("one".to_owned()),
+                lines: Some(1),
+                ..Default::default()
+            },
+            state(&workspace, &engine, &projects, &deck, &mut notifies),
+        );
+
+        let data = peek.data.unwrap();
+        assert_eq!(data["lines"], serde_json::json!(["fn main() {}"]));
+        assert_eq!(data["alt_screen"], true);
+        assert_eq!(data["screen"], "alt");
     }
 
     #[test]

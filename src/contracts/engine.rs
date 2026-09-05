@@ -66,4 +66,10 @@ pub trait TerminalEngine {
     fn history_lines(&self, _terminal: &TerminalId, _max: usize) -> Option<Vec<String>> {
         None
     }
+    /// Returns up to `max` lines from the terminal's active grid, oldest to
+    /// newest. This is the main grid normally and the alternate grid while a
+    /// full-screen application owns the pane.
+    fn active_screen_lines(&self, _terminal: &TerminalId, _max: usize) -> Option<Vec<String>> {
+        None
+    }
 }
