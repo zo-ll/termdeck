@@ -1370,6 +1370,22 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   scheduled-advisories track). The #112/#114/#94 resume-on-baseline decs are
   the user's.
 
+- 2026-09-05 EOD (WAVE-2 DECIDED FOR TOMORROW, user): status block already
+  corrected (10a3cc6) — honest about RED CI since 8ae14fc (zsh hook failure
+  under real zsh; #137 ambient-TERMDECK_SOCK; #138 exhibit A). My earlier
+  "gate green" ledger claims were local-only and env-polluted (ran inside the
+  deck with TERMDECK_SOCK set) — owned; going forward gate = CI run, not
+  local invocation. Second astra audit (AUDIT-2026-09-05.md, b3df768) filed
+  #136-#147; probes archived (.coordinator/journal/audit-2026-09-05-probes,
+  3ba731f). WAVE-2 ORDER (locked, follows the audit + status block): STEP 0
+  CI-green — #137 (test env) + zsh-hook CI failure + #138 (merge gate = CI
+  green) — then #143 (panic guard, amplifies #140, fix first) → P1s #139
+  #140 #142 #141 → P2s #136 #144 #145 #146 #147 (+ audit extras: socket_dir
+  symlink hardening, lru/paste/serde_yaml triage). Pending offers for
+  tomorrow: bound critic agent (.claude/agents/critic.md + claude --agent
+  critic) before the wave-2 loop; lane plan codex/claude/critic idle + ready.
+  NO DISPATCH TODAY. Safe to close.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
