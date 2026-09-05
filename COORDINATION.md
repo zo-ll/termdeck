@@ -1186,6 +1186,25 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   retry-honesty + fail-on-first preservation, advisory visibility, e2e
   timeout fail-fast, boundary; pass ≈ closes #130). Verdict ping inbox
   130-flake-story.critic.ping.
+- 2026-09-05: #130-PART2 CRITIC VERDICT = PASS → MERGED + #130 CLOSED
+  (d45c7db; 401 lib + 4; auto-close keyword; record comment posted).
+  The critic ran every workflow shell path locally: --skip removes
+  exactly 1 test (400/0/1 filtered + 4 bin), no --no-fail-fast anywhere;
+  retry loop deterministic-failure-proven (2 attempts, 2 warnings, then
+  error+exit 1 — real regressions still red); rename guard hazard PROVEN
+  (bogus filter → '0 passed, 401 filtered' EXIT 0 — guard catches it);
+  advisories gated via steps.audit.outcome==failure (correct context) +
+  warning AND step-summary; e2e 0.10s vs 5s timeout; boundary 2 files;
+  gate 401+4 ×2. NITS (backlog 41): retry can launder a 50% intermittent
+  bug (~75% green) — write 'needed a retry' into STEP_SUMMARY; advisories
+  can't distinguish vulns vs DB-unreachable; continue-on-error = 
+  annotation-only signal → tracked as NEW ISSUE #134 (scheduled advisories
+  job opens an issue); -uo pipefail leaves outside-loop commands
+  unguarded; --skip substring filter overlap risk.
+- 2026-09-05: #132 (scrollbar final frame) DISPATCHED to claude (WORKING,
+  transcript-verified; worktree coord/132-scrollbar-frame off d45c7db;
+  folds into #125's schedule_expiry_repaint pattern, injected clock,
+  shared-deadline perf item = do-the-cheap-or-note).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
