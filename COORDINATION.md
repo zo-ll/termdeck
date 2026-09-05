@@ -461,6 +461,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
     by peek (codex's is). canNOT verify idle ⇒ #113 NOT dispatched (hard
     rule). USER eyeball pending: is 113-pin at claude's composer in the deck?
   - Pending: #115 (scrollbar) queued on claude lane AFTER #113 merges.
+  - LESSON (user-caught, both lanes): I killed the claude pane on a misread —
+    flat CPU + blank peek ≠ idle; claude is network-bound (waits on the API,
+    low CPU mid-turn) and its TUI alt-screen is invisible to termctl peek.
+    Transcript evidence later confirmed the killed session (e6f58c5a, 583KB)
+    was WORKING (brief received; last-prompt mid-cycle). Old claude had NOT
+    written to disk (worktree clean) — nothing lost. New claude re-dispatched,
+    verified working via transcript. RULE (baked in): never kill a worker on
+    ambiguity; when peek is blind, verify via the claude session transcript
+    (~/.claude/projects/<munged-dir>/*.jsonl — user msgs + last-entry types
+    show idle-vs-working) or ask the user (deck is visible to them); finish
+    markers/pings are the durable source of truth.
+  - In flight now (verified): 111-notify-fix codex Working; 113-pin claude
+    Working (transcript: mid-implementation, deck renderer).
   - Lessons logged: TUIs self-updating at launch; peek blindness for claude's
     alt-screen; Enter-as-submit unreliable in codex TUI (relaunch instead).
 
