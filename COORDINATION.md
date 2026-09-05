@@ -832,6 +832,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   to the critic (2nd assignment, .scratch/review/nb-cleanup.critic.md).
   Pending: claude-integration → merge #128 → merge NB (rebase) → close
   #118/#128 → rebuild → #119 + UI NB batch (#113/#115).
+- 2026-09-05: NB-CLEANUP CRITIC VERDICT = PASS (inbox nb-cleanup-2026-09-05.
+  critic.ping): all 3 NBs resolved — (1) fake active_screen_lines None-
+  fallback WITH a test exercising the fallback path; (2) deadline test margins
+  widened 10x (still discriminating); (3) zero-write requeue bounded by the
+  existing deadline (no infinite requeue). Gate 357 lib + 4 green on its
+  base; the 1 known sandbox flake re-verified environmental (fails on main
+  too). NO NITS → pre-approved to merge (standing approval); executes after
+  #128 lands: rebase NB onto post-#118 post-#128 main, re-gate, merge.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
