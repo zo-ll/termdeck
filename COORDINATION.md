@@ -1,9 +1,9 @@
 # Coordination — Termdeck
 
 Status: ACTIVE — tracker on GitHub.
-Open: #81 (split god-files), #82 (CI), #83 (this doc), #33 (animations, design-first), #71 (notifications, research), #72 (agent API, research).
-Recently closed: #74 (alt-screen wheel), #75 (PTY sizing), #76 (empty stack), #77 (declutter), #64 (live tail), #66 (promote-n), #67 (sheet reopen).
-Freshness: 2026-09-04 — main `a0668a9`, gate green (257 tests).
+Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #111 (termctl notify not visible — BUG), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
+Recently closed: everything through #110 (shell integration) + #112 research brief committed (5ddf02c).
+Freshness: 2026-09-04 (takeover) — main `5ddf02c`, gate green (324 tests: 320 lib + 4 integration).
 
 ## Goal
 
@@ -221,14 +221,39 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   -7 dead-field removal carried; NB#1 fixed) — critic re-review queued.
 
 ## NEXT ACTIONS
-1. Finish #83 (this doc) — commit on main; note it on issue #83.
-2. Dispatch #82 (CI) to codex in `personal:codex-82`, #81 (split) to codex in
-   `personal:codex-81`, in parallel. Cross-ownership note: #81 touches
-   Claude-owned UI files — pure-move exception, coordinator-approved per user order.
-3. Route each finished slice to the CRITIC for independent review (coordinator never
-   self-reviews); coordinator merges only after critic pass + user approval.
-4. Parked #33/#71/#72 stay parked until the user decides.
-5. Worker protocol in effect (see Decisions).
+TAKEOVER 2026-09-04 — new coordinator (pi). Baseline: main `5ddf02c`, 324 green
+(320 lib + 4 integration). No workers in flight; no worktrees; relay alive;
+inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
+
+1. #111 (BUG: explicit termctl notify not visible in the deck) — triage + fix.
+   Root-cause pointers in the issue body: caller_pane() attribution in
+   src/ctl/mod.rs vs Project::terminal identity normalization; render path in
+   src/ui/deck.rs (NotifyKind::Message from non-active pane). One bounded slice;
+   cross-lane ownership adjudicated at dispatch (ctl primary; ui render touch
+   cross-approved via the #108/#84 precedent). No design-first gate — it is a bug
+   in a shipped feature (#71/#97/#108) and currently blocks the fitness-agent
+   notify workflow.
+2. #113 (pin terminal at top of preview stack) — design-first: indicator +
+   binding decision documented in a slice doc, then ONE bounded UI slice
+   (Claude lane) with fixtures. Run AFTER #111 merges (shared ui/deck.rs).
+3. #115 (minimal per-pane scrollbar, auto-hide on idle) — same shape as #113:
+   design decision documented (master-first, display-only v1, injected-clock
+   idle timer per the demoted()/TERMDECK_BLESS pattern) + ONE bounded UI slice
+   (Claude lane). SERIALIZE with #113 (shared ui/deck.rs + ui/state.rs).
+4. #94 (MCP adapter, held) — USER decision: live handshake test from the
+   branch binary → merge, or drop. Until decided it stays on coord/94-ctl-mcp
+   (REBASE onto main when picked up). Unblocks #114 layer 1.
+5. #112 (persistent + agent-aware deck) — USER DECISION GATE. Brief §6 Q1–Q8;
+   load-bearing Q1 (persistence desire A/B/both), Q2 (B's justification), Q3
+   (constitution amendment: AGENTS.md/PLAN.md/DESIGN.md one-line clause for A;
+   re-scope for B). Nothing dispatches from the brief until answered. If
+   A+Pa+Pb approved → slices to codex (config/lifecycle resume; ctl event
+   drain) + cross-lane Pb UI badge (claude).
+6. #114 (agent discovery) — research-first: scope capabilities-verb shape /
+   doc home / certification harness before impl. Layer 1 = #94 merge +
+   handshake. Then slices: capabilities/schema verb (codex, ctl.v1 additive),
+   termctl --help overhaul (codex), docs/agents/TERMDECK.md (docs).
+7. #33 (animations) — parked; skip per user directive.
 - 2026-09-04: TAKEOVER — previous coordinator closed (its slips: critic booted
   as plain shell/full-skill pi, codex workers off-recipe). This coordinator
   now runs window 0. Canonical env spec committed to the coordinator skill
@@ -402,6 +427,20 @@ Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
   binary rebuilt — bash/zsh/fish panes auto-notify on exit!=0 or >=10s;
   TERMDECK_NOTIFY knobs; no-rearm; nested-safe). Open set: #94 (MCP held),
   #33 (animations parked). Main 320 lib.
+- 2026-09-04 (TAKEOVER): new coordinator (pi/muse) — env detected termdeck
+  (termctl live; master pane only; NO worker panes exist — recreate per the env
+  runbook at dispatch). Baseline: main `5ddf02c`, 324 green; the EOD snapshot's
+  75deb3d gained the research brief 5ddf02c. Relay (relay-termdeck.sh pid
+  31177) alive; inbox empty — relay-log pings 21:58–22:53 are the
+  FITNESS-AGENT project's tasks (delivered/consumed, not termdeck). tmux
+  `default` holds termdeck/pi windows only. Open set refreshed (see Status).
+  NO dispatch this turn — analysis + plan delivered; #111, then #113/#115
+  (serialized on ui/deck.rs) ready on user go; #94/#112 are user decision
+  gates. HYGIENE DEBT: COORDINATION.md rotation long overdue — handoff bullets
+  live in THREE sections (## Handoffs, Durable resumption, LIVE STATE), not
+  one; consolidation + eviction of the oldest >15 to the journal (most 09-03
+  history is already archived) still owed.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
