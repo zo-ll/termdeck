@@ -1018,6 +1018,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   parser-bounds slice → then #123. In flight: critic→#122; codex→126-
   integration.
 
+- 2026-09-05: #126-slice MERGED (f5bda59, 389 lib + 4; issue OPEN).
+  #122 CRITIC VERDICT = PASS → MERGED (9662658, 390 lib + 4) + CLOSED (with
+  release note: tombstoned-input code 2→3 vs #121). NBs queued (backlog now
+  13): #122-NB1 code 2→3 visible change (release-noted); NB2 peek/promote
+  still code 2 for tombstoned (uneven); NB3 promote discards deck.apply()
+  bool (always master:true, undefended); NB4 last+force close returns ok
+  pre-close (pre-existing class); NB5 queued:true test relies on fixture
+  timing not forced state. #126-PARSER-BOUNDS dispatched to codex (WORKING;
+  worktree coord/126-parser-bounds off b23fa16; completes #126 on second
+  review). In flight: codex→parser-bounds; claude-critic idle; claude-impl
+  idle. Audit closed: #117 #118 #119 #120 #121 #122 #124 (+NB). #126 open
+  (part2 in flight). Remaining: #123 #125 #129 #130 #131.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
