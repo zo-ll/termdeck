@@ -1,8 +1,11 @@
 # Coordination — Termdeck
 
-Status: ACTIVE — tracker on GitHub. ★ ASTRA AUDIT COMPLETE (all 15 issues + review-born #132-#135 closed, 2026-09-05).
-Open (user-gated): #94 (MCP HELD), #112 (persistent+agent-aware deck DECISION GATE), #114 (agent discovery), #33 (animations parked). #134 (CI scheduled advisories) = track on the CI lane.
-Freshness: 2026-09-05 — main `ca72e4f`, gate green (408 lib + 5 termctl + 1 main + docs).
+Status: ACTIVE — tracker on GitHub. **NOT a clean baseline.** The first astra audit's 15 issues + review-born #132-#135 are closed, but a second audit of `b3df768` (`docs/AUDIT-2026-09-05.md`) found 13 further defects, 4 of them P1, and CI has been red on `main` since `8ae14fc`. The ★ COMPLETE marker this line used to carry was wrong on both counts.
+Gate: **RED.** CI fails on `main` (run 33983698411 on `b3df768`, and every run since 2026-09-05 16:00) — see #136. The local `cargo test --all-targets` also fails, on a different test, off this machine — see #137. 408 library tests pass in both places; that number was never the whole gate.
+Open — correctness (fix before any new feature work): #136 (spawn drops first input byte; the live CI failure), #139 (paste executes payload, P1), #140 (small geometry kills the session, P1), #141 (shutdown leaves escaped descendants, P1), #142 (unbounded parser memory, P1), #143 (panic guard aborts; fix first — it amplifies #140), #144 (picker Unicode panic + discovery collision), #145 (termctl help swallow + zoom contract), #146 (PID reuse + connect timeout), #147 (bash hook clobbers `$?`), #137 (gate depends on ambient `TERMDECK_SOCK`).
+Open — process: #138 ("gate green" must mean CI green; this status block is exhibit A), #134 (CI scheduled advisories).
+Open (user-gated): #94 (MCP HELD), #112 (persistent+agent-aware deck DECISION GATE), #114 (agent discovery), #33 (animations parked).
+Freshness: 2026-09-05 — main `b3df768`; CI run 33983698411 = **failure**. Per #138, this line cites a run, not a local invocation.
 
 ## Goal
 
@@ -38,6 +41,22 @@ The historical #1-#14 issue/slice/Waves tables were pruned 2026-09-05 per #129 (
 ## Handoffs
 
 Rotated history: `.coordinator/journal/` (latest archive: 2026-09).
+- 2026-09-05 (post-audit correction): second astra audit of `b3df768` recorded in
+  `docs/AUDIT-2026-09-05.md`. 13 findings (4 P1), all 13 independently re-verified —
+  no false positives; 5 reproduced from scratch (#140 deck panic at 80x4/120x4/144x5,
+  #144 both halves, #145 help swallow). One correction to the report: its "584 panics /
+  2860 cases" render sweep is a DEBUG figure — `[profile.release]` sets no
+  `overflow-checks`, so at 120x5 the release build wraps and renders garbage instead of
+  panicking, while 80x4 still crashes via a ratatui buffer bound. The sheet `clamp`
+  (#140a) panics in both profiles and is the one that kills a live session.
+  Filed #139-#147; #137 was already the audit's finding 7.
+  AUDIT BLIND SPOT worth keeping: it ran entirely locally and says so
+  ("the live workflow was not run remotely"). It correctly identified that absent
+  zsh/fish make the 408 local passes no evidence for those shells — and then did not
+  open GitHub Actions, where exactly that bug (#136, zsh receives `alse` for `false`)
+  had been failing every push for five hours. A local gate cannot see a shell it does
+  not have, or an environment variable it already inherits; both classes landed in the
+  same session. That is #138.
 - 2026-09-03 (end of day): main green 257 tests (`6c00bcc` + ledger). Shipped:
   #74 alt-screen wheel (incl. hotfix for a broken-merge lapse), #76 empty-stack,
   #75 app-width sizing, #77 declutter + scan, #66/#67 (#64/NB cleanup prior).
