@@ -88,6 +88,18 @@ the parent environment.
 Closing Termdeck closes its shells. Confirmed exit sends `SIGTERM` to owned
 process groups, waits two seconds, then sends `SIGKILL` to survivors. An exited
 terminal preserves its frame, scrollback, and exit code and can be respawned.
+
+Ownership is enforced session-wide, not group-wide: interactive shells create
+separate process groups for jobs, so on Linux shutdown enumerates session
+members and descendants per PID via `/proc` (`kill(-id)` only addresses a
+process group; there is no session-signalling syscall), guarded against PID
+reuse by start times recorded at spawn, with zombies excluded. The force stage
+fires when the process group OR session is still alive — a dead shell with live
+jobs still gets killed. Reader/waiter joins are bounded (~0.5 s) and then
+detach stragglers instead of hanging, so confirmed exit completes within grace
+(2 s) + settle (0.5 s) + join (0.5 s). Non-Linux retains group-only behavior
+(documenting in the code).
+
 RAII guards, panic hooks, and handled signals must restore the outer terminal.
 
 ## Delivery sequence
