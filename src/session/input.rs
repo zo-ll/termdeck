@@ -28,6 +28,13 @@ pub(super) fn dispatch_scroll(
 /// in these, and paste-aware children want them back (#120).
 pub(super) const PASTE_OPEN: &[u8] = b"\x1b[200~";
 pub(super) const PASTE_CLOSE: &[u8] = b"\x1b[201~";
+const MOUSE_OPEN: &[u8] = b"\x1b[<";
+/// The largest explicit paste capture the outer terminal accepts. An
+/// unterminated paste is discarded after this point rather than retaining an
+/// unbounded amount of input in the session loop.
+pub(super) const CAPTURE_PAYLOAD: usize = 64 * 1024;
+pub(super) const MOUSE_SEQUENCE_CAP: usize = 256;
+const ESC_SEQUENCE_CAP: usize = PASTE_OPEN.len();
 
 /// Encodes a paste for one child (#120): bracketed while the child holds
 /// DEC 2004, raw bytes otherwise. Typed input (`Bytes`) and agent `text`
@@ -141,7 +148,29 @@ fn x10_mouse(up: bool, column: u16, row: u16, utf8: bool) -> Vec<u8> {
 
 #[derive(Default)]
 pub(super) struct KeyReader {
+    /// Bytes not yet assigned to a partial sequence.
     pub(super) bytes: Vec<u8>,
+    state: ParseState,
+}
+
+/// The small set of terminal sequences the outer UI owns. Each state owns a
+/// bounded capture; once that capture fills, the matching discard state keeps
+/// consuming through the terminator without retaining or replaying hostile
+/// input as shell keys.
+#[derive(Default)]
+enum ParseState {
+    #[default]
+    Ground,
+    Escape(Vec<u8>),
+    Paste {
+        payload: Vec<u8>,
+        close_match: usize,
+    },
+    Mouse(Vec<u8>),
+    DiscardPaste {
+        close_match: usize,
+    },
+    DiscardMouse,
 }
 
 pub(super) enum InputEvent {
@@ -250,112 +279,278 @@ impl KeyReader {
 
     pub(super) fn decode(&mut self, flush_escape: bool) -> Vec<InputEvent> {
         let mut events = Vec::new();
-        while !self.bytes.is_empty() {
-            if self.bytes.starts_with(PASTE_OPEN) {
-                let Some(end) = self
-                    .bytes
-                    .windows(PASTE_CLOSE.len())
-                    .position(|part| part == PASTE_CLOSE)
-                else {
-                    break;
-                };
-                let text = String::from_utf8_lossy(&self.bytes[PASTE_OPEN.len()..end]).into_owned();
-                self.bytes.drain(..end + PASTE_CLOSE.len());
-                events.push(InputEvent::Paste(text));
-                continue;
-            }
-            // A fragmented opener is not an escape key: `ESC[2` split from
-            // `00~` must wait for the rest like any other partial sequence
-            // (#120). At flush time it decodes as before (escape plus
-            // literals), the same tradeoff partial sequences already make.
-            if !flush_escape
-                && self.bytes.len() < PASTE_OPEN.len()
-                && PASTE_OPEN.starts_with(self.bytes.as_slice())
-            {
-                break;
-            }
-            if self.bytes.starts_with(b"\x1b[<") {
-                let Some(end) = self.bytes[3..]
-                    .iter()
-                    .position(|byte| matches!(byte, b'M' | b'm'))
-                else {
-                    break;
-                };
-                let end = end + 3;
-                let event = mouse_event(&self.bytes[3..end], self.bytes[end]);
-                self.bytes.drain(..=end);
-                if let Some(event) = event {
-                    events.push(event);
-                }
-                continue;
-            }
-            let sequence = [
-                // The modified arrows come first: `\x1b[1;2A` must not be
-                // read as an escape followed by junk.
-                (b"\x1b[1;2A".as_slice(), Key::ShiftUp),
-                (b"\x1b[1;2B".as_slice(), Key::ShiftDown),
-                (b"\x1b[Z".as_slice(), Key::ShiftTab),
-                (b"\x1b[A".as_slice(), Key::Up),
-                (b"\x1b[B".as_slice(), Key::Down),
-                (b"\x1b[C".as_slice(), Key::Right),
-                (b"\x1b[D".as_slice(), Key::Left),
-                (b"\x1b[5~".as_slice(), Key::PageUp),
-                (b"\x1b[6~".as_slice(), Key::PageDown),
-            ];
-            if let Some((bytes, key)) = sequence
-                .iter()
-                .find(|(bytes, _)| self.bytes.starts_with(bytes))
-            {
-                self.bytes.drain(..bytes.len());
-                events.push(InputEvent::Key(*key));
-                continue;
-            }
-            // Half of a sequence is not an escape key: wait for the rest
-            // rather than tearing `\x1b[1;2B` into an escape and `1;2B`.
-            if !flush_escape
-                && sequence
-                    .iter()
-                    .any(|(bytes, _)| bytes.starts_with(self.bytes.as_slice()))
-            {
-                break;
-            }
-            if self.bytes[0] == 0x1b {
-                if self.bytes.len() == 1 && !flush_escape {
-                    break;
-                }
-                self.bytes.remove(0);
-                events.push(InputEvent::Key(Key::Escape));
-                continue;
-            }
-            if !self.bytes[0].is_ascii() {
-                match std::str::from_utf8(&self.bytes) {
-                    Ok(text) => {
-                        let character = text.chars().next().expect("nonempty input");
-                        self.bytes.drain(..character.len_utf8());
-                        events.push(InputEvent::Key(Key::Char(character)));
-                        continue;
-                    }
-                    Err(error) if error.error_len().is_none() => break,
-                    Err(_) => {
-                        self.bytes.remove(0);
-                        events.push(InputEvent::Key(Key::Char('\u{fffd}')));
-                        continue;
-                    }
-                }
-            }
-            let byte = self.bytes.remove(0);
-            let key = match byte {
-                // `⏎` is CR; LF is what `ctrl+j` sends, and it falls through
-                // to the control range below so it stays that key (#95).
-                b'\r' => Key::Enter,
-                b'\t' => Key::Tab,
-                0x7f => Key::Backspace,
-                1..=26 => Key::Ctrl((b'a' + byte - 1) as char),
-                byte => Key::Char(byte as char),
+        loop {
+            let progressed = match self.state {
+                ParseState::Ground => self.decode_ground(flush_escape, &mut events),
+                ParseState::Escape(_) => self.decode_escape(flush_escape, &mut events),
+                ParseState::Paste { .. } => self.decode_paste(&mut events),
+                ParseState::Mouse(_) => self.decode_mouse(&mut events),
+                ParseState::DiscardPaste { .. } => self.discard_paste(),
+                ParseState::DiscardMouse => self.discard_mouse(),
             };
-            events.push(InputEvent::Key(key));
+            if !progressed {
+                break;
+            }
         }
         events
+    }
+
+    fn decode_ground(&mut self, flush_escape: bool, events: &mut Vec<InputEvent>) -> bool {
+        if self.bytes.starts_with(PASTE_OPEN) {
+            self.bytes.drain(..PASTE_OPEN.len());
+            self.state = ParseState::Paste {
+                payload: Vec::new(),
+                close_match: 0,
+            };
+            return true;
+        }
+        if self.bytes.starts_with(MOUSE_OPEN) {
+            self.bytes.drain(..MOUSE_OPEN.len());
+            self.state = ParseState::Mouse(Vec::new());
+            return true;
+        }
+        if let Some((bytes, key)) = key_sequence()
+            .iter()
+            .find(|(bytes, _)| self.bytes.starts_with(bytes))
+        {
+            self.bytes.drain(..bytes.len());
+            events.push(InputEvent::Key(*key));
+            return true;
+        }
+        let Some(byte) = self.bytes.first().copied() else {
+            return false;
+        };
+        if byte == 0x1b {
+            self.bytes.remove(0);
+            self.state = ParseState::Escape(vec![byte]);
+            return true;
+        }
+        if !byte.is_ascii() {
+            return self.decode_utf8(flush_escape, events);
+        }
+        self.bytes.remove(0);
+        let key = match byte {
+            // `⏎` is CR; LF is what `ctrl+j` sends, and it falls through
+            // to the control range below so it stays that key (#95).
+            b'\r' => Key::Enter,
+            b'\t' => Key::Tab,
+            0x7f => Key::Backspace,
+            1..=26 => Key::Ctrl((b'a' + byte - 1) as char),
+            byte => Key::Char(byte as char),
+        };
+        events.push(InputEvent::Key(key));
+        true
+    }
+
+    fn decode_escape(&mut self, flush_escape: bool, events: &mut Vec<InputEvent>) -> bool {
+        let ParseState::Escape(mut partial) = std::mem::take(&mut self.state) else {
+            unreachable!("escape decoder only runs in the escape state");
+        };
+        if partial == PASTE_OPEN {
+            self.state = ParseState::Paste {
+                payload: Vec::new(),
+                close_match: 0,
+            };
+            return true;
+        }
+        if partial == MOUSE_OPEN {
+            self.state = ParseState::Mouse(Vec::new());
+            return true;
+        }
+        if let Some((_, key)) = key_sequence().iter().find(|(bytes, _)| *bytes == partial) {
+            events.push(InputEvent::Key(*key));
+            return true;
+        }
+        if is_escape_prefix(&partial) && partial.len() < ESC_SEQUENCE_CAP {
+            if let Some(byte) = self.bytes.first().copied() {
+                self.bytes.remove(0);
+                partial.push(byte);
+                self.state = ParseState::Escape(partial);
+                return true;
+            }
+            if !flush_escape {
+                self.state = ParseState::Escape(partial);
+                return false;
+            }
+        }
+        // A timeout or a byte outside our owned sequence language turns the
+        // leading ESC into its ordinary key and gives the remaining bytes a
+        // fresh ground-state parse.
+        let rest = partial.split_off(1);
+        self.bytes.splice(..0, rest);
+        events.push(InputEvent::Key(Key::Escape));
+        true
+    }
+
+    fn decode_paste(&mut self, events: &mut Vec<InputEvent>) -> bool {
+        let Some(byte) = self.bytes.first().copied() else {
+            return false;
+        };
+        self.bytes.remove(0);
+        let ParseState::Paste {
+            mut payload,
+            mut close_match,
+        } = std::mem::take(&mut self.state)
+        else {
+            unreachable!("paste decoder only runs in the paste state");
+        };
+        let mut overflow = false;
+        if byte == PASTE_CLOSE[close_match] {
+            close_match += 1;
+        } else {
+            if close_match > 0 {
+                overflow |= !append_capture(&mut payload, &PASTE_CLOSE[..close_match]);
+                close_match = 0;
+            }
+            if byte == PASTE_CLOSE[0] {
+                close_match = 1;
+            } else {
+                overflow |= !append_capture(&mut payload, &[byte]);
+            }
+        }
+        if close_match == PASTE_CLOSE.len() {
+            events.push(InputEvent::Paste(
+                String::from_utf8_lossy(&payload).into_owned(),
+            ));
+        } else if overflow {
+            self.state = ParseState::DiscardPaste { close_match };
+        } else {
+            self.state = ParseState::Paste {
+                payload,
+                close_match,
+            };
+        }
+        true
+    }
+
+    fn decode_mouse(&mut self, events: &mut Vec<InputEvent>) -> bool {
+        let Some(byte) = self.bytes.first().copied() else {
+            return false;
+        };
+        self.bytes.remove(0);
+        let ParseState::Mouse(mut payload) = std::mem::take(&mut self.state) else {
+            unreachable!("mouse decoder only runs in the mouse state");
+        };
+        if matches!(byte, b'M' | b'm') {
+            if let Some(event) = mouse_event(&payload, byte) {
+                events.push(event);
+            }
+        } else if payload.len() == MOUSE_SEQUENCE_CAP {
+            self.state = ParseState::DiscardMouse;
+        } else {
+            payload.push(byte);
+            self.state = ParseState::Mouse(payload);
+        }
+        true
+    }
+
+    fn discard_paste(&mut self) -> bool {
+        let Some(byte) = self.bytes.first().copied() else {
+            return false;
+        };
+        self.bytes.remove(0);
+        let ParseState::DiscardPaste { close_match } = std::mem::take(&mut self.state) else {
+            unreachable!("discard parser only runs in the discard-paste state");
+        };
+        let close_match = next_marker_match(close_match, byte);
+        if close_match < PASTE_CLOSE.len() {
+            self.state = ParseState::DiscardPaste { close_match };
+        }
+        true
+    }
+
+    fn discard_mouse(&mut self) -> bool {
+        let Some(byte) = self.bytes.first().copied() else {
+            return false;
+        };
+        self.bytes.remove(0);
+        if matches!(byte, b'M' | b'm') {
+            self.state = ParseState::Ground;
+        } else {
+            self.state = ParseState::DiscardMouse;
+        }
+        true
+    }
+
+    fn decode_utf8(&mut self, flush_escape: bool, events: &mut Vec<InputEvent>) -> bool {
+        let byte = self.bytes[0];
+        let width = match byte {
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            0xf0..=0xf4 => 4,
+            _ => 1,
+        };
+        if self.bytes.len() < width && !flush_escape {
+            return false;
+        }
+        if width > 1
+            && self.bytes.len() >= width
+            && let Ok(text) = std::str::from_utf8(&self.bytes[..width])
+        {
+            let character = text.chars().next().expect("complete UTF-8 scalar");
+            self.bytes.drain(..width);
+            events.push(InputEvent::Key(Key::Char(character)));
+            return true;
+        }
+        // Invalid or timed-out incomplete UTF-8 consumes one byte only. That
+        // leaves a valid scalar before a later malformed byte intact.
+        self.bytes.remove(0);
+        events.push(InputEvent::Key(Key::Char('\u{fffd}')));
+        true
+    }
+
+    #[cfg(test)]
+    pub(super) fn retained_len(&self) -> usize {
+        self.bytes.len()
+            + match &self.state {
+                ParseState::Ground | ParseState::DiscardMouse => 0,
+                ParseState::Escape(bytes) | ParseState::Mouse(bytes) => bytes.len(),
+                ParseState::Paste {
+                    payload,
+                    close_match,
+                } => payload.len() + close_match,
+                ParseState::DiscardPaste { close_match } => *close_match,
+            }
+    }
+}
+
+fn key_sequence() -> [(&'static [u8], Key); 9] {
+    [
+        // The modified arrows come first: `\x1b[1;2A` must not be read as an
+        // escape followed by junk.
+        (b"\x1b[1;2A", Key::ShiftUp),
+        (b"\x1b[1;2B", Key::ShiftDown),
+        (b"\x1b[Z", Key::ShiftTab),
+        (b"\x1b[A", Key::Up),
+        (b"\x1b[B", Key::Down),
+        (b"\x1b[C", Key::Right),
+        (b"\x1b[D", Key::Left),
+        (b"\x1b[5~", Key::PageUp),
+        (b"\x1b[6~", Key::PageDown),
+    ]
+}
+
+fn is_escape_prefix(bytes: &[u8]) -> bool {
+    PASTE_OPEN.starts_with(bytes)
+        || MOUSE_OPEN.starts_with(bytes)
+        || key_sequence()
+            .iter()
+            .any(|(sequence, _)| sequence.starts_with(bytes))
+}
+
+fn append_capture(payload: &mut Vec<u8>, bytes: &[u8]) -> bool {
+    if payload.len().saturating_add(bytes.len()) > CAPTURE_PAYLOAD {
+        return false;
+    }
+    payload.extend_from_slice(bytes);
+    true
+}
+
+fn next_marker_match(close_match: usize, byte: u8) -> usize {
+    if byte == PASTE_CLOSE[close_match] {
+        close_match + 1
+    } else {
+        usize::from(byte == PASTE_CLOSE[0])
     }
 }
 

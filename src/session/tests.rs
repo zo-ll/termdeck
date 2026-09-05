@@ -1,5 +1,6 @@
 #[cfg(unix)]
 use super::dispatch_control;
+use super::input::{CAPTURE_PAYLOAD, MOUSE_SEQUENCE_CAP, PASTE_CLOSE, PASTE_OPEN};
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, encode_paste, master_terminal, mouse_action, now,
@@ -20,12 +21,10 @@ use std::path::PathBuf;
 
 #[test]
 fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
-    let mut reader = KeyReader {
-        bytes:
-            "a\x03\x1b[A\x1b[200~paste\x1b[201~\x1b[<64;3;5M\x1b[<0;4;6M\x1b[<32;5;6M\x1b[<0;5;6m界"
-                .as_bytes()
-                .to_vec(),
-    };
+    let mut reader = reader_of(
+        "a\x03\x1b[A\x1b[200~paste\x1b[201~\x1b[<64;3;5M\x1b[<0;4;6M\x1b[<32;5;6M\x1b[<0;5;6m界"
+            .as_bytes(),
+    );
 
     let events = reader.decode(true);
 
@@ -71,9 +70,7 @@ fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
 fn bracketed_paste_survives_every_fragmentation_boundary() {
     let full = b"\x1b[200~hi\nbye\x1b[201~";
     // Single-shot baseline.
-    let mut reader = KeyReader {
-        bytes: full.to_vec(),
-    };
+    let mut reader = reader_of(full);
     let events = reader.decode(false);
     assert!(
         matches!(events.as_slice(), [InputEvent::Paste(text)] if text == "hi\nbye"),
@@ -82,9 +79,7 @@ fn bracketed_paste_survives_every_fragmentation_boundary() {
     assert!(reader.bytes.is_empty());
     // Every split point: the prefix waits silently, the rest completes.
     for split in 1..full.len() {
-        let mut reader = KeyReader {
-            bytes: full[..split].to_vec(),
-        };
+        let mut reader = reader_of(&full[..split]);
         let events = reader.decode(false);
         assert!(
             events.is_empty(),
@@ -100,6 +95,103 @@ fn bracketed_paste_survives_every_fragmentation_boundary() {
             reader.bytes.is_empty(),
             "split at {split}: nothing may linger"
         );
+    }
+}
+
+/// #126: a valid UTF-8 scalar must be consumed before a later malformed byte
+/// is replaced. Decoding the whole unread suffix turned `é` plus `0xff` into
+/// three replacement characters.
+#[test]
+fn utf8_consumes_a_valid_prefix_before_a_later_malformed_byte() {
+    let events = reader_of(&[0xc3, 0xa9, 0xff]).decode(true);
+
+    assert!(matches!(
+        events.as_slice(),
+        [
+            InputEvent::Key(Key::Char('é')),
+            InputEvent::Key(Key::Char('\u{fffd}')),
+        ]
+    ));
+}
+
+/// #126: no unterminated sequence is allowed to grow the session reader
+/// without bound. Overflow is deliberately discarded through its terminator
+/// so hostile escape traffic cannot become shell input after recovery.
+#[test]
+fn unterminated_paste_and_mouse_reports_are_bounded_and_recover() {
+    let mut paste = KeyReader::default();
+    paste.bytes.extend_from_slice(PASTE_OPEN);
+    paste
+        .bytes
+        .extend(std::iter::repeat_n(b'x', CAPTURE_PAYLOAD + 1));
+    assert!(paste.decode(false).is_empty());
+    assert!(paste.retained_len() <= CAPTURE_PAYLOAD + PASTE_CLOSE.len());
+    paste.bytes.extend_from_slice(PASTE_CLOSE);
+    paste.bytes.extend_from_slice(b"ok");
+    assert!(matches!(
+        paste.decode(false).as_slice(),
+        [
+            InputEvent::Key(Key::Char('o')),
+            InputEvent::Key(Key::Char('k'))
+        ]
+    ));
+
+    let mut mouse = KeyReader::default();
+    mouse.bytes.extend_from_slice(b"\x1b[<");
+    mouse
+        .bytes
+        .extend(std::iter::repeat_n(b'9', MOUSE_SEQUENCE_CAP + 1));
+    assert!(mouse.decode(false).is_empty());
+    assert!(mouse.retained_len() <= MOUSE_SEQUENCE_CAP);
+    mouse.bytes.extend_from_slice(b"Mx");
+    let events = mouse.decode(false);
+    assert_eq!(event_signature(&events), ["key:Char('x')"]);
+}
+
+/// #126: arbitrary read boundaries must not change a valid input stream's
+/// meaning. The deterministic pseudo-fuzz partitions include boundaries in
+/// every multibyte scalar and every owned terminal sequence.
+#[test]
+fn parser_preserves_valid_streams_across_fuzzed_chunk_partitions() {
+    let stream = b"a\xc3\xa9\x1b[A\x1b[200~hi\nthere\x1b[201~\x1b[<64;3;5Mz";
+    let baseline = event_signature(&reader_of(stream).decode(true));
+
+    // Every possible partition of this compact stream: the scalar and arrow
+    // both cross arbitrary read boundaries, including the ESC prefix alone.
+    let compact = b"\xc3\xa9\x1b[A";
+    let compact_baseline = event_signature(&reader_of(compact).decode(true));
+    for boundaries in 0..(1 << (compact.len() - 1)) {
+        let mut reader = KeyReader::default();
+        let mut events = Vec::new();
+        let mut start = 0;
+        for end in 1..compact.len() {
+            if boundaries & (1 << (end - 1)) != 0 {
+                reader.bytes.extend_from_slice(&compact[start..end]);
+                events.extend(reader.decode(false));
+                start = end;
+            }
+        }
+        reader.bytes.extend_from_slice(&compact[start..]);
+        events.extend(reader.decode(true));
+        assert_eq!(event_signature(&events), compact_baseline, "{boundaries:b}");
+    }
+
+    for seed in 0..256_u64 {
+        let mut reader = KeyReader::default();
+        let mut events = Vec::new();
+        let mut cursor = 0;
+        let mut state = seed;
+        while cursor < stream.len() {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let width = 1 + (state as usize % 9);
+            let end = (cursor + width).min(stream.len());
+            reader.bytes.extend_from_slice(&stream[cursor..end]);
+            events.extend(reader.decode(false));
+            cursor = end;
+        }
+        events.extend(reader.decode(true));
+        assert_eq!(event_signature(&events), baseline, "seed {seed}");
+        assert_eq!(reader.retained_len(), 0, "seed {seed} left input behind");
     }
 }
 
@@ -289,9 +381,25 @@ fn the_decoder_keeps_line_feed_apart_from_carriage_return() {
 }
 
 fn reader_of(bytes: &[u8]) -> KeyReader {
-    KeyReader {
-        bytes: bytes.to_vec(),
-    }
+    let mut reader = KeyReader::default();
+    reader.bytes.extend_from_slice(bytes);
+    reader
+}
+
+fn event_signature(events: &[InputEvent]) -> Vec<String> {
+    events
+        .iter()
+        .map(|event| match event {
+            InputEvent::Key(key) => format!("key:{key:?}"),
+            InputEvent::Paste(text) => format!("paste:{text:?}"),
+            InputEvent::Wheel { pointer, command } => {
+                format!("wheel:{}:{}:{command:?}", pointer.x, pointer.y)
+            }
+            InputEvent::Mouse { pointer, action } => {
+                format!("mouse:{}:{}:{action:?}", pointer.x, pointer.y)
+            }
+        })
+        .collect()
 }
 
 /// The picker's range keys arrive as modified arrows, which nothing read
@@ -299,9 +407,7 @@ fn reader_of(bytes: &[u8]) -> KeyReader {
 /// characters `1;2A`.
 #[test]
 fn the_decoder_reads_shift_arrows() {
-    let mut reader = KeyReader {
-        bytes: b"\x1b[1;2A\x1b[1;2B\x1b[A\x1b[B".to_vec(),
-    };
+    let mut reader = reader_of(b"\x1b[1;2A\x1b[1;2B\x1b[A\x1b[B");
 
     let events = reader.decode(true);
 
@@ -327,15 +433,17 @@ fn the_decoder_reads_shift_arrows() {
 /// rather than becoming `esc` followed by stray characters.
 #[test]
 fn a_half_arrived_sequence_waits_for_the_rest() {
-    let mut reader = KeyReader {
-        bytes: b"\x1b[1;".to_vec(),
-    };
+    let mut reader = reader_of(b"\x1b[1;");
 
     assert!(
         reader.decode(false).is_empty(),
         "nothing is decided from half a sequence"
     );
-    assert_eq!(reader.bytes, b"\x1b[1;", "and none of it is thrown away");
+    assert_eq!(
+        reader.retained_len(),
+        b"\x1b[1;".len(),
+        "the partial sequence is retained by the parser state"
+    );
 
     reader.bytes.extend_from_slice(b"2B");
     let events = reader.decode(false);
@@ -348,9 +456,7 @@ fn a_half_arrived_sequence_waits_for_the_rest() {
 /// out with nothing following it, `esc` is `esc`.
 #[test]
 fn a_lone_escape_is_still_the_escape_key() {
-    let mut reader = KeyReader {
-        bytes: b"\x1b".to_vec(),
-    };
+    let mut reader = reader_of(b"\x1b");
     assert!(
         reader.decode(false).is_empty(),
         "it might still be a prefix"
@@ -365,9 +471,7 @@ fn a_lone_escape_is_still_the_escape_key() {
 /// from the ordinary release and from the secondary button.
 #[test]
 fn the_decoder_reads_a_shifted_click() {
-    let mut reader = KeyReader {
-        bytes: b"\x1b[<4;7;9m\x1b[<0;7;9m\x1b[<2;7;9m".to_vec(),
-    };
+    let mut reader = reader_of(b"\x1b[<4;7;9m\x1b[<0;7;9m\x1b[<2;7;9m");
 
     let events = reader.decode(true);
 
