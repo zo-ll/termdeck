@@ -1974,3 +1974,74 @@ fn a_failed_add_says_so_in_one_bounded_row() {
         "three rows would be three times the same news"
     );
 }
+
+/// The socket and the dispatcher are each well covered alone — the listener
+/// against real clients that stall, abandon their reply, or never read
+/// (`src/ctl/mod.rs`), the dispatcher against requests built in memory
+/// (above) — and nothing joined them. This is the seam the session actually
+/// runs: bytes from a real client, over a real socket, into the live deck,
+/// and an envelope back out (#130).
+#[cfg(target_os = "linux")]
+#[test]
+fn a_request_over_the_real_socket_reaches_the_live_deck() {
+    use std::io::{Read, Write};
+
+    let _lock = crate::ctl::LISTENER_TEST_LOCK.lock().unwrap();
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(2);
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
+    let mut quit = false;
+    assert_eq!(deck.active(), Some(0), "t1 opens as master");
+
+    let mut listener = crate::ctl::Listener::bind().unwrap();
+    let socket = listener.path().to_path_buf();
+    let mut client = std::os::unix::net::UnixStream::connect(&socket).unwrap();
+    client
+        .write_all(b"{\"schema\":\"ctl.v1\",\"verb\":\"promote\",\"id\":\"t2\"}\n")
+        .unwrap();
+
+    let served = listener
+        .poll_with(|request, caller| {
+            dispatch_control(
+                request,
+                caller,
+                &workspace,
+                &mut projects,
+                &mut deck,
+                &mut engine,
+                &mut notifies,
+                size,
+                false,
+                &socket,
+                false,
+                &mut closed,
+                &mut used,
+                &mut quit,
+            )
+        })
+        .unwrap();
+
+    assert!(
+        served,
+        "the request was complete, so the poll dispatched it"
+    );
+    let mut response = String::new();
+    client.read_to_string(&mut response).unwrap();
+    assert!(
+        response.contains("\"schema\":\"ctl.v1\"") && response.contains("\"ok\":true"),
+        "{response}"
+    );
+    assert!(response.contains("\"master\":true"), "{response}");
+    assert_eq!(deck.active(), Some(1), "t2 holds the master frame now");
+    assert!(!quit, "a promotion is not a reason to leave");
+
+    engine.dispatch(EngineCommand::Shutdown);
+}
