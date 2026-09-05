@@ -15,6 +15,7 @@ use crate::{
     ui::{DeckState, Input, Key, Modal, Notifications, Reaction, SheetState},
 };
 use ratatui::layout::Position;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 #[test]
@@ -474,7 +475,11 @@ fn a_committed_sheet_names_its_additions_around_the_running_ones() {
     sheet.state_mut().add(&docs);
     sheet.state_mut().add(&api);
 
-    let added = chosen(&sheet, &running);
+    let mut used: BTreeSet<String> = running
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
+    let added = chosen(&sheet, &mut used);
 
     let names: Vec<String> = added
         .iter()
@@ -495,7 +500,7 @@ fn a_committed_sheet_opens_a_plain_folder() {
     let folder = crate::ui::Entry::folder("archive", "/code/archive");
     sheet.state_mut().add(&folder);
 
-    let added = chosen(&sheet, &[]);
+    let added = chosen(&sheet, &mut BTreeSet::new());
 
     assert_eq!(added.len(), 1);
     assert_eq!(added[0].terminal, TerminalId::new("archive"));
@@ -634,8 +639,15 @@ fn closing_a_stacked_pane_drops_it_from_the_engine_and_the_list() {
     let closed = projects[1].terminal.clone();
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
 
-    assert!(close_terminal(&mut engine, &mut projects, &mut deck, 1));
+    assert!(close_terminal(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        1,
+        &mut tombstones
+    ));
 
     assert_eq!(engine.frame(&closed), None, "the engine dropped it");
     assert_eq!(
@@ -662,9 +674,16 @@ fn closing_the_master_promotes_and_resizes_what_takes_its_place() {
     let promoted = projects[1].terminal.clone();
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
     let preview = engine.frame(&promoted).unwrap().size;
 
-    assert!(close_terminal(&mut engine, &mut projects, &mut deck, 0));
+    assert!(close_terminal(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        0,
+        &mut tombstones
+    ));
 
     assert_eq!(deck.active(), Some(0));
     assert_eq!(projects[0].terminal, promoted);
@@ -686,14 +705,27 @@ fn closing_the_last_pane_leaves_nothing_for_the_session_to_run() {
     let only = projects[0].terminal.clone();
     let mut deck = DeckState::new(1);
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
 
-    assert!(close_terminal(&mut engine, &mut projects, &mut deck, 0));
+    assert!(close_terminal(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        0,
+        &mut tombstones
+    ));
 
     assert!(projects.is_empty(), "the session has nothing left to run");
     assert_eq!(deck.active(), None);
     assert_eq!(engine.frame(&only), None);
     // Out of range afterwards, and refused rather than panicking.
-    assert!(!close_terminal(&mut engine, &mut projects, &mut deck, 0));
+    assert!(!close_terminal(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        0,
+        &mut tombstones
+    ));
 }
 
 /// #84: the last pane is the session, so the close gesture asks the same
@@ -707,9 +739,10 @@ fn closing_the_last_pane_asks_the_quit_confirmation() {
     let only = projects[0].terminal.clone();
     let mut deck = DeckState::new(1);
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
 
     assert!(
-        !request_close(&mut engine, &mut projects, &mut deck, 0),
+        !request_close(&mut engine, &mut projects, &mut deck, 0, &mut tombstones),
         "it asked instead of closing"
     );
 
@@ -731,10 +764,11 @@ fn the_last_pane_survives_a_cancelled_confirmation_and_leaves_on_a_confirmed_one
     let only = projects[0].terminal.clone();
     let mut deck = DeckState::new(1);
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
     let mut input = Input::new(size.rows);
 
     for key in [Key::Char('n'), Key::Escape] {
-        request_close(&mut engine, &mut projects, &mut deck, 0);
+        request_close(&mut engine, &mut projects, &mut deck, 0, &mut tombstones);
         assert_eq!(deck.modal(), Some(Modal::Quit));
 
         assert_eq!(input.press(key, &mut deck, &projects, now()), None);
@@ -745,7 +779,7 @@ fn the_last_pane_survives_a_cancelled_confirmation_and_leaves_on_a_confirmed_one
         assert!(engine.frame(&only).is_some(), "its shell kept running");
     }
 
-    request_close(&mut engine, &mut projects, &mut deck, 0);
+    request_close(&mut engine, &mut projects, &mut deck, 0, &mut tombstones);
     assert_eq!(
         input.press(Key::Char('y'), &mut deck, &projects, now()),
         Some(Reaction::Quit),
@@ -765,14 +799,27 @@ fn closing_a_pane_that_is_not_the_last_asks_nothing() {
     let closed = projects[1].terminal.clone();
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
 
-    assert!(request_close(&mut engine, &mut projects, &mut deck, 1));
+    assert!(request_close(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        1,
+        &mut tombstones
+    ));
 
     assert_eq!(deck.modal(), None, "nothing to confirm");
     assert_eq!(engine.frame(&closed), None, "the engine ended it");
     assert_eq!(projects.len(), 1);
     // The one left is the last, so its own close asks.
-    assert!(!request_close(&mut engine, &mut projects, &mut deck, 0));
+    assert!(!request_close(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        0,
+        &mut tombstones
+    ));
     assert_eq!(deck.modal(), Some(Modal::Quit));
     engine.dispatch(EngineCommand::Shutdown);
 }
@@ -780,8 +827,6 @@ fn closing_a_pane_that_is_not_the_last_asks_nothing() {
 #[cfg(target_os = "linux")]
 #[test]
 fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
-    use std::collections::BTreeSet;
-
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(2);
     let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
@@ -789,6 +834,10 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
     let mut closed = BTreeSet::new();
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
     let mut quit = false;
     let mut notifies = crate::ui::Notifications::new();
     let request = |verb: &str| crate::ctl::Request {
@@ -811,6 +860,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
                 socket,
                 $allow,
                 &mut closed,
+                &mut used,
                 &mut quit,
             )
         };
@@ -831,6 +881,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
         socket,
         false,
         &mut closed,
+        &mut used,
         &mut quit,
     );
     assert_eq!(response.error.unwrap().code, 3);
@@ -898,7 +949,6 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
 #[cfg(target_os = "linux")]
 #[test]
 fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
-    use std::collections::BTreeSet;
     use std::time::{Duration, Instant};
 
     let size = ScreenSize::new(144, 42);
@@ -921,6 +971,10 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
     let mut closed = BTreeSet::new();
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
     let mut quit = false;
     let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
 
@@ -984,6 +1038,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
         socket,
         true,
         &mut closed,
+        &mut used,
         &mut quit,
     );
     let error = response.error.expect("a wedged pane refuses input");
@@ -1001,6 +1056,255 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
     engine.dispatch(EngineCommand::Shutdown);
 }
 
+/// #121 audit repro: open → close → reopen the same directory hands out a
+/// FRESH identity, so a delayed close on the tombstoned id reports
+/// `already` and cannot touch the replacement pane. Pre-fix the reopen
+/// reused the name and the stale close killed the new pane.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_reopened_directory_never_reuses_its_tombstoned_identity() {
+    use std::collections::BTreeSet;
+
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
+    let mut quit = false;
+    let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
+    let request = |verb: &str| crate::ctl::Request {
+        schema: crate::ctl::SCHEMA.to_owned(),
+        verb: verb.to_owned(),
+        ..Default::default()
+    };
+    macro_rules! control {
+        ($request:expr, $caller:expr, $allow:expr) => {
+            dispatch_control(
+                $request,
+                $caller,
+                &workspace,
+                &mut projects,
+                &mut deck,
+                &mut engine,
+                &mut notifies,
+                size,
+                false,
+                socket,
+                $allow,
+                &mut closed,
+                &mut used,
+                &mut quit,
+            )
+        };
+    }
+
+    let mut open = request("open");
+    open.path = Some("/tmp".to_owned());
+    let response = control!(open, None, false);
+    assert!(response.ok);
+    let first = response.data.unwrap()["id"].as_str().unwrap().to_owned();
+
+    let mut close = request("close");
+    close.id = Some(first.clone());
+    let response = control!(close, None, false);
+    assert!(response.ok, "closing the open pane succeeds");
+    assert!(closed.contains(&first), "the close is tombstoned");
+
+    let mut reopen = request("open");
+    reopen.path = Some("/tmp".to_owned());
+    let response = control!(reopen, None, false);
+    assert!(response.ok);
+    let second = response.data.unwrap()["id"].as_str().unwrap().to_owned();
+    assert_ne!(
+        first, second,
+        "a reopened directory must not reuse the tombstoned id"
+    );
+
+    // The delayed stale close: already gone, and the replacement lives.
+    let mut stale = request("close");
+    stale.id = Some(first.clone());
+    let response = control!(stale, None, false);
+    assert!(response.ok);
+    assert_eq!(
+        response.data.unwrap()["already"],
+        true,
+        "a tombstoned close is idempotent, not a kill"
+    );
+    assert_eq!(
+        engine.status(&TerminalId::new(&second)),
+        Some(&crate::contracts::TerminalStatus::Running),
+        "the replacement pane survives the stale close"
+    );
+    assert!(
+        projects
+            .iter()
+            .any(|project| project.terminal.to_string() == second),
+        "the replacement stays listed"
+    );
+
+    // Agent retries on the stale id fail unknown — never against the new
+    // pane — while the live id keeps working.
+    let mut peek = request("peek");
+    peek.id = Some(first.clone());
+    assert_eq!(control!(peek, None, false).error.unwrap().code, 2);
+    let mut input = request("input");
+    input.id = Some(first.clone());
+    input.text = Some("echo stale\n".to_owned());
+    assert_eq!(control!(input, None, true).error.unwrap().code, 2);
+    let mut live = request("input");
+    live.id = Some(second.clone());
+    live.text = Some("echo live\n".to_owned());
+    assert!(control!(live, None, true).ok, "the live id keeps working");
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// #121: repeated open/close cycles on one directory hand out a distinct
+/// identity each time, and every closed one stays tombstoned.
+#[cfg(target_os = "linux")]
+#[test]
+fn identities_stay_unique_across_close_reopen_cycles() {
+    use std::collections::BTreeSet;
+
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(1);
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut used: BTreeSet<String> = projects
+        .iter()
+        .map(|project| project.terminal.to_string())
+        .collect();
+    let mut quit = false;
+    let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
+    macro_rules! control {
+        ($request:expr) => {
+            dispatch_control(
+                $request,
+                None,
+                &workspace,
+                &mut projects,
+                &mut deck,
+                &mut engine,
+                &mut notifies,
+                size,
+                false,
+                socket,
+                false,
+                &mut closed,
+                &mut used,
+                &mut quit,
+            )
+        };
+    }
+    let mut ids = Vec::new();
+    for _ in 0..3 {
+        let open = crate::ctl::Request {
+            schema: crate::ctl::SCHEMA.to_owned(),
+            verb: "open".to_owned(),
+            path: Some("/tmp".to_owned()),
+            ..Default::default()
+        };
+        let response = control!(open);
+        assert!(response.ok);
+        let id = response.data.unwrap()["id"].as_str().unwrap().to_owned();
+        let close = crate::ctl::Request {
+            schema: crate::ctl::SCHEMA.to_owned(),
+            verb: "close".to_owned(),
+            id: Some(id.clone()),
+            ..Default::default()
+        };
+        assert!(control!(close).ok);
+        ids.push(id);
+    }
+    assert_eq!(ids.len(), 3);
+    assert!(
+        ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2],
+        "no identity is ever handed out twice: {ids:?}"
+    );
+    assert!(
+        ids.iter().all(|id| closed.contains(id)),
+        "every closed identity stays tombstoned"
+    );
+    assert_eq!(projects.len(), 1, "only the sleeper remains");
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
+/// #121: keyboard, mouse, and API closes tombstone through one primitive.
+/// `request_close` (what `^g x` and the `×` affordance both call) and the
+/// API arm above it record every removal; the last-pane confirmation and
+/// out-of-range positions remove nothing and tombstone nothing.
+#[cfg(target_os = "linux")]
+#[test]
+fn every_close_path_tombstones_through_one_primitive() {
+    let size = ScreenSize::new(144, 42);
+    let mut projects = sleepers(2);
+    let first = projects[0].terminal.to_string();
+    let second = projects[1].terminal.to_string();
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
+
+    assert!(request_close(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        1,
+        &mut tombstones
+    ));
+    assert!(
+        tombstones.contains(&second),
+        "the gesture primitive records its removal"
+    );
+    assert!(close_terminal(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        0,
+        &mut tombstones
+    ));
+    assert!(
+        tombstones.contains(&first),
+        "the underlying remover records too"
+    );
+    assert!(projects.is_empty());
+    engine.dispatch(EngineCommand::Shutdown);
+
+    // Last-pane confirmation and out-of-range positions remove nothing.
+    let mut projects = sleepers(1);
+    let only = projects[0].terminal.to_string();
+    let mut deck = DeckState::new(1);
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
+    assert!(!request_close(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        0,
+        &mut tombstones
+    ));
+    assert!(!close_terminal(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        4,
+        &mut tombstones
+    ));
+    assert!(
+        !tombstones.contains(&only),
+        "asking (not closing) tombstones nothing"
+    );
+    assert!(tombstones.is_empty());
+    engine.dispatch(EngineCommand::Shutdown);
+}
+
 /// A position no pane holds closes nothing and asks nothing, whatever is
 /// left in the list.
 #[cfg(target_os = "linux")]
@@ -1010,8 +1314,15 @@ fn a_close_out_of_range_neither_closes_nor_asks() {
     let mut projects = sleepers(1);
     let mut deck = DeckState::new(1);
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut tombstones = BTreeSet::new();
 
-    assert!(!request_close(&mut engine, &mut projects, &mut deck, 4));
+    assert!(!request_close(
+        &mut engine,
+        &mut projects,
+        &mut deck,
+        4,
+        &mut tombstones
+    ));
 
     assert_eq!(deck.modal(), None);
     assert_eq!(projects.len(), 1);
