@@ -1146,6 +1146,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   ISSUE #133 filed — folders named check/list unreachable (parse-arm
   shadowing), bug label. #129-A (CLI/help) still parked on the codex
   quota (uncommitted edits on disk); resume at 19:44 or hand to claude.
+- 2026-09-05: #130 (tests/CI safeguards) DISPATCHED to the CLAUDE lane
+  (user decision; cross-ownership adjudicated) — worktree
+  coord/130-tests-ci off 9e28dfe; brief: CI hardening (timeouts,
+  pinned toolchain via rust-toolchain.toml, zsh+fish install so shell
+  compat tests really run, cargo audit step, --locked/--frozen) + a
+  bounded coverage sweep (fill ONLY real gaps; cap 2-4 new tests) + WSL
+  evidence stamp; gate real numbers. WORKING (transcript-verified).
+  #129-A still parked (codex quota).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
