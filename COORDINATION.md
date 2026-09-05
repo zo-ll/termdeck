@@ -745,6 +745,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   reported. WAITING: user merge approval for #127 → then #128 to
   claude.
 
+- 2026-09-05: #127 MERGED (user approval) — --no-ff merge (db64abd), gate
+  green 357 lib + 4 int (base 352 + 5 new from the slice), pushed; issue #127
+  CLOSED; binary rebuilt. Audit progress: FIRST-priority 1/5, THIRD 1/4 done.
+- 2026-09-05: #128 (picker Git metadata honesty + runtime-add failure
+  surfacing) DISPATCHED to claude (WORKING — worktree coord/128-picker-git on
+  post-#127 main; brief reuses the #127 Stamp cache pattern for Git metadata,
+  handles worktree .git indirection, surfaces failures non-modally via the
+  #71 surface; session.rs add-flow cross-lane touch approved; no overlap with
+  #118). In flight: claude→#128, pi-worker(muse)→#118. Critic idle.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
