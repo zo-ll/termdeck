@@ -1110,6 +1110,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   task slug 123-integration). #123 re-review (claude critic) fires after
   the integration. Audit: closed #117-122,124,125,126; #123 mid-close;
   remaining #129 #130 #131 (+#132).
+- 2026-09-05: #123-INTEGRATION DONE (codex: 0141dd4 + 875ecf5 on main
+  base; gate reported 398 lib + 4; worktree clean) → #123 RE-REVIEW
+  dispatched to the claude critic (assignment 123-recheck.critic.md —
+  verifies ITS OWN handback fix list: array-aware PROMPT_COMMAND, real
+  user titles, profile.d once with realistic /etc/bashrc fixture,
+  PROMPT_COMMAND+=() regression test, real gate numbers). Verdict ping
+  inbox 123-shell-hook-login.critic.ping.
 
 - 2026-09-05: #125 CRITIC VERDICT = PASS → MERGED (395 lib + 4, verified
   3x by the critic; issue CLOSED) + rebuilt. The critic confirmed the marker:
