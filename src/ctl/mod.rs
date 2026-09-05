@@ -261,12 +261,10 @@ pub fn dispatch<E: TerminalEngine>(request: Request, mut state: State<'_, E>) ->
 /// unchanged either way: `{delivered:true}` is what shipped, and the response
 /// has never reported what the interface then did with it.
 fn dispatch_notify<E: TerminalEngine>(message: &str, state: &mut State<'_, E>) -> bool {
-    let Some(project) = state.caller.and_then(|pane| {
-        state
-            .projects
-            .iter()
-            .find(|project| project.terminal.to_string() == pane)
-    }) else {
+    let Some(project) = state
+        .caller
+        .and_then(|pane| project_for_pane(pane, state.projects))
+    else {
         return false;
     };
     let master = state
@@ -283,6 +281,37 @@ fn dispatch_notify<E: TerminalEngine>(message: &str, state: &mut State<'_, E>) -
         },
         state.now,
     )
+}
+
+/// Finds the pane a child process names. The PTY supplies the stable terminal
+/// id, but accepting the project's canonical directory as well keeps explicit
+/// calls attributed when a client carries the `path` reported by `termctl
+/// list`. Paths are only a fallback: terminal ids remain unambiguous, and an
+/// ambiguous directory (two panes opened on the same path) is deliberately
+/// not attributed to either one.
+fn project_for_pane<'a>(pane: &str, projects: &'a [Project]) -> Option<&'a Project> {
+    projects
+        .iter()
+        .find(|project| project.terminal.to_string() == pane)
+        .or_else(|| {
+            let pane = normalized_pane_path(pane, env::var_os("HOME").as_deref())?;
+            let mut matches = projects.iter().filter(|project| {
+                normalized_pane_path(&project.path.to_string_lossy(), None).as_ref() == Some(&pane)
+            });
+            let project = matches.next()?;
+            matches.next().is_none().then_some(project)
+        })
+}
+
+/// Resolves the spelling a caller can put in `TERMDECK_PANE`. In particular,
+/// `~/project`, an absolute path, and a symlinked/opened spelling all identify
+/// the same existing terminal directory.
+fn normalized_pane_path(path: &str, home: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let path = match path.strip_prefix("~/") {
+        Some(rest) => PathBuf::from(home?).join(rest),
+        None => PathBuf::from(path),
+    };
+    path.canonicalize().ok()
 }
 
 struct Pending {
@@ -538,7 +567,9 @@ mod tests {
         fs,
         io::{Read, Write},
         os::unix::{fs::PermissionsExt, net::UnixStream},
+        path::PathBuf,
         sync::Mutex,
+        time::{SystemTime, UNIX_EPOCH},
     };
 
     use crate::{
@@ -552,8 +583,8 @@ mod tests {
     };
 
     use super::{
-        Control, Listener, Request, SCHEMA, State, dispatch, peer_uid, socket_directory,
-        trusted_peer,
+        Control, Listener, Request, SCHEMA, State, dispatch, normalized_pane_path, peer_uid,
+        socket_directory, trusted_peer,
     };
 
     static LISTENER_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -585,6 +616,17 @@ mod tests {
             command: vec!["sh".to_owned()],
             shell_hook: false,
         }
+    }
+
+    fn test_path(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "termdeck-ctl-{name}-{}-{nanos}",
+            std::process::id()
+        ))
     }
 
     struct NoHistory;
@@ -772,6 +814,73 @@ mod tests {
             state(&workspace, &engine, &projects, &deck, &mut notifies),
         );
         assert_eq!(missing.error.unwrap().code, 2);
+    }
+
+    #[test]
+    fn notify_normalizes_a_real_panes_directory_identity() {
+        let root = test_path("notify-identity");
+        let project_path = root.join("fitness-agent");
+        let opened_path = root.join("opened-fitness-agent");
+        fs::create_dir_all(&project_path).unwrap();
+        std::os::unix::fs::symlink(&project_path, &opened_path).unwrap();
+
+        let projects = vec![
+            project("one"),
+            Project {
+                terminal: TerminalId::new("fitness-agent"),
+                path: project_path.clone(),
+                command: vec!["sh".to_owned()],
+                shell_hook: false,
+            },
+        ];
+        let engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+        let deck = DeckState::new(projects.len());
+        let workspace = Workspace::discovered(root.clone(), projects.clone());
+        let mut notifies = Notifications::new();
+        let response = dispatch(
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "notify".to_owned(),
+                msg: Some("tests passed".to_owned()),
+                ..Default::default()
+            },
+            State {
+                workspace: &workspace,
+                projects: &projects,
+                deck: &deck,
+                engine: &engine,
+                size: ScreenSize::new(80, 24),
+                sheet_open: false,
+                notifies: &mut notifies,
+                caller: opened_path.to_str(),
+                now: Timestamp { unix_millis: 10 },
+            },
+        );
+
+        assert!(response.ok);
+        assert_eq!(
+            notifies
+                .pending(&TerminalId::new("fitness-agent"))
+                .map(|notify| notify.kind.clone()),
+            Some(NotifyKind::Message {
+                title: String::new(),
+                body: "tests passed".to_owned(),
+            })
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pane_path_normalization_expands_tilde_before_resolving() {
+        let home = test_path("notify-home");
+        let pane = home.join("fitness-agent");
+        fs::create_dir_all(&pane).unwrap();
+
+        assert_eq!(
+            normalized_pane_path("~/fitness-agent", Some(home.as_os_str())),
+            normalized_pane_path(pane.to_str().unwrap(), None),
+        );
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[test]
