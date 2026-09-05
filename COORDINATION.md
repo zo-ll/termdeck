@@ -942,6 +942,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   plan continues toward closing the audit queue; stop-after-#121
   SUPERSEDED by the user's terra-lane enablement (resume audit queue).
 
+- 2026-09-05 (ENV SPEC CHANGE, user): when muse finishes #121 → KILL the
+  muse worker (only pi pane = coordinator). CRITIC ROLE becomes a second
+  claude opus-5 pane — pi critic pane (termdeck) CLOSED; new critic pane
+  "termdeck" launched: claude --dangerously-skip-permissions --model opus
+  (idle at composer; assignment files carry the read-only/never-edit-merge-
+  push discipline + VERDICT ping format — same delivery as before).
+  Review routing unchanged: assignment files + verdict via
+  /tmp/shipwright/inbox/<task>.critic.ping. In flight: muse→#121, codex→#124.
+  On #121 done: review via claude critic → merge (standing) → close → kill
+  muse worker.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
