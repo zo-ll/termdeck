@@ -41,8 +41,8 @@ use crate::{
     },
     engine::NativeEngine,
     ui::{
-        Browse, Deck, DeckState, FsBrowse, Input, Key, Notifications, Picker, PickerReaction,
-        PickerState, Reaction, Sheet, SheetState, picker,
+        Browse, Deck, DeckState, FsBrowse, Input, Key, Listing, Notifications, Picker,
+        PickerReaction, PickerState, Reaction, Sheet, SheetState, picker,
     },
 };
 
@@ -73,15 +73,25 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
     // The pointer's `→`: a second click on the row it is already on.
     let mut last_click: Option<(usize, Timestamp)> = None;
     let mut dirty = true;
+    let mut size = screen_size()?;
+    // What the last drawn frame was built from, kept across passes: an idle
+    // loop that rebuilt them was walking the filesystem fifty times a second
+    // for a screen it was not going to redraw (#127).
+    let mut roots = Vec::new();
+    let mut listing = Listing::default();
+    let mut rows = Vec::new();
     let chosen = 'picker: loop {
         if SIGNAL.swap(0, Ordering::SeqCst) != 0 {
             break None;
         }
-        let roots = Browse::roots(&browser);
-        let listing = state.listing(&browser);
-        let rows = listing.entries.clone();
-        let size = screen_size()?;
+        // A resize is a reason to redraw by itself. Without this the picker
+        // read the size every pass and never compared it, so a resized
+        // window kept its old layout until the next keypress (#127).
+        dirty |= resized(&mut size, screen_size()?);
         if dirty {
+            roots = Browse::roots(&browser);
+            listing = state.listing(&browser);
+            rows = listing.entries.clone();
             let height = usize::from(size.rows.saturating_sub(12));
             state.follow_cursor(height);
             terminal.autoresize()?;
@@ -160,6 +170,15 @@ pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn
     };
     drop(outer);
     Ok(chosen)
+}
+
+/// Whether the terminal has changed size since the last frame, remembering
+/// the new size as it answers. A picker that has not been touched still has
+/// to redraw when the window around it moves.
+fn resized(size: &mut ScreenSize, current: ScreenSize) -> bool {
+    let changed = *size != current;
+    *size = current;
+    changed
 }
 
 /// What the session is already running, so the sheet can identify another
