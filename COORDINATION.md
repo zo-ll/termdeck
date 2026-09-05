@@ -1,9 +1,8 @@
 # Coordination — Termdeck
 
-Status: ACTIVE — tracker on GitHub.
-Open (user-gated): #94 (MCP HELD — handshake/merge/drop), #112 (persistent+agent-aware deck DECISION GATE), #114 (agent discovery), #33 (animations parked). Audit queue (astra): #129 (two parts; docs MERGED, CLI half pending codex quota), #130, #131, +#132 (scrollbar final frame), #133 (check/list shadowing).
-Recently closed: audit batch #117-#126 (all critic-gated), #111/#113/#115/#116 wave, #106 docs sweep, #108 shell integration, #103 footer.
-Freshness: 2026-09-05 — main `8c3e497`-ish (post #129-docs merge), gate green (398 lib + 4 integration + docs).
+Status: ACTIVE — tracker on GitHub. ★ ASTRA AUDIT COMPLETE (all 15 issues + review-born #132-#135 closed, 2026-09-05).
+Open (user-gated): #94 (MCP HELD), #112 (persistent+agent-aware deck DECISION GATE), #114 (agent discovery), #33 (animations parked). #134 (CI scheduled advisories) = track on the CI lane.
+Freshness: 2026-09-05 — main `ca72e4f`, gate green (408 lib + 5 termctl + 1 main + docs).
 
 ## Goal
 
@@ -1339,6 +1338,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   errors 'unknown option' — the #129-A help blocker remains open
   (quota-bound at 19:44). Review-born issues accounted: #132 (open,
   waits #135), #133 (closed), #134 (tracked, CI), #135 (queued engine).
+
+- 2026-09-05 20:2x: ★ ASTRA AUDIT COMPLETE — ALL 15 issues closed:
+  #117 #118 #119 #120 #121 #122 #123 #124 #125 #126 #129 #130 #131 (+ docs
+  halves), plus the review-born #132 (2 items) #133 #134 #135. Final merges:
+  #135 (f93d361/64e111c via ca72e4f; 408 lib + 5 termctl + 1 main) closes
+  #135+#132; #131 umbrella closed (criterion: hardened baseline shipped).
+  Rebuilt. Review-born journey recap: 3 substantive handbacks that were
+  caught and corrected (#123 false-green + PROMPT_COMMAND array; #129-A exit-
+  code collision + stale-base; #135 folded-strip freeze). Main green 408+5+1.
+  Open now: user gates #112 #94 #33 #114 + NB backlog (~55) + #134 (CI
+  scheduled-advisories track). The #112/#114/#94 resume-on-baseline decs are
+  the user's.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
