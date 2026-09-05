@@ -1064,6 +1064,32 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   + expiry repaints) rebased to main + DISPATCHED to codex (WORKING).
   Remaining audit: #125 (in flight), #129, #130, #131.
 
+- 2026-09-05: #123 CRITIC VERDICT = HANDBACK (claude critic). GATE NOT
+  GREEN: bash_hook_reports_errors_and_long_completions fails DETERMINISTICALLY
+  (4/4) on the branch, passes on origin/main — NOT the known flake; the
+  "full gate green" marker was FALSE (lesson: demand real gate numbers in
+  markers — the #111 lesson resurfaced). HOOK=1 install works, but the
+  notification reports the WRONG COMMAND (__systemd_osc_context_precmdline
+  instead of `false`/`sleep 0.01`) — the truthfulness failure #123 sits
+  under. Root causes: (A) PROMPT_COMMAND is an ARRAY on bash 5.1+ (systemd
+  profile.d does +=(...)); scalar assignment lands element [0] only → prompt
+  funcs recorded as user commands. (B) stripping -l turns off shopt
+  login_shell → /etc/bashrc re-sources /etc/profile.d/* → profile.d runs
+  TWICE (PS0/PROMPT_COMMAND doubled) — AC2 violated.
+  MINIMAL FIX LIST (route to SAME codex session, after #125): (1) array-aware
+  PROMPT_COMMAND chaining OR drop __td_prompt_end + clear on first non-__td_*
+  command; (2) stop prompt-driven funcs being recorded as commands; (3) fix
+  double-source (login fidelity or BASH_LOGIN_RC avoids re-entering profile.d
+  via ~/.bashrc chain); (4) regression test with PROMPT_COMMAND+=() asserting
+  the notification title IS the user command; (5) re-run gate, real numbers.
+  NITS (5): no API-created-pane argv test; ~/.bash_logout no longer runs;
+  login_shell/$0 no longer report login; bash_init_arguments treats leading
+  dash as flags after -c; DEBUG-trap snapshot one-time.
+  VERIFIED GOOD: bash_init_arguments rewriting, login profile ORDER, trap -p
+  DEBUG capture (bash 5.3.9), non-login path byte-identical, zsh/fish
+  untouched, fmt+clippy clean. #123 STAYS OPEN. Correction queued — cannot
+  steer codex (on #125); deliver after #125's marker.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
