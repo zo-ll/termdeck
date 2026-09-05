@@ -986,6 +986,178 @@ fn a_repository_inside_two_roots_is_listed_once() {
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// The picker asks for the folder it is standing in on every frame it draws,
+/// which used to mean a `read_dir` for the folder and another for every row
+/// in it, fifty times a second (#127). An unchanged folder is answered from
+/// memory; an explicit refresh and the folder's own clock both drop that.
+#[test]
+fn a_listing_is_answered_from_memory_until_the_folder_moves() {
+    let root = temp_root("cache");
+    let child = root.join("child");
+    let probe = root.join(".probe");
+    std::fs::create_dir_all(&child).unwrap();
+    std::fs::create_dir_all(&probe).unwrap();
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let first = browser.list(&root);
+    assert_eq!(names(&first.entries), ["..", "child"]);
+    assert_eq!(holding(&first.entries, "child"), Some(0));
+
+    // A file inside `child` changes what `child` holds without moving
+    // `root`'s own modification time, which is the one stat the remembered
+    // answer is checked against. The unchanged answer is how the test sees
+    // that the folder was not read again.
+    std::fs::write(child.join("file.txt"), "").unwrap();
+    assert_eq!(
+        browser.list(&root),
+        first,
+        "the same answer, not a new read"
+    );
+
+    // An explicit refresh drops it, and the deeper change lands.
+    browser.refresh();
+    let refreshed = browser.list(&root);
+    assert_eq!(holding(&refreshed.entries, "child"), Some(1), "read again");
+
+    // A child of `root` itself moves `root`'s stamp, so the next question
+    // goes to the filesystem without anyone having to say so.
+    let stamp = modified(&root);
+    wait_past(&probe, stamp);
+    std::fs::create_dir(root.join("later")).unwrap();
+    assert_eq!(
+        names(&browser.list(&root).entries),
+        ["..", "child", "later"]
+    );
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// Walking somewhere else is an invalidation in itself: the browser keeps one
+/// folder at a time, so what the picker comes back to is read afresh.
+#[test]
+fn walking_to_another_folder_drops_the_remembered_listing() {
+    let root = temp_root("navigate");
+    let child = root.join("child");
+    let other = root.join("other");
+    std::fs::create_dir_all(&child).unwrap();
+    std::fs::create_dir_all(&other).unwrap();
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let first = browser.list(&root);
+    std::fs::write(child.join("file.txt"), "").unwrap();
+    browser.list(&other);
+    let back = browser.list(&root);
+
+    assert_eq!(holding(&first.entries, "child"), Some(0));
+    assert_eq!(
+        holding(&back.entries, "child"),
+        Some(1),
+        "the folder was read again on the way back"
+    );
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// The root list is drawn on every frame too, and counts what each root
+/// holds, so it is remembered on the same terms as a listing.
+#[test]
+fn the_root_list_is_answered_from_memory_too() {
+    let root = temp_root("root-list");
+    let child = root.join("child");
+    let probe = root.join(".probe");
+    std::fs::create_dir_all(&child).unwrap();
+    std::fs::create_dir_all(&probe).unwrap();
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let first = Browse::roots(&browser);
+    assert_eq!(first.len(), 1);
+    std::fs::write(child.join("file.txt"), "").unwrap();
+    assert_eq!(
+        Browse::roots(&browser),
+        first,
+        "nothing the root list shows"
+    );
+
+    let stamp = modified(&root);
+    wait_past(&probe, stamp);
+    std::fs::create_dir(root.join("later")).unwrap();
+    let moved = Browse::roots(&browser);
+    assert_eq!(moved[0].items, Some(2), "the root itself grew");
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// A filter is a walk three folders deep from every root — the most
+/// expensive question the picker asks, and one it used to ask per frame. It
+/// is remembered against the folders the walk starts from; a repository that
+/// appears below them waits for a refresh.
+#[test]
+fn a_search_is_answered_from_memory_until_a_root_moves() {
+    let root = temp_root("search-cache");
+    let deep = root.join("deep");
+    let probe = root.join(".probe");
+    std::fs::create_dir_all(&deep).unwrap();
+    std::fs::create_dir_all(&probe).unwrap();
+    repository(&root.join("repo"));
+    let browser = FsBrowse::new(vec![root.clone()]);
+
+    let first = browser.search(&root);
+    assert_eq!(names(&first), ["repo"]);
+
+    // Deeper than the walk starts, so no stamp moves and the answer stands.
+    repository(&deep.join("buried"));
+    assert_eq!(browser.search(&root), first, "the same answer, not a walk");
+    browser.refresh();
+    assert_eq!(names(&browser.search(&root)), ["buried", "repo"]);
+
+    // A repository directly under the root moves the root's own stamp.
+    let stamp = modified(&root);
+    wait_past(&probe, stamp);
+    repository(&root.join("another"));
+    assert_eq!(names(&browser.search(&root)), ["another", "buried", "repo"]);
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+fn names(entries: &[Entry]) -> Vec<&str> {
+    entries.iter().map(|entry| entry.name.as_str()).collect()
+}
+
+/// How many items the listing says a named folder holds.
+fn holding(entries: &[Entry], name: &str) -> Option<usize> {
+    entries
+        .iter()
+        .find(|entry| entry.name == name)
+        .and_then(|entry| entry.items)
+}
+
+fn repository(path: &Path) {
+    std::fs::create_dir_all(path.join(".git")).unwrap();
+    std::fs::write(path.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+}
+
+fn modified(path: &Path) -> std::time::SystemTime {
+    std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .unwrap()
+}
+
+/// Blocks until a filesystem timestamp taken now would be later than
+/// `stamp`. Timestamps move in coarse ticks, so a change made inside the
+/// same tick as the stamp it has to beat would be invisible to it — this is
+/// what makes "and now the folder moved" an assertion rather than a race.
+fn wait_past(probe: &Path, stamp: std::time::SystemTime) {
+    let tick = probe.join("tick");
+    for _ in 0..2_000 {
+        std::fs::write(&tick, "").unwrap();
+        if modified(&tick) > stamp {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    panic!("filesystem timestamps never moved past {stamp:?}");
+}
+
 /// Mouse parity's other half (§7): the secondary button is the `-`.
 #[test]
 fn the_secondary_button_sheds_an_instance() {

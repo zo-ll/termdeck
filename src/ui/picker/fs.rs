@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use super::render::display_path;
@@ -10,9 +11,53 @@ use std::{fs, time::SystemTime};
 /// Everything here is one stat or one small read per row. No process is
 /// spawned and no repository is opened, because the note requires the detail
 /// block to never block the cursor.
+///
+/// What it answers is also remembered (#127). A listing costs a `read_dir`
+/// for the folder and another for every row in it, and the picker's loop
+/// asked for one fifty times a second whether or not anything had changed —
+/// a fifth of a core in a folder of a hundred, for a screen nobody redrew.
+/// A cached answer is checked against the folder's own modification time,
+/// which is one stat.
 pub struct FsBrowse {
     roots: Vec<PathBuf>,
     home: Option<PathBuf>,
+    cache: RefCell<Cache>,
+}
+
+/// What the browser was last asked, and what it said.
+///
+/// One slot each, because the picker stands in one folder at a time: walking
+/// into another is itself the invalidation, since the new path misses and
+/// takes the slot over.
+#[derive(Default)]
+struct Cache {
+    /// The root list, which is not a folder and so is keyed by nothing.
+    roots: Option<(Stamp, Vec<Entry>)>,
+    /// The folder listed last, and the folder searched last.
+    listing: Option<(PathBuf, Stamp, Listing)>,
+    search: Option<(PathBuf, Stamp, Vec<Entry>)>,
+}
+
+/// The modification times of the folders an answer was read from: one stat
+/// each, against the `read_dir` per row that building it costs.
+///
+/// A folder's own time moves when a child is added, removed, or renamed,
+/// which is what a listing draws. It does not move for a change further
+/// down — a repository's branch, or what a child folder holds — so those
+/// arrive when the picker next walks somewhere and back, or when
+/// [`FsBrowse::refresh`] says so outright.
+#[derive(Eq, PartialEq)]
+struct Stamp(Vec<Option<SystemTime>>);
+
+impl Stamp {
+    fn of<'a>(paths: impl IntoIterator<Item = &'a Path>) -> Self {
+        Self(
+            paths
+                .into_iter()
+                .map(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok())
+                .collect(),
+        )
+    }
 }
 
 impl FsBrowse {
@@ -20,12 +65,27 @@ impl FsBrowse {
         Self {
             roots,
             home: std::env::var_os("HOME").map(PathBuf::from),
+            cache: RefCell::new(Cache::default()),
         }
     }
 
     /// The home the picker abbreviates paths against.
     pub fn home(&self) -> Option<&Path> {
         self.home.as_deref()
+    }
+
+    /// Forgets every cached answer, so the next question goes to the
+    /// filesystem. Walking to another folder invalidates by itself; this is
+    /// for a caller that knows something moved under the folder it is
+    /// standing in.
+    pub fn refresh(&self) {
+        *self.cache.borrow_mut() = Cache::default();
+    }
+
+    /// Every folder a search starts from, which is what its answer depends
+    /// on: the folder being browsed, then the configured roots.
+    fn search_from<'a>(&'a self, path: &'a Path) -> impl Iterator<Item = &'a Path> {
+        std::iter::once(path).chain(self.roots.iter().map(PathBuf::as_path))
     }
 
     fn entry(path: &Path, name: String) -> Entry {
@@ -51,10 +111,9 @@ impl FsBrowse {
             Entry::file(name, path)
         }
     }
-}
 
-impl Browse for FsBrowse {
-    fn list(&self, path: &Path) -> Listing {
+    /// The listing itself, read fresh.
+    fn read(path: &Path) -> Listing {
         // The parent row goes in whatever happens: a folder that cannot be
         // read is one the user especially needs a way out of.
         let mut entries = Vec::new();
@@ -92,7 +151,8 @@ impl Browse for FsBrowse {
         Listing::of(entries)
     }
 
-    fn search(&self, path: &Path) -> Vec<Entry> {
+    /// The search itself, walked fresh.
+    fn scan(&self, path: &Path) -> Vec<Entry> {
         // Configured roots may overlap — the default pair is the working
         // directory and the home that usually contains it — and a repository
         // inside two of them would otherwise be found once per root and
@@ -126,7 +186,8 @@ impl Browse for FsBrowse {
         found
     }
 
-    fn roots(&self) -> Vec<Entry> {
+    /// The root list itself, read fresh.
+    fn read_roots(&self) -> Vec<Entry> {
         self.roots
             .iter()
             .map(|root| {
@@ -137,6 +198,50 @@ impl Browse for FsBrowse {
                 }
             })
             .collect()
+    }
+}
+
+impl Browse for FsBrowse {
+    fn list(&self, path: &Path) -> Listing {
+        let stamp = Stamp::of([path]);
+        if let Some((of, at, listing)) = self.cache.borrow().listing.as_ref()
+            && of == path
+            && *at == stamp
+        {
+            return listing.clone();
+        }
+        let listing = Self::read(path);
+        self.cache.borrow_mut().listing = Some((path.to_path_buf(), stamp, listing.clone()));
+        listing
+    }
+
+    fn search(&self, path: &Path) -> Vec<Entry> {
+        // A search is a walk three folders deep from every root, which is far
+        // too much to repeat per frame. Its stamp covers the folders it
+        // starts from; anything deeper waits for a walk elsewhere or a
+        // `refresh`, the same terms the listing keeps.
+        let stamp = Stamp::of(self.search_from(path));
+        if let Some((of, at, found)) = self.cache.borrow().search.as_ref()
+            && of == path
+            && *at == stamp
+        {
+            return found.clone();
+        }
+        let found = self.scan(path);
+        self.cache.borrow_mut().search = Some((path.to_path_buf(), stamp, found.clone()));
+        found
+    }
+
+    fn roots(&self) -> Vec<Entry> {
+        let stamp = Stamp::of(self.roots.iter().map(PathBuf::as_path));
+        if let Some((at, roots)) = self.cache.borrow().roots.as_ref()
+            && *at == stamp
+        {
+            return roots.clone();
+        }
+        let roots = self.read_roots();
+        self.cache.borrow_mut().roots = Some((stamp, roots.clone()));
+        roots
     }
 }
 
