@@ -721,6 +721,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Working (exploring engine contracts). In flight: pi-worker → #118; claude
   → #127 (parallel). Critic idle.
 
+- 2026-09-05: #127 DONE (claude, 2 commits bd29b50 perf/ui cache +
+  0c68a66 fix/session rebuild-only-when-drawn; marker pass: "listings/search/
+  roots cached with mtime invalidation, loop rebuilds only for drawn frames,
+  resize alone repaints; idle CPU 21.6%→0.2%; 353 lib + 4 bin tests green";
+  worktree clean; claude idle at composer). Routed to CRITIC (assignment
+  .scratch/review/127.critic.md — mtime invalidation correctness, session.rs
+  surgical-check (approved 80-85 region), resize-only dirty, picker behavior
+  regression, gate 353+4). Verdict ping inbox 127-picker-cache.critic.ping.
+  NABE (=next after #127 merges): #128 picker Git metadata + silent run-add
+  failures (claude lane; same files ⇒ after merge).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
