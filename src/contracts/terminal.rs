@@ -86,4 +86,8 @@ pub struct TerminalMetadata {
     /// Whether the app enabled mouse reporting: with it the app wants the
     /// wheel as SGR mouse reports, without it as cursor keys (#74).
     pub mouse_reporting: bool,
+    /// Whether the child enabled bracketed paste (DEC 2004): with it the
+    /// child wants pastes as delimited regions, without it as raw bytes
+    /// (#120). Tracked like the flags above, straight from the emulator.
+    pub bracketed_paste: bool,
 }

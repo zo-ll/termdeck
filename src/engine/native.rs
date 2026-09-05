@@ -154,11 +154,13 @@ impl NativeTerminal {
     }
 
     /// The viewport the renderer shows: history offset plus which screen
-    /// the app owns and whether it wants the wheel as mouse reports (#74).
+    /// the app owns, whether it wants the wheel as mouse reports (#74),
+    /// and whether it wants pastes bracketed (#120).
     fn refresh_viewport(&mut self) {
         self.metadata.scrollback = self.adapter.scrollback_position();
         self.metadata.alt_screen = self.adapter.alt_screen();
         self.metadata.mouse_reporting = self.adapter.mouse_reporting();
+        self.metadata.bracketed_paste = self.adapter.bracketed_paste();
     }
 
     fn refresh_timing(&mut self) {

@@ -85,6 +85,11 @@ pub enum Control {
         id: String,
         bytes: Vec<u8>,
         force: bool,
+        /// Whether the caller sent `paste` (vs `text`/`keys`). The wire is
+        /// unchanged — all three arrive as bytes — but only a paste
+        /// operation re-emits bracketed when the child holds DEC 2004
+        /// (#120); typed text never wraps.
+        paste: bool,
     },
 }
 
@@ -125,6 +130,7 @@ impl Request {
                         .as_bytes()
                         .to_vec(),
                     force: self.force,
+                    paste: self.paste.is_some(),
                 }))
             }
             _ => Ok(None),
@@ -989,6 +995,34 @@ mod tests {
         ] {
             assert!(matches!(request.control(), Ok(Some(Control::Input { .. }))));
         }
+    }
+
+    /// #120: the three input kinds stay distinct past parsing — only
+    /// `paste` re-emits bracketed at a paste-mode child. The wire is
+    /// unchanged; this flag is the internal memory of which field arrived.
+    #[test]
+    fn input_control_marks_paste_requests_as_paste_operations() {
+        let request = |text: Option<&str>, paste: Option<&str>, keys: Option<&str>| Request {
+            schema: SCHEMA.to_owned(),
+            verb: "input".to_owned(),
+            id: Some("one".to_owned()),
+            text: text.map(str::to_owned),
+            paste: paste.map(str::to_owned),
+            keys: keys.map(str::to_owned),
+            ..Default::default()
+        };
+        assert!(matches!(
+            request(Some("text"), None, None).control(),
+            Ok(Some(Control::Input { paste: false, .. }))
+        ));
+        assert!(matches!(
+            request(None, Some("paste"), None).control(),
+            Ok(Some(Control::Input { paste: true, .. }))
+        ));
+        assert!(matches!(
+            request(None, None, Some("keys")).control(),
+            Ok(Some(Control::Input { paste: false, .. }))
+        ));
     }
 
     /// #97: the shipped wire is untouched — `notify` still answers

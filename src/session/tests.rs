@@ -2,8 +2,9 @@
 use super::dispatch_control;
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
-    close_terminal, dispatch_live_input, master_terminal, mouse_action, now, open_terminals,
-    request_close, resize_terminals, resized, route_wheel, spawn_terminals, terminal_sizes,
+    close_terminal, dispatch_live_input, encode_paste, master_terminal, mouse_action, now,
+    open_terminals, request_close, resize_terminals, resized, route_wheel, spawn_terminals,
+    terminal_sizes,
 };
 use crate::{
     contracts::{
@@ -60,6 +61,152 @@ fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
         }
     ));
     assert!(matches!(events[8], InputEvent::Key(Key::Char('界'))));
+}
+
+/// #120: every fragmentation boundary of a bracketed paste decodes as one
+/// paste once complete — and a partial opener emits nothing, not an escape
+/// plus literal keys (the audit's split after `ESC[2`).
+#[test]
+fn bracketed_paste_survives_every_fragmentation_boundary() {
+    let full = b"\x1b[200~hi\nbye\x1b[201~";
+    // Single-shot baseline.
+    let mut reader = KeyReader {
+        bytes: full.to_vec(),
+    };
+    let events = reader.decode(false);
+    assert!(
+        matches!(events.as_slice(), [InputEvent::Paste(text)] if text == "hi\nbye"),
+        "single-shot paste must decode"
+    );
+    assert!(reader.bytes.is_empty());
+    // Every split point: the prefix waits silently, the rest completes.
+    for split in 1..full.len() {
+        let mut reader = KeyReader {
+            bytes: full[..split].to_vec(),
+        };
+        let events = reader.decode(false);
+        assert!(
+            events.is_empty(),
+            "split at {split}: an opener fragment must wait, not emit keys"
+        );
+        reader.bytes.extend_from_slice(&full[split..]);
+        let events = reader.decode(false);
+        assert!(
+            matches!(events.as_slice(), [InputEvent::Paste(text)] if text == "hi\nbye"),
+            "split at {split}: the completed paste must decode"
+        );
+        assert!(
+            reader.bytes.is_empty(),
+            "split at {split}: nothing may linger"
+        );
+    }
+}
+
+/// #120: paste encoding follows the child's DEC 2004 mode — bracketed
+/// while the child holds it, raw bytes otherwise (and for unknown
+/// terminals, the safe default).
+#[test]
+fn paste_encoding_follows_the_child_bracketed_paste_mode() {
+    let terminal = TerminalId::new("pane");
+    let mut engine = FakeEngine::new([terminal.clone()]);
+    assert_eq!(
+        encode_paste(&engine, &terminal, "a\nb".to_owned()),
+        b"a\nb".to_vec(),
+        "no mode means raw bytes, as before"
+    );
+    assert_eq!(
+        encode_paste(&engine, &TerminalId::new("ghost"), "a\nb".to_owned()),
+        b"a\nb".to_vec(),
+        "unknown terminals stay raw"
+    );
+    engine.set_metadata(
+        &terminal,
+        TerminalMetadata {
+            bracketed_paste: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        encode_paste(&engine, &terminal, "SAFE\nTEXT".to_owned()),
+        b"\x1b[200~SAFE\nTEXT\x1b[201~".to_vec(),
+        "paste mode means a delimited region"
+    );
+}
+
+/// #120 audit repro at the byte level: a child holding DEC 2004 receives
+/// the paste as a delimited REGION — markers intact around the content, so
+/// its newlines arrive as data rather than submitted commands. `dd bs=1`
+/// records every stdin byte unbuffered, so even a SIGKILLed child leaves
+/// exactly what reached it; the file must equal the region byte for byte.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_child_with_paste_mode_receives_the_bracketed_region() {
+    use std::time::{Duration, Instant};
+
+    let probe = std::env::temp_dir().join(format!(
+        "termdeck-paste-probe-{}-{}",
+        std::process::id(),
+        now().unix_millis
+    ));
+    let size = ScreenSize::new(80, 24);
+    let projects = vec![Project {
+        terminal: TerminalId::new("prober".to_owned()),
+        path: PathBuf::from("/"),
+        command: vec![
+            "/usr/bin/bash".to_owned(),
+            "-c".to_owned(),
+            format!(
+                "stty raw -echo; printf '\\033[?2004h'; exec dd bs=1 of={} 2>/dev/null",
+                probe.display()
+            ),
+        ],
+        shell_hook: false,
+    }];
+    let deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let terminal = projects[0].terminal.clone();
+    // The child's mode set surfaces through real output first.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline
+        && !engine
+            .metadata(&terminal)
+            .is_some_and(|metadata| metadata.bracketed_paste)
+    {
+        engine.drain_events();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        engine
+            .metadata(&terminal)
+            .is_some_and(|metadata| metadata.bracketed_paste),
+        "the child never enabled paste mode"
+    );
+
+    let expected = b"\x1b[200~SAFE\nTEXT\x1b[201~".to_vec();
+    let bytes = encode_paste(&engine, &terminal, "SAFE\nTEXT".to_owned());
+    assert_eq!(bytes, expected, "the dispatch must carry the region");
+    engine.dispatch(EngineCommand::Input {
+        terminal: terminal.clone(),
+        bytes,
+    });
+    // Every byte acknowledged in the file before shutdown may reap.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline
+        && std::fs::read(&probe)
+            .map(|contents| contents.len())
+            .unwrap_or(0)
+            < expected.len()
+    {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    engine.dispatch(EngineCommand::Shutdown);
+
+    let recorded = std::fs::read(&probe).unwrap();
+    let _ = std::fs::remove_file(&probe);
+    assert_eq!(
+        recorded, expected,
+        "the child must receive the region, not stripped bytes"
+    );
 }
 
 /// The raw terminal sends CR for `⏎` and LF for `ctrl+j`. Merging them made

@@ -24,6 +24,38 @@ pub(super) fn dispatch_scroll(
     engine.dispatch(EngineCommand::Scroll { terminal, command });
 }
 
+/// Bracketed-paste delimiters (DEC 2004): the outer terminal wraps pastes
+/// in these, and paste-aware children want them back (#120).
+pub(super) const PASTE_OPEN: &[u8] = b"\x1b[200~";
+pub(super) const PASTE_CLOSE: &[u8] = b"\x1b[201~";
+
+/// Encodes a paste for one child (#120): bracketed while the child holds
+/// DEC 2004, raw bytes otherwise. Typed input (`Bytes`) and agent `text`
+/// stay raw — only a paste operation wraps, so a child without paste mode
+/// keeps today's submit-on-newline behavior while a paste-aware child gets
+/// its region with newlines non-executable.
+///
+/// The content cannot hold the closer: the outer parse ended the paste at
+/// the first one, so the same bytes re-emit unambiguously. The wrapped
+/// unit rides the bounded input path like any other write (#118).
+pub(super) fn encode_paste(
+    engine: &dyn TerminalEngine,
+    terminal: &TerminalId,
+    text: String,
+) -> Vec<u8> {
+    if !engine
+        .metadata(terminal)
+        .is_some_and(|metadata| metadata.bracketed_paste)
+    {
+        return text.into_bytes();
+    }
+    let mut bytes = Vec::with_capacity(text.len() + PASTE_OPEN.len() + PASTE_CLOSE.len());
+    bytes.extend_from_slice(PASTE_OPEN);
+    bytes.extend_from_slice(text.as_bytes());
+    bytes.extend_from_slice(PASTE_CLOSE);
+    bytes
+}
+
 /// What a wheel tick over a pane becomes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum WheelRoute {
@@ -175,14 +207,28 @@ impl KeyReader {
     pub(super) fn decode(&mut self, flush_escape: bool) -> Vec<InputEvent> {
         let mut events = Vec::new();
         while !self.bytes.is_empty() {
-            if self.bytes.starts_with(b"\x1b[200~") {
-                let Some(end) = self.bytes.windows(6).position(|part| part == b"\x1b[201~") else {
+            if self.bytes.starts_with(PASTE_OPEN) {
+                let Some(end) = self
+                    .bytes
+                    .windows(PASTE_CLOSE.len())
+                    .position(|part| part == PASTE_CLOSE)
+                else {
                     break;
                 };
-                let text = String::from_utf8_lossy(&self.bytes[6..end]).into_owned();
-                self.bytes.drain(..end + 6);
+                let text = String::from_utf8_lossy(&self.bytes[PASTE_OPEN.len()..end]).into_owned();
+                self.bytes.drain(..end + PASTE_CLOSE.len());
                 events.push(InputEvent::Paste(text));
                 continue;
+            }
+            // A fragmented opener is not an escape key: `ESC[2` split from
+            // `00~` must wait for the rest like any other partial sequence
+            // (#120). At flush time it decodes as before (escape plus
+            // literals), the same tradeoff partial sequences already make.
+            if !flush_escape
+                && self.bytes.len() < PASTE_OPEN.len()
+                && PASTE_OPEN.starts_with(self.bytes.as_slice())
+            {
+                break;
             }
             if self.bytes.starts_with(b"\x1b[<") {
                 let Some(end) = self.bytes[3..]
