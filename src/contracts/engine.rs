@@ -51,6 +51,12 @@ pub enum EngineEvent {
         terminal: TerminalId,
         kind: NotifyKind,
     },
+    /// A terminal's bounded input queue had no room, so the input was refused
+    /// and nothing reached the PTY (#118). Returned from `dispatch`, not
+    /// from `drain_events`: the frame pump only flushes what is already
+    /// queued, so it never refuses. Additive like `Notify`: engines that
+    /// never saturate never emit it, and consumers may ignore it.
+    InputDropped { terminal: TerminalId },
 }
 
 /// The narrow UI-to-engine seam. Implementations retain state and emit changes
