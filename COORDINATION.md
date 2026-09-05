@@ -861,6 +861,11 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   + gate; the SCROLLBAR_WINDOW≡NOTIFY_WINDOW aliasing honesty is the one
   judgment call to verify). Verdict ping inbox nb-ui-2026-09-05.critic.ping.
   In flight: worker → #119; critic → UI-NB review; claude idle.
+- 2026-09-05: UI NB BATCH CRITIC VERDICT = PASS + MERGED (standing
+  approval) — e6629ff, gate 372 lib + 4 green; toggle_pin doc truthful,
+  is_some_and identical, SCROLLBAR_WINDOW aliased with HONEST split-rule
+  comment; binary rebuilt. ALL NB DEBT CLEARED (#116/#117/#113/#115).
+  In flight: worker → #119 (job cleanup, no marker yet). Claude idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
