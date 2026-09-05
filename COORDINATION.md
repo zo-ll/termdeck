@@ -1040,6 +1040,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   non-regression, fuzz determinism; pass ≈ closes #126). #123 (bash -l hook)
   rebased to main + DISPATCHED to codex (WORKING).
 
+- 2026-09-05: #126-PARSER-BOUNDS CRITIC VERDICT = PASS → MERGED (f9026a7,
+  393 lib + 4) → #126 CLOSED (GitHub auto-closed on the "CLOSES #126" merge-
+  message keyword; closing-summary comment added; critic verified NOT the
+  closer — its only gh use was reading issues). Verdict detail: Escape ≤6B
+  behind is_escape_prefix; Mouse 256B → DiscardMouse; Paste 64KiB →
+  DiscardPaste through [201~; retained state bounded ~64KiB+4KiB read;
+  decode_utf8 derives width from lead byte, consumes ≤3B partial, failure→
+  exactly 1 byte consumed (é+0xff → scalar + U+FFFD pinned); close-marker
+  restart correct; coverage deterministic (16 exhaustive partitions +
+  256 fixed-seed LCG chunkings, no sleeps); #120 matrix + #118 path intact.
+  NBs queued (backlog 17): sil dozen >64KiB paste dropped silently (follow-up
+  worth); retained_len assertion far looser than reality (0); malformed-byte
+  single-shot only; 5-byte exhaustive stream (fuzz carries coverage).
+  In flight: codex→#123. Remaining audit: #123, #125, #129, #130, #131.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
