@@ -1163,6 +1163,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   critical read, 3 tests genuine fail-pre-fix + deterministic,
   already-covered claims spot-checked, impl deltas test-support-only,
   gate). Verdict ping inbox 130-tests-ci.critic.ping.
+- 2026-09-05: #130 CRITIC VERDICT = PASS → MERGED (0941b4e, 401 lib + 4;
+  issue #130 STAYS OPEN — flake CI story missing). Verdict honesty:
+  workflow NOT executable locally (stated plainly; shell logic + pin
+  assertion run locally; PIN 1.98.0 would pass); 3 gap-fills genuine
+  (socket e2e real Listener+UnixStream+ctl.v1, colour byte-exact hand-
+  checked, fish mirrors zsh); 9/10 coverage classes spot-checked; WSL
+  stamp records 'manual pass NEVER run' + zsh/fish SKIP here; gate 401
+  +4 ×2, --locked clean. NITS (queued, backlog 36): fish/zsh tests
+  vacuous without the shells (2/3 verifiable here; rides CI apt);
+  advisories-on-every-push red-light risk; pin assertion version-shaped;
+  step ceilings over-subscribe job ceiling; no registry cache (audit
+  rebuilds under 10m); e2e read_to_string no timeout (hang-risk);
+  flake story absent (grep 0). #130-PART2 (flake story + e2e read
+  timeout + advisories continue-on-error) DISPATCHED to the claude
+  lane (WORKING, transcript-verified).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
