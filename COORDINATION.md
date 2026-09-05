@@ -961,6 +961,27 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Verdict ping inbox 124-scrollback-config.critic.ping. In flight: claude-
   critic→#124 review; muse→#121; codex idle after #124.
 
+- 2026-09-05: #124 MERGED (claude-critic PASS; 3 nits queued to NB backlog:
+  NB-A NativeEngine::spawn still hardcodes DEFAULT_SCROLLBACK (public API,
+  test-only caller); NB-B #124 commit body empty (contract lives in code
+  comments); NB-C session test hardcodes /tmp/termdeck-scrollback-test.sock).
+  79d4b48, gate 383 lib + 4 green, issue #124 CLOSED, binary rebuilt.
+- 2026-09-05: #121 DONE (muse worker, commit 711eb1d, 3 files; marker pass:
+  "session-monotonic pane identities plus shared tombstone primitive, 3
+  failing-pre-fix tests"; gate 383+4 stable 2x; hand-back archived →
+  .coordinator/journal/muse-121-handback.txt). Design: ONE string id
+  (deliberately not opaque — TERMDECK_PANE/agent workflows preserved);
+  session-monotonic allocator (reopen → -2 suffix, never tombstoned
+  original); single funnel tombstone primitive through keyboard/mouse/API
+  close; stale-ID truthful (close→already:true idempotent; unknown→error 2);
+  visible -2 suffix change flagged for critic. MUSE WORKER KILLED per env
+  spec (only pi pane = coordinator). Routed to CLAUDE critic (assignment
+  .scratch/review/121.critic.md; branch base pre-#124 → integration rebase
+  planned post-verdict — #124 touched session.rs/lifecycle.rs/tests.rs too,
+  expect a small conflict routed to codex at merge). #126 (ANSI attrs +
+  mode-aware input) DISPATCHED to codex (WORKING, parallel-safe vs #121:
+  no session.rs overlap).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
