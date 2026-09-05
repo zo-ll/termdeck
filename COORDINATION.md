@@ -487,6 +487,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   muse-spark-1.3-contributor, critic-skill only, assignment
   .scratch/review/111.critic.md, single-line pointer; critic Working — reading
   diff at source). Verdict pings via inbox 111-notify-fix.critic.ping.
+- 2026-09-05: #111 CRITIC VERDICT = PASS (inbox 111-notify-fix.critic.ping).
+  Attribution-only fix: path normalization (symlink-spelling + tilde) + 2 tests
+  (fail pre-fix / pass post-fix), gate green 322 lib + 4 int, deck.rs NOT
+  touched ⇒ zero overlap with #113. Root cause confirmed: render path already
+  handled non-active-pane NotifyKind::Message (flashing strip, census mark,
+  non-modal toast for hidden panes, #71 non-modal principle intact — existing
+  snapshots prove it); the bug was the caller_pane() identity mismatch only.
+  NITS (recorded, non-blocking): (1) worker's .done/ping lacked user smoke
+  steps (critic supplied them); (2) temp-dir cleanup skipped on assert-failure
+  in one test; (3) no render-level test — justified by pre-existing snapshots.
+  ENV FLAKE noted: engine::native::tests::shutdown_terms_… fails identically
+  on pristine origin/main in the sandbox (process-group restriction), passes
+  on re-run — pre-existing, unrelated to the 1-file ctl diff.
+  WAITING: user merge approval for #111 (then close issue #111).
 - 2026-09-05: #116 (guaranteed peek, alt-aware active screen) FILED (issue
   created), worktree coord/116-peek-active-screen + brief ready; DISPATCHED to
   the idle codex session (same full session, per user preference) and verified
