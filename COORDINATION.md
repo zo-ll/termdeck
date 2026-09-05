@@ -505,6 +505,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   contracts/engine, honest-fixtures check, mode-interplay matrix).
   Verdict ping inbox 113-pin.critic.ping. Claude lane IDLE; #115 STILL queued
   until #113 merges (shared ui/deck.rs + ui/state.rs — serialization per plan).
+- 2026-09-05: #113 CRITIC VERDICT = PASS (inbox 113-pin.critic.ping). Design
+  doc settles ALL open points (pin-held-not-spent, one pin, ^g p on master,
+  unpin cost, ACCENT mark + conditional status key, mode matrix, runtime-only);
+  implementation matches point-by-point (demotion-of-pinned-master → pin slot
+  asserted in tests; unprefixed p passes to shell). Boundary honored: zero
+  contracts/engine/ctl/config changes; runtime-only (pinned nowhere outside
+  src/ui/); fixtures honest + unpinned-byte-identical guard test; PLAN.md
+  binding table untouched (doc §6 discloses). 14 tests full matrix, fail
+  pre-fix; gate green FIRST run 338 lib + 4 int (flake absent this time).
+  NITS: (1) toggle_pin "returns whether anything changed" doc overpromises —
+  always changes with a master present; (2) pinned().is_some() && …==active()
+  double-call style nit in deck.rs. WAITING: user merge approval for #113;
+  then merge + close + rebuild + dispatch #115 to claude.
 - 2026-09-05: #116 CRITIC VERDICT = PASS (inbox 116-peek-active-screen.critic.ping):
   all 6 acceptance criteria met; active-suffix with history fallback; screen
   field derived from same adapter metadata (can't disagree with grid); error
