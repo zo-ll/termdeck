@@ -1178,6 +1178,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   flake story absent (grep 0). #130-PART2 (flake story + e2e read
   timeout + advisories continue-on-error) DISPATCHED to the claude
   lane (WORKING, transcript-verified).
+- 2026-09-05: #130-PART2 DONE (claude, 08e0119; marker: main suite
+  --skips the shutdown case (fail-on-first kept), one-retry step with a
+  rename guard (all 3 paths run locally), advisories continue-on-error +
+  loud warning/summary, socket e2e read timeout; YAML parses, 401 lib +
+  4). Routed to CLAUDE critic (assignment 130-flake-story.critic.md —
+  retry-honesty + fail-on-first preservation, advisory visibility, e2e
+  timeout fail-fast, boundary; pass ≈ closes #130). Verdict ping inbox
+  130-flake-story.critic.ping.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
