@@ -1,13 +1,13 @@
 #[cfg(unix)]
 use super::dispatch_control;
 use super::{
-    InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
+    InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, master_terminal, mouse_action, now, open_terminals,
     request_close, resize_terminals, resized, route_wheel, spawn_terminals, terminal_sizes,
 };
 use crate::{
     contracts::{
-        ActionCommand, EngineCommand, EngineEvent, Project, ScreenSize, ScrollCommand,
+        ActionCommand, EngineCommand, EngineEvent, NotifyKind, Project, ScreenSize, ScrollCommand,
         ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
@@ -990,5 +990,45 @@ fn a_resize_alone_is_a_reason_to_redraw() {
     assert!(
         !resized(&mut size, ScreenSize::new(100, 40)),
         "one redraw, not one per pass"
+    );
+}
+
+/// A terminal that would not start was dropped in silence, which made an
+/// ignored selection and a failed process look exactly alike (#128). The
+/// batch says so in one row: the first failure named in full, the rest
+/// counted, and a paragraph of an error cut to the line that fits.
+#[test]
+fn a_failed_add_says_so_in_one_bounded_row() {
+    assert!(add_failure(&[]).is_none(), "nothing failed, nothing to say");
+
+    let (head, one) = add_failure(&[(
+        TerminalId::new("frontend-2"),
+        "No such file or directory (os error 2)\nwhile running bash".to_owned(),
+    )])
+    .expect("a failure is worth saying");
+    assert_eq!(head, "frontend-2", "the row is about the terminal");
+    assert_eq!(
+        one,
+        NotifyKind::Message {
+            title: "did not start".to_owned(),
+            body: "No such file or directory (os error 2)".to_owned(),
+        },
+        "the first line of the error, and only the first"
+    );
+
+    let (head, three) = add_failure(&[
+        (TerminalId::new("api"), "permission denied".to_owned()),
+        (TerminalId::new("web"), "permission denied".to_owned()),
+        (TerminalId::new("db"), "permission denied".to_owned()),
+    ])
+    .expect("three failures are worth saying once");
+    assert_eq!(head, "api");
+    assert_eq!(
+        three,
+        NotifyKind::Message {
+            title: "did not start".to_owned(),
+            body: "permission denied · +2 more".to_owned(),
+        },
+        "three rows would be three times the same news"
     );
 }

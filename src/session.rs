@@ -36,7 +36,7 @@ use ratatui::{
 use crate::{
     config::Workspace,
     contracts::{
-        EngineCommand, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
+        EngineCommand, NotifyKind, Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId,
         TerminalMetadata, Timestamp, UserCommand,
     },
     engine::NativeEngine,
@@ -179,6 +179,30 @@ fn resized(size: &mut ScreenSize, current: ScreenSize) -> bool {
     let changed = *size != current;
     *size = current;
     changed
+}
+
+/// What a failed add says, as the one toast row it becomes: the terminal it
+/// is about, and one bounded line about why (#128).
+///
+/// The panes that did start are already open and stay open — this is the
+/// half of the batch that has nowhere else to appear. A sheet of twenty that
+/// all fail says so in one row and counts the rest, and an error that
+/// arrives as a paragraph is cut to its first line: the toast is four rows
+/// of a fixed box, not a log.
+fn add_failure(failed: &[(TerminalId, String)]) -> Option<(String, NotifyKind)> {
+    let (terminal, error) = failed.first()?;
+    let error = error.lines().next().unwrap_or_default().trim();
+    let body = match failed.len() - 1 {
+        0 => error.to_owned(),
+        rest => format!("{error} · +{rest} more"),
+    };
+    Some((
+        terminal.to_string(),
+        NotifyKind::Message {
+            title: "did not start".to_owned(),
+            body,
+        },
+    ))
 }
 
 /// What the session is already running, so the sheet can identify another
@@ -552,6 +576,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 };
                 match reaction {
                     Some(PickerReaction::Launch) => {
+                        let mut failed = Vec::new();
                         for project in chosen(open_sheet, &projects) {
                             #[cfg(unix)]
                             let result = add_terminal_with_socket(
@@ -572,8 +597,15 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 }
                                 // A terminal that will not start is not worth
                                 // ending the session over; the rest still do.
-                                Err(_) => continue,
+                                // It is worth saying so, though: dropping the
+                                // error made an ignored selection and a
+                                // process that could not start look exactly
+                                // alike (#128).
+                                Err(error) => failed.push((project.terminal, error)),
                             }
+                        }
+                        if let Some((head, summary)) = add_failure(&failed) {
+                            notifies.notice(head, summary, now());
                         }
                         sheet = None;
                     }

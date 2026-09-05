@@ -42,6 +42,24 @@ pub struct Notify {
     pub at: Timestamp,
 }
 
+/// How many notices are kept. The toast lists four rows and counts the rest,
+/// so remembering more than it can draw serves nobody; the oldest goes.
+const NOTICE_LIMIT: usize = 4;
+
+/// Something the session has to say that no pane can say for it (#128).
+///
+/// A terminal that never started has no frame to flash and no row in the
+/// stack, so the ordinary notification — which is addressed to a pane — has
+/// nowhere to land, and the failure used to be dropped on the floor instead.
+/// A notice carries its own `head` for the same reason: there is no pane
+/// number and no running terminal to name it by.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Notice {
+    /// What the row is about — the terminal that failed to start.
+    pub head: String,
+    pub notify: Notify,
+}
+
 /// What the terminals have asked for and has not been seen yet (#97).
 ///
 /// One slot per terminal, keyed by identity rather than by configured
@@ -52,6 +70,8 @@ pub struct Notify {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Notifications {
     pending: BTreeMap<TerminalId, Notify>,
+    /// What the session said for itself, newest last and bounded.
+    notices: Vec<Notice>,
     /// When the batch was last dismissed. The marks it leaves behind outlive
     /// it: a dismissal closes the toast, it does not mean the pane was seen.
     dismissed: Option<Timestamp>,
@@ -61,6 +81,7 @@ impl Notifications {
     pub const fn new() -> Self {
         Self {
             pending: BTreeMap::new(),
+            notices: Vec::new(),
             dismissed: None,
         }
     }
@@ -119,6 +140,31 @@ impl Notifications {
         }
     }
 
+    /// Says something no pane can say: `head` names what it is about, and
+    /// the message is the same kind a pane would have sent. Nothing here is
+    /// coalesced — a notice is news by definition, and the batch is bounded
+    /// by [`NOTICE_LIMIT`] rather than by a window.
+    pub fn notice(&mut self, head: impl Into<String>, kind: NotifyKind, now: Timestamp) -> bool {
+        self.notices.push(Notice {
+            head: head.into(),
+            notify: Notify { kind, at: now },
+        });
+        if self.notices.len() > NOTICE_LIMIT {
+            self.notices.remove(0);
+        }
+        true
+    }
+
+    /// The notices still in the toast: never dismissed since they arrived,
+    /// and inside the toast's own window. A notice has no pane, so this is
+    /// the only place any of them is ever drawn.
+    pub fn toasting_notices(&self, now: Timestamp) -> impl Iterator<Item = &Notice> {
+        self.notices.iter().filter(move |notice| {
+            self.undismissed(notice.notify.at)
+                && since(now, notice.notify.at).is_some_and(|elapsed| elapsed < TOAST_WINDOW.millis)
+        })
+    }
+
     /// Clears one terminal's slot: the pane has been seen. The session calls
     /// this for whichever terminal holds the master frame, so a promotion
     /// answers a notification with no clock involved at all.
@@ -132,7 +178,9 @@ impl Notifications {
         let closed = self
             .pending
             .values()
-            .any(|notify| self.undismissed(notify.at));
+            .map(|notify| notify.at)
+            .chain(self.notices.iter().map(|notice| notice.notify.at))
+            .any(|at| self.undismissed(at));
         self.dismissed = Some(now);
         closed
     }
@@ -162,7 +210,7 @@ impl Notifications {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.pending.is_empty()
+        self.pending.is_empty() && self.notices.is_empty()
     }
 
     /// Whether any window is still open, and so still owes the interface a
@@ -177,7 +225,9 @@ impl Notifications {
         let window = NOTIFY_WINDOW.millis.max(TOAST_WINDOW.millis);
         self.pending
             .values()
-            .filter_map(|notify| since(now, notify.at))
+            .map(|notify| notify.at)
+            .chain(self.notices.iter().map(|notice| notice.notify.at))
+            .filter_map(|at| since(now, at))
             .any(|elapsed| elapsed < window)
     }
 
@@ -749,7 +799,7 @@ impl DeckState {
 
 #[cfg(test)]
 mod tests {
-    use super::{DeckState, Notifications};
+    use super::{DeckState, Notifications, TOAST_WINDOW};
     use crate::{
         contracts::{ActionCommand, Elapsed, NotifyKind, TerminalId, Timestamp},
         ui::fixture,
@@ -1349,6 +1399,48 @@ mod tests {
         assert_eq!(state.demoted(later(1_499)), Some(0));
         assert_eq!(state.demoted(later(1_500)), None);
         assert_eq!(super::DEMOTION_WINDOW, Elapsed { millis: 1_500 });
+    }
+
+    /// A notice is the session speaking for a pane that does not exist, so
+    /// nothing about it can be keyed by a terminal (#128). It is bounded by
+    /// count rather than by a window — the toast draws four rows — and it
+    /// answers to the same dismissal and the same settling as the rest.
+    #[test]
+    fn a_notice_is_bounded_dismissable_and_settles_by_itself() {
+        let mut notifies = Notifications::new();
+
+        for index in 0..6 {
+            assert!(notifies.notice(format!("term-{index}"), message("did not start"), NOW));
+        }
+
+        let heads: Vec<String> = notifies
+            .toasting_notices(NOW)
+            .map(|notice| notice.head.clone())
+            .collect();
+        assert_eq!(
+            heads,
+            ["term-2", "term-3", "term-4", "term-5"],
+            "the box draws four"
+        );
+        assert!(!notifies.is_empty(), "the session has something to say");
+        assert!(notifies.settling(NOW), "and a frame is owed to say it in");
+
+        // The toast closes on `esc` like any other, and stays closed.
+        assert!(notifies.dismiss(later(1_000)));
+        assert_eq!(notifies.toasting_notices(later(1_100)).count(), 0);
+        assert!(!notifies.dismiss(later(1_200)), "nothing left to close");
+
+        // A later notice opens it again, and its own window ends it.
+        assert!(notifies.notice("term-6", message("did not start"), later(2_000)));
+        assert_eq!(notifies.toasting_notices(later(2_100)).count(), 1);
+        assert_eq!(
+            notifies
+                .toasting_notices(later(2_000 + TOAST_WINDOW.millis))
+                .count(),
+            0,
+            "the window is the same one a pane's toast keeps"
+        );
+        assert!(!notifies.settling(later(2_000 + TOAST_WINDOW.millis)));
     }
 
     fn message(body: &str) -> NotifyKind {

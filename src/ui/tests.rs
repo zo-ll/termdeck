@@ -2137,6 +2137,36 @@ fn a_rich_hidden_completion_uses_the_toast() {
     assert_snapshot("notify-rich-toast", &buffer);
 }
 
+/// A terminal that never started has no pane to flash and no row in the
+/// stack, so its failure had nowhere to land and was dropped on the floor
+/// (#128). The toast is where it lands now: beside whatever the panes have
+/// to say for themselves, taking nothing — the master keeps its cursor.
+#[test]
+fn a_terminal_that_never_started_says_so_in_the_toast() {
+    let mut notifies = Notifications::new();
+    assert!(notifies.notice(
+        "frontend-2",
+        rich_message("did not start", "No such file or directory"),
+        at(0),
+    ));
+    let engine = fixture::frontend_active();
+
+    let (buffer, cursor) = render_at(&engine, &reference_deck(4), &notifies, at(1_000), (144, 42));
+
+    let rendered = text(&buffer);
+    assert!(rendered.contains("1 notification"), "{rendered}");
+    assert!(
+        rendered.contains("frontend-2 · did not start"),
+        "{rendered}"
+    );
+    assert!(cursor.is_some(), "the toast is not a modal: {rendered}");
+
+    // And it settles by itself, the way every notification does: nothing
+    // asks the user to acknowledge a pane that does not exist.
+    let (later, _) = render_at(&engine, &reference_deck(4), &notifies, at(9_000), (144, 42));
+    assert!(!text(&later).contains("did not start"), "{}", text(&later));
+}
+
 /// The chrome the keyframes above draw, read as colours rather than glyphs.
 #[test]
 fn a_notified_pane_flashes_in_the_demotion_idiom_and_then_settles() {
