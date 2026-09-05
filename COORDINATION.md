@@ -707,6 +707,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (load-sensitive, acceptable), no binary-level deadline test (thin
   wrapper, justified). WAITING: user merge approval for #117.
 
+- 2026-09-05: #117 MERGED (user approval) — --no-ff merge (64b28f6), gate
+  green 352 lib + 4 int, pushed; issue #117 CLOSED; binary rebuilt (deck
+  restart loads it). Audit wave progress: FIRST-priority 1/5 done.
+- 2026-09-05 (LANE SWITCH, user): codex tokens <10% — worker lane is now PI +
+  muse-spark-1.3-contributor (NOT codex-toward-muse; user decision). New
+  worker skill committed at /home/az/.pi/agent/skills/worker/SKILL.md (role:
+  implementation worker; brief-as-contract; worktree-only; commit-local;
+  never push/merge/PR/tracker; checkpoints; marker+ping finish). Codex pane
+  closed. #118 (nonblocking bounded PTY input) worktree coord/118-pty-input
+  off post-#117 main + brief written; worker pane "118-pty-input" launched
+  (pi muse-spark-1.3-contributor, worker skill) and DISPATCHED — verified
+  Working (exploring engine contracts). In flight: pi-worker → #118; claude
+  → #127 (parallel). Critic idle.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
