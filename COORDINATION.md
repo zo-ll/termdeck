@@ -853,6 +853,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Audit progress: #117 #118 #127 #128 + 2 NB batches shipped; #119 in flight;
   #120 #121 remaining in FIRST; then #122-#126, #129-#131.
 
+- 2026-09-05: UI NB BATCH DONE (claude, commit d74403a; marker pass:
+  "toggle_pin doc states the real semantics; unpin hint one is_some_and;
+  SCROLLBAR_WINDOW = NOTIFY_WINDOW with derivation stated; behavior-
+  identical, 372 lib + 4 green"; worktree clean). Routed to CRITIC
+  (assignment .scratch/review/nb-ui.critic.md — NBs 1-3 + behavior-identical
+  + gate; the SCROLLBAR_WINDOW≡NOTIFY_WINDOW aliasing honesty is the one
+  judgment call to verify). Verdict ping inbox nb-ui-2026-09-05.critic.ping.
+  In flight: worker → #119; critic → UI-NB review; claude idle.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
