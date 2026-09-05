@@ -473,7 +473,10 @@ impl NativeEngine {
             let Some(transport) = &mut terminal.transport else {
                 continue;
             };
-            if transport.is_process_group_alive()
+            // Force when anything owned survives — the shell's group OR the
+            // wider session (#119). A dead shell with live jobs must still
+            // reach `force_shutdown`; the group check alone misses it.
+            if (transport.is_process_group_alive() || transport.is_session_alive())
                 && let Err(message) = transport.force_shutdown()
             {
                 failures[index].get_or_insert(message);
@@ -791,6 +794,58 @@ mod tests {
         ));
         let transport = engine.terminals[0].transport.as_ref().unwrap();
         assert!(!transport.is_process_group_alive());
+        assert!(transport.has_joined_threads());
+    }
+
+    /// #119 through the integrated path: a pane whose background job
+    /// ignores SIGHUP in its own process group is cleaned by engine
+    /// shutdown — the shared grace, per-terminal force, and bounded join
+    /// together leave no owned session member behind.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn engine_shutdown_kills_a_sighup_ignoring_background_job() {
+        let terminal = TerminalId::new("bg-job");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/usr/bin/bash".to_owned(),
+                "-m".to_owned(),
+                "-c".to_owned(),
+                "trap '' HUP; sleep 60 & echo JOBPID=$!; wait".to_owned(),
+            ],
+            shell_hook: false,
+        }];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        wait_for_frame(&mut engine, &terminal, "JOBPID=");
+        let text = frame_text(engine.frame(&terminal).unwrap());
+        let marker = "JOBPID=";
+        let job: u32 = text[text.find(marker).unwrap() + marker.len()..]
+            .split(|character: char| !character.is_ascii_digit())
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(pid_alive(job), "the job must be running before shutdown");
+
+        let started = Instant::now();
+        engine.dispatch(EngineCommand::Shutdown);
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "engine shutdown must stay bounded, took {elapsed:?}"
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && pid_alive(job) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!pid_alive(job), "the SIGHUP-ignoring job must die");
+        let transport = engine.terminals[0].transport.as_ref().unwrap();
+        assert!(
+            !transport.is_session_alive(),
+            "no session member may survive"
+        );
         assert!(transport.has_joined_threads());
     }
 
@@ -1371,6 +1426,12 @@ mod tests {
                 && frame.size == ScreenSize::new(4, 1)
         ));
         assert_eq!(engine.metadata(&terminal).unwrap().scrollback, expected);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn pid_alive(pid: u32) -> bool {
+        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
     }
 
     #[cfg(target_os = "linux")]

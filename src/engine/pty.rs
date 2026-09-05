@@ -19,6 +19,14 @@ use crate::{
 
 const EVENT_CAPACITY: usize = 16;
 const READ_BUFFER_SIZE: usize = 4096;
+/// Upper bound for confirming a force SIGKILL landed before reaping helper
+/// threads (#119). SIGKILL death is prompt; this only absorbs scheduling
+/// and reaping latency so the common path joins instead of detaching.
+const FORCE_SETTLE: Duration = Duration::from_millis(500);
+/// Upper bound for reaping one transport's helper threads in total (#119).
+/// After the SIGKILL above, the reader sees EOF and the waiter reaps, so
+/// both finish promptly; what cannot finish is detached, never waited out.
+const JOIN_TIMEOUT: Duration = Duration::from_millis(500);
 /// Bytes one PTY may hold for a child that has stopped reading (#118). At
 /// 1 MiB it comfortably accepts the 512 KiB audit paste while keeping a
 /// wedged pane's footprint fixed. Single ctl.v1 requests are bounded far
@@ -63,11 +71,30 @@ pub enum InputOutcome {
 }
 
 /// A single host shell and its bounded PTY transport.
+///
+/// Process-ownership boundary (#119): every process in the spawned shell's
+/// session (session id == shell pid — `portable-pty` makes the child a
+/// session leader), plus any descendant that escaped the session outright
+/// (nested sessions, `setsid` daemons), snapshotted while still parented.
+/// An interactive shell's jobs live in SEPARATE process groups that survive
+/// the shell's own group signals when they ignore SIGHUP, so the group
+/// alone is not the boundary; the session is, with the snapshot behind it.
 pub struct PtyTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
     process_group: Option<u32>,
+    /// The shell's start time (Linux `/proc` clock ticks), recorded at
+    /// spawn to validate the session still belongs to us before a
+    /// session-wide signal: a pid can be reused after our shell dies.
+    #[cfg(target_os = "linux")]
+    shell_start: Option<u64>,
+    /// Descendant (pid, start time) pairs snapshotted at shutdown start,
+    /// while the tree is still parented. Catches processes that left our
+    /// session (nested sessions, detached daemons); each kill revalidates
+    /// the start time so a reused pid is never signalled.
+    #[cfg(target_os = "linux")]
+    descendants: Vec<(u32, u64)>,
     /// Bytes accepted but not yet written: the bounded queue between the
     /// session loop and a child that may have stopped reading (#118).
     /// `dispatch` appends without blocking; the frame pump (`flush_input`
@@ -148,6 +175,10 @@ impl PtyTransport {
             .map_err(|error| error.to_string())?;
         let process_group = child.process_id();
         let killer = child.clone_killer();
+        // Recorded before anything can exit: the reuse guard below
+        // compares against this baseline (#119).
+        #[cfg(target_os = "linux")]
+        let shell_start = process_group.and_then(proc_starttime);
         let (sender, events) = mpsc::sync_channel(EVENT_CAPACITY);
 
         let reader_terminal = terminal.clone();
@@ -179,6 +210,10 @@ impl PtyTransport {
             writer,
             killer,
             process_group,
+            #[cfg(target_os = "linux")]
+            shell_start,
+            #[cfg(target_os = "linux")]
+            descendants: Vec::new(),
             pending_input: VecDeque::new(),
             events: Some(events),
             reader: Some(reader),
@@ -279,8 +314,13 @@ impl PtyTransport {
             .unwrap_or_default()
     }
 
-    /// Hangs up and terminates one process group, then waits through the
-    /// normal grace period.
+    /// Hangs up and terminates every owned process, bounded in time.
+    ///
+    /// Graceful first (HUP+TERM to the shell's group, up to two seconds),
+    /// then SIGKILL to the whole session and every snapshotted descendant
+    /// (#119), a short settle, and a bounded thread reap. Total shutdown is
+    /// bounded by the grace period plus the two small constants above — a
+    /// wedged or ignoring child can delay it, never stall it.
     pub fn shutdown(&mut self) -> Result<(), String> {
         if self.events.is_none() {
             return Ok(());
@@ -290,10 +330,18 @@ impl PtyTransport {
         while self.is_process_group_alive() && std::time::Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));
         }
-        let kill_result = self
-            .is_process_group_alive()
+        let kill_result = (self.is_process_group_alive() || self.is_session_alive())
             .then(|| self.force_shutdown())
             .transpose();
+        // Let the SIGKILL land: transient zombies (an init that has not
+        // reaped yet) read "alive" to kill(2), and the helper threads
+        // need the EOF/reap that follows the last death.
+        let settle = std::time::Instant::now() + FORCE_SETTLE;
+        while (self.is_process_group_alive() || self.is_session_alive())
+            && std::time::Instant::now() < settle
+        {
+            thread::sleep(Duration::from_millis(20));
+        }
         self.join();
         result.and(kill_result.map(|_| ()))
     }
@@ -315,6 +363,16 @@ impl PtyTransport {
     /// behind it are unchanged.
     pub fn request_shutdown(&mut self) -> Result<(), String> {
         self.events.take();
+        // Snapshot the owned tree at its most complete, while the shell is
+        // still alive to parent it (#119). Anything that already orphaned
+        // before this point stays covered by the session kill at force time.
+        #[cfg(target_os = "linux")]
+        {
+            self.descendants = self
+                .process_group
+                .map(descendant_snapshot)
+                .unwrap_or_default();
+        }
         #[cfg(unix)]
         if let Some(process_group) = self.process_group {
             let hangup = send_signal(process_group, libc::SIGHUP);
@@ -334,24 +392,135 @@ impl PtyTransport {
         false
     }
 
-    /// Kills a process group that survived the TERM grace period.
+    /// Whether the owned session still has a live member (#119).
+    /// This is the ownership boundary the group check misses: jobs in
+    /// their own groups, and orphans reparented before the snapshot, all
+    /// keep the session alive until they die. Zombies do not count: they
+    /// hold no descriptors and need only their reaper, not our signals.
+    pub fn is_session_alive(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        if let Some(session) = self.process_group {
+            return !session_members(session).is_empty();
+        }
+
+        false
+    }
+
+    /// Kills what the grace period did not take (#119): the shell's group
+    /// as before, plus the whole session (job groups, SIGHUP-ignorers,
+    /// pre-shutdown orphans holding slave descriptors), plus every
+    /// snapshotted descendant that escaped the session. Each wider step is
+    /// guarded against pid reuse; see `kill_session`.
     pub fn force_shutdown(&mut self) -> Result<(), String> {
         #[cfg(unix)]
         if let Some(process_group) = self.process_group {
-            return send_signal(process_group, libc::SIGKILL);
+            let group = send_signal(process_group, libc::SIGKILL);
+            let session = self.kill_session();
+            let tree = self.kill_descendants();
+            return group.and(session).and(tree);
         }
 
         self.killer.kill().map_err(|error| error.to_string())
     }
 
+    /// SIGKILLs the whole owned session: job process groups, SIGHUP
+    /// ignorers, and orphans reparented before the snapshot (#119).
+    ///
+    /// Linux has no session-signalling syscall (kill(-id) names a process
+    /// GROUP), so this enumerates session members via `/proc` and signals
+    /// each one. If the session id was reused by a new leader after our
+    /// shell died, that leader's fresh tree is excluded; a live shell
+    /// needs no guard since its pid cannot have been reused.
+    #[cfg(unix)]
+    fn kill_session(&self) -> Result<(), String> {
+        #[cfg(not(target_os = "linux"))]
+        {
+            // Without `/proc` there is no session enumeration: the group
+            // kill above is the whole force stage, as before.
+            return Ok(());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let Some(session) = self.process_group else {
+                return Ok(());
+            };
+            let procs = all_processes();
+            let excluded = pid_reused(session, self.shell_start).then(|| {
+                let excluded = descendant_pids(session, &procs);
+                eprintln!("DEBUG pid reused, excluding new tree: {excluded:?}");
+                excluded
+            });
+            let own = std::process::id();
+            let mut first_error = None;
+            for info in &procs {
+                if info.session != session
+                    || info.pid == session
+                    || info.pid == own
+                    || excluded
+                        .as_ref()
+                        .is_some_and(|tree| tree.contains(&info.pid))
+                {
+                    continue;
+                }
+                if let Err(error) = send_signal_pid(info.pid, libc::SIGKILL) {
+                    first_error.get_or_insert(error);
+                }
+            }
+            first_error.map_or(Ok(()), Err)
+        }
+    }
+
+    /// SIGKILLs the snapshotted descendants that escaped the session
+    /// (nested sessions, detached daemons — #119). Best effort across the
+    /// set: every kill is attempted, the first error reported. Each pid is
+    /// revalidated against its snapshot start time first, so reuse since
+    /// the snapshot can never aim at an innocent — nor at ourselves.
+    #[cfg(unix)]
+    fn kill_descendants(&self) -> Result<(), String> {
+        #[cfg(not(target_os = "linux"))]
+        {
+            return Ok(());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let own = std::process::id();
+            let shell = self.process_group.unwrap_or(0);
+            let mut first_error = None;
+            for (pid, starttime) in &self.descendants {
+                if *pid == own || *pid == shell {
+                    continue;
+                }
+                if proc_stat(*pid).is_some_and(|info| info.starttime == *starttime)
+                    && let Err(error) = send_signal_pid(*pid, libc::SIGKILL)
+                {
+                    first_error.get_or_insert(error);
+                }
+            }
+            first_error.map_or(Ok(()), Err)
+        }
+    }
+
     /// Joins the reader and waiter after their owner has ended the process.
+    /// Bounded (#119): both threads finish promptly once the SIGKILL above
+    /// lands — the reader on EOF, the waiter on the reap — so this waits up
+    /// to `JOIN_TIMEOUT` and then detaches what cannot finish instead of
+    /// stalling shutdown behind an unkillable child. A detached helper
+    /// still exits on its own once its fd/child resolves.
     pub fn join(&mut self) {
         self.events.take();
-        if let Some(reader) = self.reader.take() {
-            let _ = reader.join();
-        }
-        if let Some(waiter) = self.waiter.take() {
-            let _ = waiter.join();
+        let deadline = std::time::Instant::now() + JOIN_TIMEOUT;
+        for slot in [&mut self.reader, &mut self.waiter] {
+            while slot.as_ref().is_some_and(|handle| !handle.is_finished())
+                && std::time::Instant::now() < deadline
+            {
+                thread::sleep(Duration::from_millis(20));
+            }
+            if let Some(handle) = slot.take()
+                && handle.is_finished()
+            {
+                let _ = handle.join();
+                // Else the handle drops here and the thread detaches.
+            }
         }
     }
 
@@ -498,7 +667,20 @@ fn is_end_of_pty(_: &std::io::Error) -> bool {
 #[cfg(unix)]
 fn send_signal(process_group: u32, signal: libc::c_int) -> Result<(), String> {
     // `portable-pty` creates the child as the session/process-group leader.
-    let result = unsafe { libc::kill(-(process_group as libc::pid_t), signal) };
+    check_kill(unsafe { libc::kill(-(process_group as libc::pid_t), signal) })
+}
+
+/// Signals one process, tolerating the already-dead race (#119). Used for
+/// per-PID sweeps where a member may exit between enumeration and kill.
+#[cfg(unix)]
+fn send_signal_pid(pid: u32, signal: libc::c_int) -> Result<(), String> {
+    check_kill(unsafe { libc::kill(pid as libc::pid_t, signal) })
+}
+
+/// A kill(2) result is success when it landed or the target is already
+/// gone (ESRCH); anything else is a real error.
+#[cfg(unix)]
+fn check_kill(result: libc::c_int) -> Result<(), String> {
     if result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
         Ok(())
     } else {
@@ -510,6 +692,111 @@ fn send_signal(process_group: u32, signal: libc::c_int) -> Result<(), String> {
 pub(crate) fn process_group_alive(process_group: u32) -> bool {
     let result = unsafe { libc::kill(-(process_group as libc::pid_t), 0) };
     result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+/// One `/proc` process record: the identity a shutdown sweep needs.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct ProcInfo {
+    pid: u32,
+    ppid: u32,
+    session: u32,
+    starttime: u64,
+    /// First letter of the stat state: zombies (`Z`) hold no descriptors
+    /// and need only their reaper, so sweeps do not count or signal them.
+    state: char,
+}
+
+/// Reads `/proc/<pid>/stat`. `comm` may hold spaces and parens, so the
+/// fields after it are split off the LAST `)`. Times are raw clock ticks:
+/// only ever compared for equality, never converted.
+#[cfg(target_os = "linux")]
+fn proc_stat(pid: u32) -> Option<ProcInfo> {
+    let contents = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let after_comm = contents.rfind(')')?;
+    // state(0) ppid(1) pgrp(2) session(3) … starttime(19).
+    let fields: Vec<&str> = contents[after_comm + 1..].split_whitespace().collect();
+    Some(ProcInfo {
+        pid,
+        ppid: fields.get(1)?.parse().ok()?,
+        session: fields.get(3)?.parse().ok()?,
+        starttime: fields.get(19)?.parse().ok()?,
+        state: fields.first()?.chars().next()?,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn proc_starttime(pid: u32) -> Option<u64> {
+    proc_stat(pid).map(|info| info.starttime)
+}
+
+/// Every process visible to us. Racy by nature — a member may exit mid-scan
+/// (its record simply vanishes) or fork (missed until the next scan) — so
+/// every kill site revalidates or tolerates ESRCH.
+#[cfg(target_os = "linux")]
+fn all_processes() -> Vec<ProcInfo> {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().to_string_lossy().parse::<u32>().ok())
+        .filter_map(proc_stat)
+        .collect()
+}
+
+/// (pid, starttime) of every process parented under `root` (#119).
+/// Taken while the tree is intact; kills revalidate the start time.
+#[cfg(target_os = "linux")]
+fn descendant_snapshot(root: u32) -> Vec<(u32, u64)> {
+    descendant_pids(root, &all_processes())
+        .into_iter()
+        .filter_map(|pid| proc_stat(pid).map(|info| (pid, info.starttime)))
+        .collect()
+}
+
+/// Breadth-first walk down ppid links from `root`, excluding `root` itself.
+#[cfg(target_os = "linux")]
+fn descendant_pids(root: u32, procs: &[ProcInfo]) -> Vec<u32> {
+    let mut found = Vec::new();
+    let mut frontier = vec![root];
+    while let Some(parent) = frontier.pop() {
+        for info in procs {
+            if info.ppid == parent && info.pid != root && !found.contains(&info.pid) {
+                found.push(info.pid);
+                frontier.push(info.pid);
+            }
+        }
+    }
+    found
+}
+
+/// Live (non-zombie) members of one session. Racy like every scan here:
+/// callers poll rather than assert instantly.
+#[cfg(target_os = "linux")]
+fn session_members(session: u32) -> Vec<ProcInfo> {
+    all_processes()
+        .into_iter()
+        .filter(|info| info.session == session && info.state != 'Z')
+        .collect()
+}
+/// Whether pid was reused since `recorded` (#119 reuse guard). A matching
+/// start time means the same process, so the session is ours. A free pid
+/// means no reuser exists, and whoever else sits in the session could only
+/// have inherited it from our tree — also ours. Anything else is treated
+/// as reused, and the fresh tree under the new leader is excluded from the
+/// per-PID sweep.
+#[cfg(target_os = "linux")]
+fn pid_reused(pid: u32, recorded: Option<u64>) -> bool {
+    let Some(recorded) = recorded else {
+        // No baseline (unreadable `/proc` at spawn): assume the worst so
+        // the group kill below stays off and the per-PID fallback decides.
+        return true;
+    };
+    match proc_stat(pid) {
+        Some(info) => info.starttime != recorded,
+        None => false,
+    }
 }
 
 #[cfg(test)]
@@ -526,6 +813,92 @@ mod tests {
     use super::{
         INPUT_QUEUE_CAP, InputOutcome, PtyEvent, PtyTransport, inject_session_environment,
     };
+
+    /// Whether one pid is alive (kill(pid, 0): 0 and EPERM mean alive).
+    #[cfg(target_os = "linux")]
+    fn pid_alive(pid: u32) -> bool {
+        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+
+    /// The process group of one pid, via `/proc`. Proves the job-control
+    /// premise: monitor-mode jobs really leave the shell's group.
+    #[cfg(target_os = "linux")]
+    fn pid_pgrp(pid: u32) -> Option<u32> {
+        let contents = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let after_comm = contents.rfind(')')?;
+        contents[after_comm + 1..]
+            .split_whitespace()
+            .nth(2)?
+            .parse()
+            .ok()
+    }
+
+    /// A monitor-mode bash running `script`: background jobs get their own
+    /// process groups (needs the PTY's controlling terminal — without one
+    /// bash prints "no job control" and jobs stay in the shell's group).
+    #[cfg(target_os = "linux")]
+    fn bash_job_project(terminal: &str, script: &str) -> Project {
+        Project {
+            terminal: TerminalId::new(terminal),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/usr/bin/bash".to_owned(),
+                "-m".to_owned(),
+                "-c".to_owned(),
+                script.to_owned(),
+            ],
+            shell_hook: false,
+        }
+    }
+
+    /// Reads PTY output until `marker` appears (established 15s pattern).
+    /// Returns everything seen.
+    #[cfg(target_os = "linux")]
+    fn read_until(transport: &mut PtyTransport, marker: &str) -> Vec<u8> {
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut output = Vec::new();
+        while Instant::now() < deadline && !String::from_utf8_lossy(&output).contains(marker) {
+            for event in transport.drain_events() {
+                if let PtyEvent::Output { bytes, .. } = event {
+                    output.extend(bytes);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        output
+    }
+
+    /// Parses `PREFIX=<pid>` out of PTY output.
+    #[cfg(target_os = "linux")]
+    fn marked_pid(output: &[u8], prefix: &str) -> u32 {
+        let text = String::from_utf8_lossy(output);
+        let marker = format!("{prefix}=");
+        let start = text
+            .find(&marker)
+            .unwrap_or_else(|| panic!("{prefix} never printed: {text:?}"));
+        text[start + marker.len()..]
+            .split(|character: char| !character.is_ascii_digit())
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
+
+    /// Polls until `condition` holds or `timeout` passes. Shutdown asserts
+    /// must poll: init reaping of zombies is async, so an instant check
+    /// after shutdown races the reaper (the known `shutdown_terms` flake).
+    #[cfg(target_os = "linux")]
+    fn poll_until(timeout: Duration, condition: impl Fn() -> bool) -> bool {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if condition() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        condition()
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -710,6 +1083,126 @@ mod tests {
             "the flushed bytes reached the child"
         );
         transport.shutdown().unwrap();
+    }
+
+    /// #119 (audit repro): an interactive-shell background job in its own
+    /// process group that ignores SIGHUP. Shutdown used to return with the
+    /// job alive — group signals never reached its group, and the surviving
+    /// slave holder then wedged the reader join without bound.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shutdown_kills_a_sighup_ignoring_background_job() {
+        let mut transport = PtyTransport::spawn(
+            &bash_job_project("bg-job", "trap '' HUP; sleep 60 & echo JOBPID=$!; wait"),
+            ScreenSize::new(80, 24),
+        )
+        .unwrap();
+        let shell_group = transport.process_group.unwrap();
+        let output = read_until(&mut transport, "JOBPID=");
+        let job = marked_pid(&output, "JOBPID");
+        assert!(pid_alive(job), "the job must be running before shutdown");
+        assert_ne!(
+            pid_pgrp(job),
+            Some(shell_group),
+            "the premise: monitor-mode jobs leave the shell's group"
+        );
+
+        let started = Instant::now();
+        transport.shutdown().unwrap();
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "shutdown must stay bounded, took {elapsed:?}"
+        );
+        assert!(
+            poll_until(Duration::from_secs(5), || !pid_alive(job)),
+            "the SIGHUP-ignoring job must die"
+        );
+        assert!(
+            poll_until(Duration::from_secs(5), || !transport.is_session_alive()),
+            "no owned session member may survive"
+        );
+        assert!(transport.has_joined_threads());
+    }
+
+    /// #119: a foreground job that ignores HUP and TERM in its own group.
+    /// It survives the whole grace period, so shutdown takes the full two
+    /// seconds — then the session SIGKILL must still take it and the shell.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shutdown_kills_a_foreground_job_ignoring_hup_and_term() {
+        let mut transport = PtyTransport::spawn(
+            &bash_job_project("fg-job", "trap '' HUP TERM; sleep 60"),
+            ScreenSize::new(80, 24),
+        )
+        .unwrap();
+        let shell = transport.process_group.unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(
+            pid_alive(shell),
+            "the shell must be running before shutdown"
+        );
+
+        let started = Instant::now();
+        transport.shutdown().unwrap();
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "shutdown must stay bounded, took {elapsed:?}"
+        );
+        assert!(
+            poll_until(Duration::from_secs(5), || !pid_alive(shell)),
+            "the ignoring shell must die at force time"
+        );
+        assert!(
+            poll_until(Duration::from_secs(5), || !transport.is_session_alive()),
+            "no owned session member may survive"
+        );
+        assert!(transport.has_joined_threads());
+    }
+
+    /// #119: a grandchild orphaned before shutdown, holding the slave side
+    /// open. Pre-fix this wedged the reader so the unconditional join hung
+    /// forever; the session kill must take the orphan and release the PTY.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shutdown_kills_an_orphan_holding_the_slave_open() {
+        let mut transport = PtyTransport::spawn(
+            &bash_job_project("orphan", "sleep 60 & echo ORPHAN=$!; disown; wait"),
+            ScreenSize::new(80, 24),
+        )
+        .unwrap();
+        let output = read_until(&mut transport, "ORPHAN=");
+        let orphan = marked_pid(&output, "ORPHAN");
+        // Let bash leave: the waiter reaps it and init adopts the orphan,
+        // which keeps the session — and the slave — alive on its own.
+        assert!(
+            poll_until(Duration::from_secs(5), || !pid_alive(
+                transport.process_group.unwrap()
+            )),
+            "bash must exit on its own once disowned"
+        );
+        assert!(pid_alive(orphan), "the orphan must outlive its shell");
+
+        let started = Instant::now();
+        transport.shutdown().unwrap();
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "shutdown must stay bounded past a wedged reader, took {elapsed:?}"
+        );
+        assert!(
+            poll_until(Duration::from_secs(5), || !pid_alive(orphan)),
+            "the orphan must die"
+        );
+        assert!(
+            poll_until(Duration::from_secs(5), || !transport.is_session_alive()),
+            "no owned session member may survive"
+        );
+        assert!(transport.has_joined_threads());
     }
 
     #[cfg(target_os = "linux")]
