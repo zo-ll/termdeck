@@ -493,7 +493,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Result: termctl peek now returns the ACTIVE screen (main/alt, "screen"
   field) — full-screen TUIs visible — this coordinator's peek blind spot is
   fixed at the root (per-user design approved at dispatch).
-  Codex lane idle; #115 still queued on claude lane after #113 merges.
+- 2026-09-05: #113 DONE (claude, 2 commits: 50f2578 feat(ui) + 9b2ea67 docs;
+  marker RESULT=pass: "^g p pins the master to the stack top (held across
+  promotion, one pin, accent mark + status-row unpin key); doc + 14 tests"
+  gate 338 lib + 4 int — base 324 + 14 new). Design doc committed:
+  docs/design/termdeck/pin-terminal.md. REBASED onto current origin/main
+  (clean — no ui overlap with #111/#116); gate re-run: 1 flaky fail =
+  known sandbox env flake (shutdown_terms…), re-run GREEN. Routed to CRITIC
+  (assignment .scratch/review/113.critic.md — includes design-doc-vs-code
+  agreement check, one-pin/promotion-demotion semantics, boundary check for
+  contracts/engine, honest-fixtures check, mode-interplay matrix).
+  Verdict ping inbox 113-pin.critic.ping. Claude lane IDLE; #115 STILL queued
+  until #113 merges (shared ui/deck.rs + ui/state.rs — serialization per plan).
 - 2026-09-05: #116 CRITIC VERDICT = PASS (inbox 116-peek-active-screen.critic.ping):
   all 6 acceptance criteria met; active-suffix with history fallback; screen
   field derived from same adapter metadata (can't disagree with grid); error
