@@ -1,7 +1,7 @@
 # Coordination — Termdeck
 
 Status: ACTIVE — tracker on GitHub.
-Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #111 (termctl notify not visible — BUG), #116 (guaranteed peek: active screen main/alt — QUEUED on codex lane after #111), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
+Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #116 (guaranteed peek — critic PASS, rebased, awaiting merge approval), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
 Recently closed: everything through #110 (shell integration) + #112 research brief committed (5ddf02c).
 Freshness: 2026-09-04 (takeover) — main `5ddf02c`, gate green (324 tests: 320 lib + 4 integration).
 
@@ -487,6 +487,23 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   muse-spark-1.3-contributor, critic-skill only, assignment
   .scratch/review/111.critic.md, single-line pointer; critic Working — reading
   diff at source). Verdict pings via inbox 111-notify-fix.critic.ping.
+- 2026-09-05: #111 MERGED (user approval) — --no-ff merge into main, gate green
+  322 lib + 4 int, pushed; issue #111 CLOSED with smoke comment; binary updated
+  to ~/.local/bin/termdeck via mv (Text-file-busy workaround) — DECK RESTART
+  required to load (restart tears down this workspace's panes; do with #116
+  merged, at a convenient stop).
+- 2026-09-05: #116 CRITIC VERDICT = PASS (inbox 116-peek-active-screen.critic.ping):
+  all 6 acceptance criteria met; active-suffix with history fallback; screen
+  field derived from same adapter metadata (can't disagree with grid); error
+  codes intact; tests discriminating (fail pre-fix, ctl test diverges history
+  vs active content, asserts the ACTIVE tail). Gate green. NITS:
+  (1) FakeEngine::active_screen_lines unset → Some([]) shadows the history
+  fallback (behaviorally identical today; None-when-unset would be more
+  faithful); (2) base pre-#111 merge note — critic PREDICTED clean rebase.
+  REBASE DONE (clean, no conflicts — peek hunk untouched by #111's dispatch
+  lines, exactly as the critic predicted): coord/116-peek-active-screen now
+  = commit d4a7622 on post-#111 main; gate re-run green 324 lib + 4 int.
+  WAITING: user merge approval for #116.
 - 2026-09-05: #111 CRITIC VERDICT = PASS (inbox 111-notify-fix.critic.ping).
   Attribution-only fix: path normalization (symlink-spelling + tilde) + 2 tests
   (fail pre-fix / pass post-fix), gate green 322 lib + 4 int, deck.rs NOT
@@ -500,7 +517,7 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   ENV FLAKE noted: engine::native::tests::shutdown_terms_… fails identically
   on pristine origin/main in the sandbox (process-group restriction), passes
   on re-run — pre-existing, unrelated to the 1-file ctl diff.
-  WAITING: user merge approval for #111 (then close issue #111).
+  RESOLVED: merged + closed below.
 - 2026-09-05: #116 DONE (codex commit 34fe3d9 "Make termctl peek read active
   screens", marker RESULT=pass: "Peek now reads active main or alternate grids
   with screen metadata; full gate green", worktree clean). Routed to CRITIC
