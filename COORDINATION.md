@@ -478,10 +478,23 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
     (~/.claude/projects/<munged-dir>/*.jsonl — user msgs + last-entry types
     show idle-vs-working) or ask the user (deck is visible to them); finish
     markers/pings are the durable source of truth.
-  - In flight now (verified): 111-notify-fix codex Working; 113-pin claude
-    Working (transcript: mid-implementation, deck renderer).
-  - Lessons logged: TUIs self-updating at launch; peek blindness for claude's
-    alt-screen; Enter-as-submit unreliable in codex TUI (relaunch instead).
+- 2026-09-05: #111 DONE (codex commit 0142ee9 "Fix notify pane path attribution",
+  marker RESULT=pass: "Normalized explicit notify pane paths and added coverage;
+  full gate green", 1 commit, worktree clean). RELAY WEDGE discovered: relay
+  process alive but loop frozen since 22:53 (fitness-agent era) — no ARRIVE for
+  the 02:23 ping; restarted detached (pid 110637) → ARRIVE+DELIVER ok, inbox
+  consumed. #111 routed to CRITIC (spawned pane "termdeck": pi
+  muse-spark-1.3-contributor, critic-skill only, assignment
+  .scratch/review/111.critic.md, single-line pointer; critic Working — reading
+  diff at source). Verdict pings via inbox 111-notify-fix.critic.ping.
+- 2026-09-05: #116 (guaranteed peek, alt-aware active screen) FILED (issue
+  created), worktree coord/116-peek-active-screen + brief ready; DISPATCHED to
+  the idle codex session (same full session, per user preference) and verified
+  Working. #116 runs parallel to the #111 critic pass; at merge, rebase #116
+  onto origin/main before/with integration (ctl/mod.rs overlap with #111).
+- In flight: critic→#111 verdict; codex→#116 Working; claude→#113 Working
+  (transcript-verified mid-implementation). #115 queued on claude lane after
+  #113 merges. RELAY lesson: verify relay alive (log tail) when a ping is late.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
