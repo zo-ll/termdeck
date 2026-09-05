@@ -515,6 +515,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     #[cfg(not(unix))]
     let mut engine = spawn_terminals_with_scrollback(&projects, &deck, size, workspace.scrollback)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
+    // The engine begins with safe all-terminal timing visibility. Replace it
+    // before the first drain with the panes this initial deck actually draws.
+    resize_terminals(&mut engine, &projects, &deck, size);
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     let mut input = Input::new(size.rows.saturating_sub(4));
     let mut keys = KeyReader::default();

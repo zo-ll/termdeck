@@ -69,8 +69,18 @@ pub(super) fn resize_terminals(
     deck: &DeckState,
     size: ScreenSize,
 ) -> bool {
+    let sizes = terminal_sizes(projects, deck, size);
+    engine.dispatch(EngineCommand::SetTimingVisibility {
+        terminals: projects
+            .iter()
+            .zip(&sizes)
+            .filter(|(_, size)| size.is_some())
+            .map(|(project, _)| project.terminal.clone())
+            .collect(),
+    });
+
     let mut resized = false;
-    for (project, size) in projects.iter().zip(terminal_sizes(projects, deck, size)) {
+    for (project, size) in projects.iter().zip(sizes) {
         let Some(size) = size else {
             continue;
         };

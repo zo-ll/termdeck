@@ -1741,6 +1741,50 @@ fn visible_panes_resize_after_layout_changes() {
 }
 
 #[test]
+fn timing_visibility_matches_the_panes_the_deck_renders() {
+    let projects = [
+        Project {
+            terminal: TerminalId::new("first"),
+            path: PathBuf::from("/"),
+            command: vec!["sh".to_owned()],
+            shell_hook: false,
+        },
+        Project {
+            terminal: TerminalId::new("second"),
+            path: PathBuf::from("/"),
+            command: vec!["sh".to_owned()],
+            shell_hook: false,
+        },
+    ];
+    let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    let mut deck = DeckState::new(projects.len());
+    let area = ScreenSize::new(144, 42);
+
+    resize_terminals(&mut engine, &projects, &deck, area);
+    assert_eq!(
+        engine.timing_visible(),
+        &BTreeSet::from([projects[0].terminal.clone()]),
+        "the folded preview has no rendered timing metadata"
+    );
+
+    assert!(deck.toggle_collapse(1));
+    resize_terminals(&mut engine, &projects, &deck, area);
+    assert_eq!(
+        engine.timing_visible(),
+        &BTreeSet::from([projects[0].terminal.clone(), projects[1].terminal.clone()]),
+        "an expanded preview renders timing metadata"
+    );
+
+    assert!(deck.apply(&ActionCommand::ToggleZoom, &projects, Timestamp::default()));
+    resize_terminals(&mut engine, &projects, &deck, area);
+    assert_eq!(
+        engine.timing_visible(),
+        &BTreeSet::from([projects[0].terminal.clone()]),
+        "zoom hides the preview and stops its timing tick"
+    );
+}
+
+#[test]
 fn drag_and_double_click_dispatch_the_existing_promotion_action() {
     let mut state = DeckState::new(4);
     let mut last_click = None;

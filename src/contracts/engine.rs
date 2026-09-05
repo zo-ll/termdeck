@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::{NotifyKind, ScreenSize, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus};
 
 /// An engine-owned scrollback movement. `Up` moves toward older output, and
@@ -12,6 +14,12 @@ pub enum ScrollCommand {
 /// Commands the UI can issue to a terminal engine.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EngineCommand {
+    /// Declares the terminals whose timing metadata is currently rendered.
+    /// The engine uses this to batch its once-per-second timing refresh to
+    /// visible panes only.
+    SetTimingVisibility {
+        terminals: BTreeSet<TerminalId>,
+    },
     Input {
         terminal: TerminalId,
         bytes: Vec<u8>,
@@ -44,6 +52,10 @@ pub enum EngineEvent {
         terminal: TerminalId,
         metadata: TerminalMetadata,
     },
+    /// The displayed timing metadata was refreshed as one shared clock tick.
+    /// Consumers query the metadata for the rendered terminals after this
+    /// redraw signal instead of receiving one event per terminal.
+    TimingChanged,
     /// A terminal asked for the user's attention: a BEL out of the PTY, or an
     /// explicit `ctl notify` (#97). Additive, so an engine that raises none
     /// and a consumer that ignores them both stay correct.
