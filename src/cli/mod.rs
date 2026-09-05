@@ -82,7 +82,21 @@ pub fn parse_with_environment(
     let mut arguments = arguments.into_iter();
     let mut config_path = None;
     let mut remaining = Vec::new();
+    // Whether `--` has ended the verbs (#133). `check` and `list` are words a
+    // folder or a workspace is allowed to be called, and a bare one of those
+    // is the command: nothing else could be, since the meaning of a command
+    // must not depend on what happens to sit in the working directory. So
+    // there has to be a way to say "this token is a name", and `--` is the
+    // one every shell user already knows.
+    let mut literal = false;
     while let Some(argument) = arguments.next() {
+        if argument == "--" {
+            // Everything after it is positional, a leading `-` included:
+            // that is what ending option parsing means everywhere else.
+            literal = true;
+            remaining.extend(arguments.by_ref());
+            break;
+        }
         if argument == "--config" {
             if config_path.is_some() {
                 return Err(CliError::new("--config can only be specified once"));
@@ -102,8 +116,8 @@ pub fn parse_with_environment(
     let command = match remaining.as_slice() {
         [] if config_path.is_some() => CliCommand::Launch { workspace: None },
         [] => CliCommand::Picker,
-        [command] if command == "check" => CliCommand::Check,
-        [command] if command == "list" => CliCommand::List,
+        [command] if !literal && command == "check" => CliCommand::Check,
+        [command] if !literal && command == "list" => CliCommand::List,
         [workspace] if config_path.is_some() => CliCommand::Launch {
             workspace: Some(workspace.clone()),
         },
@@ -142,7 +156,8 @@ fn default_config_path(environment: &CliEnvironment) -> Result<PathBuf, CliError
 }
 
 const fn usage() -> &'static str {
-    "usage: termdeck [FOLDER|CONFIG_FILE|--config PATH|check|list]"
+    "usage: termdeck [FOLDER|CONFIG_FILE|--config PATH|check|list]; \
+     `--` ends the verbs, so `termdeck -- check` names a path or a workspace"
 }
 
 pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>, Box<dyn Error>> {
@@ -425,6 +440,104 @@ mod tests {
                 .command,
             CliCommand::Check
         );
+    }
+
+    /// #133: `check` and `list` are ordinary words, and a folder or a
+    /// workspace is allowed to be called one. The bare token stays the
+    /// command — a command whose meaning depended on what happened to be in
+    /// the working directory would be worse than the shadowing — so `--`
+    /// ends the verbs and whatever follows is a name.
+    #[test]
+    fn a_folder_named_like_a_verb_is_reachable_after_a_double_dash() {
+        let root = test_root();
+        let shadowed = root.join("check");
+        fs::create_dir_all(&shadowed).unwrap();
+
+        // The bare verb is still the verb, wherever it is run.
+        assert_eq!(
+            parse_with_environment(["check".to_owned()], environment())
+                .unwrap()
+                .command,
+            CliCommand::Check
+        );
+
+        let intent = parse_with_environment(
+            ["--".to_owned(), shadowed.display().to_string()],
+            environment(),
+        )
+        .unwrap();
+        assert_eq!(intent.command, CliCommand::Folder { root: shadowed });
+        assert_eq!(intent.config_path, None, "a folder reads no configuration");
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The half with no workaround at all: a path can already be spelled
+    /// `./check`, but a workspace name is not a path and had nothing to
+    /// disambiguate it — `--config file.yaml check` validated the file
+    /// instead of opening the workspace called `check` (#133).
+    #[test]
+    fn a_workspace_named_like_a_verb_is_reachable_after_a_double_dash() {
+        let config = test_config();
+
+        let verb = parse_with_environment(
+            ["--config", &config.display().to_string(), "check"].map(str::to_owned),
+            environment(),
+        )
+        .unwrap();
+        assert_eq!(verb.command, CliCommand::Check, "the verb still wins");
+
+        let workspace = parse_with_environment(
+            ["--config", &config.display().to_string(), "--", "check"].map(str::to_owned),
+            environment(),
+        )
+        .unwrap();
+        assert_eq!(
+            workspace.command,
+            CliCommand::Launch {
+                workspace: Some("check".to_owned()),
+            }
+        );
+        assert_eq!(workspace.config_path, Some(config.clone()));
+
+        fs::remove_dir_all(config.parent().unwrap()).unwrap();
+    }
+
+    /// The escape hatch that already worked, pinned so it keeps working: a
+    /// token that is spelled as a path was never a verb, because it is not
+    /// the word. And `--` with nothing behind it changes nothing.
+    #[test]
+    fn a_path_spelling_and_a_bare_double_dash_keep_their_meanings() {
+        let root = test_root();
+        let shadowed = root.join("list");
+        fs::create_dir_all(&shadowed).unwrap();
+        let inside = std::env::current_dir().unwrap();
+        assert!(shadowed.is_absolute(), "the test never depends on the cwd");
+
+        let intent =
+            parse_with_environment([shadowed.display().to_string()], environment()).unwrap();
+        assert_eq!(
+            intent.command,
+            CliCommand::Folder {
+                root: shadowed.clone()
+            },
+            "`termdeck <path>/list` is a path with or without the `--`"
+        );
+
+        assert_eq!(
+            parse_with_environment(["--".to_owned()], environment())
+                .unwrap()
+                .command,
+            CliCommand::Picker,
+            "nothing to name is still the picker"
+        );
+        assert_eq!(
+            std::env::current_dir().unwrap(),
+            inside,
+            "no cwd was harmed"
+        );
+
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

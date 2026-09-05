@@ -58,6 +58,7 @@ What `termdeck` opens is decided by what it is given:
 | `termdeck CONFIG_FILE` | That configuration file's workspace. |
 | `termdeck --config PATH [WORKSPACE]` | `WORKSPACE` from `PATH`. |
 | `termdeck check` / `termdeck list` | Nothing: it inspects the configuration and exits. |
+| `termdeck -- NAME` | `NAME` as a path or a workspace, never as a verb. |
 
 A bare positional argument is a **path**, not a workspace name. It has to
 exist, and whether it is a directory or a file decides which of the two shapes
@@ -65,6 +66,14 @@ above applies; a name that is neither is an error rather than a guess at a
 misspelled workspace. A workspace is named only alongside `--config`, and only
 when the file holds more than one — a file with exactly one workspace opens it
 without being asked, and a file with several lists them instead of choosing.
+
+`check` and `list` are ordinary words, and a folder or a workspace is allowed
+to be called one. A bare `check` is always the command — a command that meant
+something different depending on what happened to sit in the working directory
+would be worse than the collision — so `--` ends the verbs and whatever follows
+it is a name: `termdeck -- check` opens the folder, and `termdeck --config
+work.yaml -- check` opens the workspace. A path that is spelled as one, like
+`./check`, was never the verb to begin with.
 
 `$XDG_CONFIG_HOME/termdeck/config.yaml`, falling back to
 `$HOME/.config/termdeck/config.yaml`, is the configuration `check` and `list`
