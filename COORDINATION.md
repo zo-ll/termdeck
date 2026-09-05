@@ -755,6 +755,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   #71 surface; session.rs add-flow cross-lane touch approved; no overlap with
   #118). In flight: claude→#128, pi-worker(muse)→#118. Critic idle.
 
+- 2026-09-05: #118 DONE (PI-WORKER muse, commit ea10642; marker pass:
+  "nonblocking bounded PTY input: queue+refuse, truthful ctl refusal, gate
+  green"; worktree clean; hand-back detailed). Semantics chosen: accepted =
+  queued (caller never blocks); written = nonblocking slices as child reads;
+  refusal ATOMIC (whole-or-nothing, never silent prefix); refusal never fails
+  the pane, only dead PTY (EIO) errors. Truthful outcome wired: ctl code 3
+  naming the queue on refusal, pane live. 6 tests (3 pty: audit repro ≤2s+
+  Queued, saturation→Refused, reading→Flushed+echo; 2 native: wedged drops
+  truthfully/stays Running, 256KiB paste <2s; 1 session: wedged→ctl code 3).
+  Gate 358 lib + 4 green, no flake. NBs: canonical-mode absorption (wedge
+  tests use stty raw -echo), portable-pty Drop EOT write_all now nonblocking
+  (benign), old .write().unwrap() compile unchanged. Routed to CRITIC
+  (assignment .scratch/review/118.critic.md). Verdict ping inbox
+  118-pty-input.critic.ping. Worker lane idle at prompt.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
