@@ -681,6 +681,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Note: muse is critic-grade — worker quality may drop; user owns this
   tradeoff. In flight now: codex→#117, claude→#127 (parallel).
 
+- 2026-09-05: #117 DONE (codex commit b90828e "fix: bound control socket
+  clients"; marker pass: "Bounded nonblocking round-robin ctl sockets plus
+  termctl response deadline and cap; full gate green"; worktree clean).
+  Routed to CRITIC (assignment .scratch/review/117.critic.md — checks both
+  defect-classes-fixed + failing-pre-fix tests, blocking-mode removal,
+  partial-response progress, round-robin fairness, termctl cap+deadline,
+  ctl.v1 wire/error-code preservation, one-request-per-frame invariant,
+  gate). Verdict ping inbox 117-socket-handling.critic.ping. Codex lane back
+  at prompt, idle. #118 (nonblocking PTY input) NEXT — lane choice pending
+  user (codex tokens <10% vs pi+muse switch).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
