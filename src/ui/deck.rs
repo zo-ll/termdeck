@@ -1921,7 +1921,11 @@ impl Deck<'_> {
         // the key is advertised exactly while it would unpin, which is while
         // the master is the pinned pane. Elsewhere the pinned pane wears its
         // own mark and the row keeps its columns.
-        if self.state.pinned().is_some() && self.state.pinned() == self.state.active() {
+        if self
+            .state
+            .pinned()
+            .is_some_and(|pinned| self.state.active() == Some(pinned))
+        {
             entries.push(("^g p", "unpin"));
         }
         entries.extend_from_slice(&KEY_HINTS[1..]);

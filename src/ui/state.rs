@@ -22,12 +22,20 @@ pub const NOTIFY_WINDOW: Elapsed = Elapsed { millis: 4_000 };
 /// How long the scrollbar stands after the last scroll (#115).
 ///
 /// Longer than the demotion highlight, which reports something that has
-/// finished, and the same window as the notification flash, which reports
-/// something still going on: a scrollbar is the second kind, and the pause
-/// between two wheel flicks while a line is read is longer than a second and
-/// a half. Well short of the 30s activity window, which measures whether a
-/// process is alive rather than whether a person is doing something.
-pub const SCROLLBAR_WINDOW: Elapsed = Elapsed { millis: 4_000 };
+/// finished, and *the notification flash's own window*, because a scrollbar
+/// is the flash's kind of thing: something still going on rather than
+/// something that just happened, and the pause between two wheel flicks
+/// while a line is read is longer than a second and a half. Well short of
+/// the 30s activity window, which measures whether a process is alive rather
+/// than whether a person is doing something.
+///
+/// It is written as [`NOTIFY_WINDOW`] rather than as the same number twice
+/// because that is the reasoning the scrollbar's design records (§3.2: "a
+/// scrollbar is the second kind"), and a second literal would let the two
+/// drift apart silently. They keep separate names because they are separate
+/// facts: a change to the flash made for a reason about notifications is the
+/// point at which this earns a literal of its own again.
+pub const SCROLLBAR_WINDOW: Elapsed = NOTIFY_WINDOW;
 /// How long the toast stays up before it settles by itself. Long enough to
 /// read four lines, short enough not to sit over the master.
 pub const TOAST_WINDOW: Elapsed = Elapsed { millis: 8_000 };
@@ -540,8 +548,11 @@ impl DeckState {
     /// pin. Like `^g c` this is the deck's own arrangement, so it carries no
     /// frozen action; and like the split it lives for the session only.
     ///
-    /// Returns whether anything changed — nothing does on an empty deck, which
-    /// has no master to pin.
+    /// Returns whether there was a master to pin. An empty deck has none and
+    /// nothing changes; with a master the toggle always has something to do —
+    /// it sets the pin, moves it, or takes it away — so the answer is always
+    /// `true` there. It is not the finer "anything changed" the deck's other
+    /// commands answer with, and the key that calls it reads nothing from it.
     pub fn toggle_pin(&mut self) -> bool {
         let Some(active) = self.active() else {
             return false;
