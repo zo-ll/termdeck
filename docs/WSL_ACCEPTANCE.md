@@ -1,5 +1,13 @@
 # WSL manual acceptance
 
+**Status (2026-09-05): this is the procedure, not a record of a run.** No pass
+against any revision is recorded here or in COORDINATION.md, where the
+integration-and-acceptance issue (#4) is still open; the audit that raised
+#129 read the file as evidence and found none. Whoever runs it should replace
+this paragraph with what they ran, on what revision, and what failed —
+"verified against main @ `<commit>` on `<date>`, all steps passed except …" —
+so the next reader can tell a procedure from a result.
+
 Run these steps from WSL in a real terminal. Build the binary first, then
 keep a second WSL shell available for the CPU, signal, and orphan checks.
 
