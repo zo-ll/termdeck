@@ -1,7 +1,7 @@
 # Coordination — Termdeck
 
 Status: ACTIVE — tracker on GitHub.
-Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #111 (termctl notify not visible — BUG), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
+Open: #112 (persistent + agent-aware deck — DECISION GATE, user), #114 (agent discovery), #113 (pin terminal), #115 (minimal scrollbar), #111 (termctl notify not visible — BUG), #116 (guaranteed peek: active screen main/alt — QUEUED on codex lane after #111), #94 (agent API Phase 3: MCP — HELD on coord/94-ctl-mcp, user call), #33 (animations — parked/skip).
 Recently closed: everything through #110 (shell integration) + #112 research brief committed (5ddf02c).
 Freshness: 2026-09-04 (takeover) — main `5ddf02c`, gate green (324 tests: 320 lib + 4 integration).
 
@@ -254,6 +254,12 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
    handshake. Then slices: capabilities/schema verb (codex, ctl.v1 additive),
    termctl --help overhaul (codex), docs/agents/TERMDECK.md (docs).
 7. #33 (animations) — parked; skip per user directive.
+8. #116 (guaranteed peek — active screen main/alt; USER-approved design + queue):
+   issue filed with acceptance criteria; worktree ~/.worktrees/termdeck/116-peek-active-screen
+   (coord/116-peek-active-screen) + brief ready. Dispatch to the SAME codex session
+   when #111 finishes+merges (rebases onto fresh origin/main at dispatch to avoid
+   ctl/mod.rs overlap with #111). Then peek works on ANY pane incl. alt-screen TUIs
+   (fixes this coordinator's blind spot at the root).
 - 2026-09-04: TAKEOVER — previous coordinator closed (its slips: critic booted
   as plain shell/full-skill pi, codex workers off-recipe). This coordinator
   now runs window 0. Canonical env spec committed to the coordinator skill
