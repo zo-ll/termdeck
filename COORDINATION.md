@@ -441,6 +441,29 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   one; consolidation + eviction of the oldest >15 to the journal (most 09-03
   history is already archived) still owed.
 
+- 2026-09-04 (WAVE 1+2 DISPATCH): user approved waves 1+2 in parallel. Worktrees
+  built off origin/main `c0c6a4a`: `~/.worktrees/termdeck/111-notify-fix`
+  (coord/111-notify-fix) + `~/.worktrees/termdeck/113-pin` (coord/113-pin).
+  Briefs written: `.scratch/tasks/111-notify-fix.brief.md` +
+  `113-pin.brief.md`. Panes via `termctl open`:
+  - 111-notify-fix (codex FULL interactive session; user: no exec one-shots):
+    astra attempt FAILED 400 — "'astra' model is not supported when using
+    Codex with a ChatGPT account" (account-tier, NOT CLI version). USER: switch
+    back to terra. On relaunch codex SELF-UPDATED 0.147.0→0.153.4 (standalone
+    installer ran at launch, "Please restart Codex") — the `az` window became
+    moot. Relaunched codex -s danger-full-access -m gpt-5.6-terra on 0.153.4
+    (trust prompt skipped — project already trusted). #111 BRIEF DISPATCHED
+    and VERIFIED WORKING ("I'll read the task brief... then implement...").
+  - 113-pin (claude FULL session; user: no exec one-shots): launched
+    `claude --dangerously-skip-permissions --model opus --effort high`;
+    folder-trust prompt CONFIRMED. Pane STILL renders BLANK to termctl peek
+    (process alive, ~4% CPU, 5min) — claude's alt-screen TUI is not captured
+    by peek (codex's is). canNOT verify idle ⇒ #113 NOT dispatched (hard
+    rule). USER eyeball pending: is 113-pin at claude's composer in the deck?
+  - Pending: #115 (scrollbar) queued on claude lane AFTER #113 merges.
+  - Lessons logged: TUIs self-updating at launch; peek blindness for claude's
+    alt-screen; Enter-as-submit unreliable in codex TUI (relaunch instead).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
