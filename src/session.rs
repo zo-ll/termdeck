@@ -666,7 +666,18 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     close_press = None;
                     deck.set_resizing(false);
                     let was_scrollback = deck.scrollback();
-                    let reaction = input.press(key, &mut deck, &projects, now());
+                    let application_cursor = deck
+                        .active()
+                        .and_then(|active| projects.get(active))
+                        .and_then(|project| engine.metadata(&project.terminal))
+                        .is_some_and(|metadata| metadata.application_cursor);
+                    let reaction = input.press_with_application_cursor(
+                        key,
+                        &mut deck,
+                        &projects,
+                        now(),
+                        application_cursor,
+                    );
                     if was_scrollback
                         && key == Key::Escape
                         && !deck.scrollback()
@@ -811,7 +822,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                         scrolled = Some(position);
                                     }
                                 }
-                                WheelRoute::App { up, mouse } => {
+                                WheelRoute::App {
+                                    up,
+                                    mouse,
+                                    application_cursor,
+                                } => {
                                     let (column, row) = pane
                                         .pane_cell(area, pointer)
                                         .map(|(_, column, row)| (column, row))
@@ -827,7 +842,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     // the alternate screen anyway.
                                     engine.dispatch(EngineCommand::Input {
                                         terminal,
-                                        bytes: app_wheel(up, column, row, mouse),
+                                        bytes: app_wheel(
+                                            up,
+                                            column,
+                                            row,
+                                            mouse,
+                                            application_cursor,
+                                        ),
                                     });
                                 }
                             }

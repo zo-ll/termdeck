@@ -167,6 +167,8 @@ impl NativeTerminal {
         self.metadata.scrollback = self.adapter.scrollback_position();
         self.metadata.alt_screen = self.adapter.alt_screen();
         self.metadata.mouse_reporting = self.adapter.mouse_reporting();
+        self.metadata.mouse_protocol = self.adapter.mouse_protocol();
+        self.metadata.application_cursor = self.adapter.application_cursor();
         self.metadata.bracketed_paste = self.adapter.bracketed_paste();
     }
 
@@ -682,8 +684,9 @@ mod tests {
     };
 
     use crate::contracts::{
-        CellContent, DEFAULT_SCROLLBACK, EngineCommand, EngineEvent, NotifyKind, Project,
-        ScreenSize, ScrollCommand, TerminalEngine, TerminalId, TerminalMetadata, TerminalStatus,
+        CellContent, DEFAULT_SCROLLBACK, EngineCommand, EngineEvent, MouseProtocol, NotifyKind,
+        Project, ScreenSize, ScrollCommand, TerminalEngine, TerminalId, TerminalMetadata,
+        TerminalStatus,
     };
 
     use super::{
@@ -1378,7 +1381,7 @@ mod tests {
             ScreenSize::new(80, 24),
             DEFAULT_SCROLLBACK,
         );
-        adapter.feed(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h");
+        adapter.feed(b"\x1b[?1049h\x1b[?1h\x1b[?1000h\x1b[?1006h");
         let frame = adapter.frame();
         let mut engine = NativeEngine {
             terminals: vec![NativeTerminal {
@@ -1404,6 +1407,8 @@ mod tests {
         let metadata = engine.metadata(&terminal).unwrap();
         assert!(metadata.alt_screen, "the app owns the grid");
         assert!(metadata.mouse_reporting, "the app enabled the mouse");
+        assert_eq!(metadata.mouse_protocol, MouseProtocol::Sgr);
+        assert!(metadata.application_cursor, "the app enabled DECCKM");
     }
 
     /// #74 end to end: a live app entering its alternate screen surfaces

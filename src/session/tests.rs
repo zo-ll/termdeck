@@ -8,8 +8,8 @@ use super::{
 };
 use crate::{
     contracts::{
-        ActionCommand, EngineCommand, EngineEvent, NotifyKind, Project, ScreenSize, ScrollCommand,
-        ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
+        ActionCommand, EngineCommand, EngineEvent, MouseProtocol, NotifyKind, Project, ScreenSize,
+        ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
     ui::{DeckState, Input, Key, Modal, Notifications, Reaction, SheetState},
@@ -580,38 +580,58 @@ fn wheel_over_an_alt_screen_app_reaches_the_app() {
     let mouse = TerminalMetadata {
         alt_screen: true,
         mouse_reporting: true,
+        mouse_protocol: MouseProtocol::Sgr,
         ..TerminalMetadata::default()
     };
     assert_eq!(
         route_wheel(Some(&mouse), ScrollCommand::Up(3)),
         WheelRoute::App {
             up: true,
-            mouse: true
+            mouse: Some(MouseProtocol::Sgr),
+            application_cursor: false,
         }
     );
     assert_eq!(
         route_wheel(Some(&mouse), ScrollCommand::Down(3)),
         WheelRoute::App {
             up: false,
-            mouse: true
+            mouse: Some(MouseProtocol::Sgr),
+            application_cursor: false,
         }
     );
     let keys = TerminalMetadata {
         alt_screen: true,
+        application_cursor: true,
         ..TerminalMetadata::default()
     };
     assert_eq!(
         route_wheel(Some(&keys), ScrollCommand::Up(3)),
         WheelRoute::App {
             up: true,
-            mouse: false
+            mouse: None,
+            application_cursor: true,
         }
     );
 
-    assert_eq!(app_wheel(true, 7, 4, true), b"\x1b[<64;7;4M");
-    assert_eq!(app_wheel(false, 7, 4, true), b"\x1b[<65;7;4M");
-    assert_eq!(app_wheel(true, 1, 1, false), b"\x1b[A\x1b[A\x1b[A");
-    assert_eq!(app_wheel(false, 1, 1, false), b"\x1b[B\x1b[B\x1b[B");
+    assert_eq!(
+        app_wheel(true, 7, 4, Some(MouseProtocol::Sgr), false),
+        b"\x1b[<64;7;4M"
+    );
+    assert_eq!(
+        app_wheel(false, 7, 4, Some(MouseProtocol::Sgr), false),
+        b"\x1b[<65;7;4M"
+    );
+    assert_eq!(
+        app_wheel(true, 7, 4, Some(MouseProtocol::X10), false),
+        b"\x1b[M`'$",
+        "ordinary DECSET 1000 uses the original X10 report, not SGR"
+    );
+    assert_eq!(
+        app_wheel(false, 7, 4, Some(MouseProtocol::Utf8), false),
+        b"\x1b[Ma'$"
+    );
+    assert_eq!(app_wheel(true, 1, 1, None, true), b"\x1bOA\x1bOA\x1bOA");
+    assert_eq!(app_wheel(false, 1, 1, None, false), b"\x1b[B\x1b[B\x1b[B");
 }
 
 /// A workspace of shells for the close tests: each one sleeps, so it is alive

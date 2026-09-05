@@ -66,6 +66,19 @@ pub struct ScrollbackPosition {
     pub lines_below: u32,
 }
 
+/// Mouse-report encoding selected by the child terminal application.
+///
+/// The engine only uses this while [`TerminalMetadata::mouse_reporting`] is
+/// true. Its default preserves the ordinary X10 protocol for a child that
+/// enables mouse reporting without an extension mode.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum MouseProtocol {
+    #[default]
+    X10,
+    Utf8,
+    Sgr,
+}
+
 /// Chrome data that changes independently of terminal pixels.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TerminalMetadata {
@@ -84,8 +97,14 @@ pub struct TerminalMetadata {
     /// there and the wheel belongs to the app (#74).
     pub alt_screen: bool,
     /// Whether the app enabled mouse reporting: with it the app wants the
-    /// wheel as SGR mouse reports, without it as cursor keys (#74).
+    /// wheel in [`Self::mouse_protocol`], without it as cursor keys (#74).
     pub mouse_reporting: bool,
+    /// Encoding the child selected for mouse reports. This is meaningful only
+    /// while [`Self::mouse_reporting`] is true.
+    pub mouse_protocol: MouseProtocol,
+    /// Whether the child enabled DECCKM application-cursor mode. Plain arrow
+    /// keys then use SS3 (`ESC O`) rather than CSI (`ESC [`).
+    pub application_cursor: bool,
     /// Whether the child enabled bracketed paste (DEC 2004): with it the
     /// child wants pastes as delimited regions, without it as raw bytes
     /// (#120). Tracked like the flags above, straight from the emulator.

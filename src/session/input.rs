@@ -62,8 +62,12 @@ pub(super) enum WheelRoute {
     /// A line terminal: the engine-owned #25 scrollback viewport.
     Scrollback(ScrollCommand),
     /// An alternate-screen app: bytes for its PTY. `up` is the tick
-    /// direction and `mouse` whether the app enabled mouse reporting.
-    App { up: bool, mouse: bool },
+    /// direction, followed by its selected mouse protocol and DECCKM mode.
+    App {
+        up: bool,
+        mouse: Option<crate::contracts::MouseProtocol>,
+        application_cursor: bool,
+    },
 }
 
 /// Routes a wheel tick: alternate-screen apps scroll natively, everything
@@ -78,21 +82,61 @@ pub(super) fn route_wheel(
     }
     WheelRoute::App {
         up: matches!(command, ScrollCommand::Up(_)),
-        mouse: metadata.is_some_and(|metadata| metadata.mouse_reporting),
+        mouse: metadata
+            .filter(|metadata| metadata.mouse_reporting)
+            .map(|metadata| metadata.mouse_protocol),
+        application_cursor: metadata.is_some_and(|metadata| metadata.application_cursor),
     }
 }
 
-/// Encodes one app-bound wheel tick: SGR mouse reports when the app enabled
-/// the mouse (1-based `column`/`row`, already clamped to its grid), cursor
-/// keys otherwise — the xterm alternate-scroll fallback `less` scrolls on.
+/// Encodes one app-bound wheel tick in the child's selected mouse protocol
+/// (1-based `column`/`row`, already clamped to its grid), or cursor keys when
+/// the application did not enable mouse reporting.
 /// One tick sends [`WHEEL_LINES`] arrows, the same distance as scrollback.
-pub(super) fn app_wheel(up: bool, column: u16, row: u16, mouse: bool) -> Vec<u8> {
-    if mouse {
-        format!("\x1b[{};{column};{row}M", if up { "<64" } else { "<65" }).into_bytes()
-    } else {
-        let arrow = if up { b"\x1b[A" } else { b"\x1b[B" };
-        arrow.repeat(usize::from(WHEEL_LINES))
+pub(super) fn app_wheel(
+    up: bool,
+    column: u16,
+    row: u16,
+    mouse: Option<crate::contracts::MouseProtocol>,
+    application_cursor: bool,
+) -> Vec<u8> {
+    use crate::contracts::MouseProtocol;
+
+    match mouse {
+        Some(MouseProtocol::Sgr) => {
+            format!("\x1b[{};{column};{row}M", if up { "<64" } else { "<65" }).into_bytes()
+        }
+        Some(MouseProtocol::X10) => x10_mouse(up, column, row, false),
+        Some(MouseProtocol::Utf8) => x10_mouse(up, column, row, true),
+        None => {
+            let arrow = match (up, application_cursor) {
+                (true, true) => b"\x1bOA",
+                (false, true) => b"\x1bOB",
+                (true, false) => b"\x1b[A",
+                (false, false) => b"\x1b[B",
+            };
+            arrow.repeat(usize::from(WHEEL_LINES))
+        }
     }
+}
+
+fn x10_mouse(up: bool, column: u16, row: u16, utf8: bool) -> Vec<u8> {
+    let component = |value: u16| {
+        let value = value.saturating_add(32);
+        if utf8 {
+            char::from_u32(u32::from(value))
+                .unwrap_or(' ')
+                .to_string()
+                .into_bytes()
+        } else {
+            vec![value.min(255) as u8]
+        }
+    };
+    let mut bytes = b"\x1b[M".to_vec();
+    bytes.extend(component(if up { 64 } else { 65 }));
+    bytes.extend(component(column));
+    bytes.extend(component(row));
+    bytes
 }
 
 #[derive(Default)]

@@ -13,7 +13,7 @@ impl AnsiBackend {
         })
     }
     fn cursor_to(&mut self, x: u16, y: u16) -> io::Result<()> {
-        write!(self.output, "\x1b[{};{}H", y + 1, x + 1)
+        cursor_to(&mut self.output, x, y)
     }
 }
 
@@ -23,15 +23,7 @@ impl Backend for AnsiBackend {
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
         for (x, y, cell) in content {
-            self.cursor_to(x, y)?;
-            write!(
-                self.output,
-                "\x1b[0m{}{}{}",
-                colour(cell.fg, true),
-                colour(cell.bg, false),
-                modifiers(cell.modifier)
-            )?;
-            self.output.write_all(cell.symbol().as_bytes())?;
+            write_cell(&mut self.output, x, y, cell)?;
             self.cursor = Position { x, y };
         }
         Ok(())
@@ -69,19 +61,43 @@ impl Backend for AnsiBackend {
     }
 }
 
-fn modifiers(modifier: Modifier) -> &'static str {
-    if modifier.contains(Modifier::BOLD) {
-        "\x1b[1m"
-    } else if modifier.contains(Modifier::DIM) {
-        "\x1b[2m"
-    } else if modifier.contains(Modifier::ITALIC) {
-        "\x1b[3m"
-    } else if modifier.contains(Modifier::UNDERLINED) {
-        "\x1b[4m"
-    } else if modifier.contains(Modifier::REVERSED) {
-        "\x1b[7m"
+fn cursor_to(output: &mut impl Write, x: u16, y: u16) -> io::Result<()> {
+    write!(output, "\x1b[{};{}H", y + 1, x + 1)
+}
+
+fn write_cell(output: &mut impl Write, x: u16, y: u16, cell: &Cell) -> io::Result<()> {
+    cursor_to(output, x, y)?;
+    write!(
+        output,
+        "\x1b[0m{}{}{}",
+        colour(cell.fg, true),
+        colour(cell.bg, false),
+        modifiers(cell.modifier)
+    )?;
+    output.write_all(cell.symbol().as_bytes())
+}
+
+fn modifiers(modifier: Modifier) -> String {
+    let mut codes = Vec::new();
+    for (flag, code) in [
+        (Modifier::BOLD, 1),
+        (Modifier::DIM, 2),
+        (Modifier::ITALIC, 3),
+        (Modifier::UNDERLINED, 4),
+        (Modifier::SLOW_BLINK, 5),
+        (Modifier::RAPID_BLINK, 6),
+        (Modifier::REVERSED, 7),
+        (Modifier::HIDDEN, 8),
+        (Modifier::CROSSED_OUT, 9),
+    ] {
+        if modifier.contains(flag) {
+            codes.push(code.to_string());
+        }
+    }
+    if codes.is_empty() {
+        String::new()
     } else {
-        ""
+        format!("\x1b[{}m", codes.join(";"))
     }
 }
 
@@ -110,5 +126,40 @@ fn colour(colour: Color, foreground: bool) -> String {
             if foreground { 38 } else { 48 }
         ),
         Color::Indexed(index) => format!("\x1b[{};5;{index}m", if foreground { 38 } else { 48 }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::{
+        buffer::Cell,
+        style::{Modifier, Style},
+    };
+
+    use super::write_cell;
+
+    /// Assert the bytes written to a real `Write`, rather than the Ratatui
+    /// buffer state that precedes this backend conversion.
+    #[test]
+    fn a_cell_emits_every_combined_text_attribute() {
+        let attributes = Modifier::BOLD
+            | Modifier::DIM
+            | Modifier::ITALIC
+            | Modifier::UNDERLINED
+            | Modifier::SLOW_BLINK
+            | Modifier::RAPID_BLINK
+            | Modifier::REVERSED
+            | Modifier::HIDDEN
+            | Modifier::CROSSED_OUT;
+        let mut cell = Cell::new("X");
+        cell.set_style(Style::new().add_modifier(attributes));
+        let mut output = Vec::new();
+
+        write_cell(&mut output, 2, 3, &cell).unwrap();
+
+        assert_eq!(
+            output,
+            b"\x1b[4;3H\x1b[0m\x1b[39m\x1b[49m\x1b[1;2;3;4;5;6;7;8;9mX"
+        );
     }
 }
