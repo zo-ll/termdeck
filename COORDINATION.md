@@ -953,6 +953,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   On #121 done: review via claude critic → merge (standing) → close → kill
   muse worker.
 
+- 2026-09-05: #124 DONE (codex/terra, commit 704fb42; marker pass:
+  "Configured scrollback now bounds initial, added, and respawned PTY history;
+  full gate green"; worktree clean). Routed to the CLAUDE critic (assignment
+  .scratch/review/124.critic.md — all-creation-paths check, N-vs-N+viewport
+  contract, no #116/#115 regression, failing-pre-fix e2e test, gate).
+  Verdict ping inbox 124-scrollback-config.critic.ping. In flight: claude-
+  critic→#124 review; muse→#121; codex idle after #124.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
