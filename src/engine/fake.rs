@@ -9,7 +9,11 @@ use crate::contracts::{
 struct FakeTerminalState {
     frame: TerminalFrame,
     history: Vec<String>,
-    screen: Vec<String>,
+    /// Active-grid content, when supplied. `None` (unset) is distinct from
+    /// `Some([])`: only `None` falls through to the history fallback in
+    /// ctl peek, so unset fixtures exercise the real fallback path (#116
+    /// NB-1) instead of shadowing it with an empty screen.
+    screen: Option<Vec<String>>,
     metadata: TerminalMetadata,
     status: TerminalStatus,
 }
@@ -36,7 +40,7 @@ impl FakeEngine {
                         FakeTerminalState {
                             frame,
                             history: Vec::new(),
-                            screen: Vec::new(),
+                            screen: None,
                             metadata: TerminalMetadata::default(),
                             status: TerminalStatus::Starting,
                         },
@@ -177,7 +181,7 @@ impl FakeEngine {
         let Some(state) = self.terminals.get_mut(terminal) else {
             return false;
         };
-        state.screen = lines;
+        state.screen = Some(lines);
         true
     }
 }
@@ -303,8 +307,9 @@ impl TerminalEngine for FakeEngine {
 
     fn active_screen_lines(&self, terminal: &TerminalId, max: usize) -> Option<Vec<String>> {
         let state = self.terminals.get(terminal)?;
-        let first = state.screen.len().saturating_sub(max);
-        Some(state.screen[first..].to_vec())
+        let screen = state.screen.as_ref()?;
+        let first = screen.len().saturating_sub(max);
+        Some(screen[first..].to_vec())
     }
 }
 
