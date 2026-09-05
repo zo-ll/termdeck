@@ -867,6 +867,25 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   comment; binary rebuilt. ALL NB DEBT CLEARED (#116/#117/#113/#115).
   In flight: worker → #119 (job cleanup, no marker yet). Claude idle.
 
+- 2026-09-05: #119 DONE (muse worker, commit 32c464e; marker pass:
+  "session-wide shutdown ownership enforced, join bounded, 4 failing-pre-fix
+  tests, gate 376 lib + 4"). Hand-back highlights: session-wide kill on Linux
+  via per-PID /proc enumeration (kill(-id) is PG-only — no session syscall);
+  pid-reuse guards via /proc start-times; zombies excluded; join bounded
+  (500ms → detach stragglers; total ≤ grace+settle+join = 3s); SECOND real
+  bug found+fixed: force_shutdown gated on group-alive only — dead shell +
+  live jobs skipped force; widened to group-or-session. 4 failing-pre-fix
+  tests (bg SIGHUP-ignore, fg HUP+TERM-ignore, pre-shutdown orphan, engine
+  bg), polling w/ 10s bound; flake passed this run; tests 3× stable. Non-
+  Linux keeps group-only behavior (documented). PLAN.md FLAG (worker, no
+  edit): lifecycle § still documents only "SIGTERM to owned process groups…
+  SIGKILL survivors" — session-wide force + bounded join extend it; a
+  coordinator-owned amendment + user approval is required (constitution).
+  Routed to CRITIC (assignment .scratch/review/119.critic.md — full
+  ownership/kill-mechanism verification, pid-reuse, bounded join, tests
+  fail-pre-fix, non-Linux fallback). Verdict ping inbox
+  119-job-cleanup.critic.ping. FIRST-priority: #120 #121 remaining.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
