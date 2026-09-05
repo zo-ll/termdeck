@@ -895,6 +895,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   text to sync (checked). #120 (bracketed paste) DISPATCHED to the muse
   worker (WORKING; worktree coord/120-bracketed-paste off aa55591).
 
+- 2026-09-05: #120 DONE (muse worker, commit 5ce0a6c, 7 files +269/-14;
+  marker pass: "mode-driven paste wrapping plus split-proof parsing, 4
+  failing-pre-fix tests, gate green 380 lib + 4"). Hand-back: full split
+  matrix over opener/content/closer; encode wrapped-vs-raw units; ctl
+  paste/text/keys distinction; byte-exact dd probe (child receives
+  ESC[200~SAFE LF TEXT ESC[201~); incomplete-closer stall carved out as
+  PRE-EXISTING → routed to the #10/#126 parser-bounds slice (verify at
+  review). Worker ctx 22.6% (healthy). Routed to CRITIC (assignment
+  .scratch/review/120.critic.md — paste model coherence, split matrix
+  coverage, ctl wire additive-only, #118 bounded-path intact, carve-out
+  honesty, gate). Verdict ping inbox 120-bracketed-paste.critic.ping.
+  FIRST-priority: 5/5 after #120 merges; #121 (pane-ID reuse) next.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
