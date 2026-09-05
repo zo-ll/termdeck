@@ -982,6 +982,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   mode-aware input) DISPATCHED to codex (WORKING, parallel-safe vs #121:
   no session.rs overlap).
 
+- 2026-09-05: #126 DONE (codex, commit 60ce2a2; marker pass: "ANSI
+  attributes and DECCKM/X10/UTF-8/SGR input modes are honored"; files:
+  contracts additive + engine/vt + session/{backend,input} + ui/input;
+  gate on its base 383+4; worktree clean). Routed to CLAUDE critic
+  (assignment .scratch/review/126.critic.md — byte-exact combined attrs,
+  DECCKM + mouse-protocol mode flow, additive contract check, failing-pre-fix
+  tests). #122 (API truth) DISPATCHED to codex (rebase-to-main first;
+  WORKING). Audit closed: #117 #118 #119 #120 #121 #124; in review #126;
+  in flight #122. Remaining: #123 #125 #129 #130 #131.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
