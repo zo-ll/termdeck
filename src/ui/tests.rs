@@ -1446,12 +1446,13 @@ fn the_help_overlay_takes_the_focus_the_master_gives_up() {
 
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-    // 60x26 centred on the canvas: columns 42..101, rows 8..33. The
+    // 60x27 centred on the canvas: columns 42..101, rows 7..33. The
     // overlay grew a row for the split divider's keys (#41), another for
-    // the runtime-add sheet (#50) and another for `^g x` (#84).
-    assert_eq!(buffer[(42u16, 8u16)].symbol(), "┌");
+    // the runtime-add sheet (#50), another for `^g x` (#84) and another
+    // for the pin (#113).
+    assert_eq!(buffer[(42u16, 7u16)].symbol(), "┌");
     assert_eq!(buffer[(101u16, 33u16)].symbol(), "┘");
-    assert_eq!(buffer[(42u16, 8u16)].fg, ACCENT);
+    assert_eq!(buffer[(42u16, 7u16)].fg, ACCENT);
     // Focus is singular: the master border is no longer the accent, and
     // the underlay recedes by foreground alone.
     assert_eq!(buffer[(0u16, 2u16)].fg, IDLE_BORDER);
@@ -2347,4 +2348,133 @@ fn a_preview_outside_the_stack_window_notifies_through_the_toast() {
         "{}",
         text(terminal.backend().buffer())
     );
+}
+
+/// The column a run of cells starts at on one row, for the status bar's own
+/// assertions: every cell it draws is one character wide, so a character
+/// offset into the joined row is a column.
+fn column_of(buffer: &Buffer, row: u16, needle: &str) -> Option<u16> {
+    let joined: String = (0..buffer.area().width)
+        .map(|column| buffer[(column, row)].symbol())
+        .collect();
+    joined
+        .find(needle)
+        .map(|byte| joined[..byte].chars().count() as u16)
+}
+
+/// #113: worker pinned, then frontend promoted. The pinned pane is the top
+/// of the stack rather than the slot frontend vacated, and it wears the mark.
+fn pinned() -> DeckState {
+    let mut state = expanded(4);
+    let projects = fixture::projects();
+    state.apply(&ActionCommand::SelectPosition(3), &projects, fixture::NOW);
+    assert!(state.toggle_pin());
+    state.apply(&ActionCommand::SelectPosition(0), &projects, fixture::NOW);
+    assert_eq!(state.stack(), [3, 1, 2]);
+    state
+}
+
+#[test]
+fn pinned_stack_matches_the_canvas() {
+    let (buffer, _) = render(&fixture::frontend_active(), &pinned(), (144, 42));
+
+    assert_snapshot("pinned-stack", &buffer);
+}
+
+/// The mark leads the title row behind the disclosure marker, in accent, and
+/// no other pane wears one.
+#[test]
+fn the_pinned_preview_wears_its_mark_in_the_title() {
+    let (buffer, _) = render(&fixture::frontend_active(), &pinned(), (144, 42));
+    let rendered = text(&buffer);
+
+    assert!(rendered.contains("▾ ↑ 4 worker"), "{rendered}");
+    assert!(rendered.contains("▾ 2 backend"), "one pin, one mark");
+    assert!(rendered.contains("▾ 3 app"), "{rendered}");
+    // The marker keeps its own two cells at the head of the row, so the fold
+    // affordance and its hit test are where they were.
+    assert_eq!(buffer[(103u16, 2u16)].symbol(), "▾");
+    assert_eq!(buffer[(105u16, 2u16)].symbol(), "↑");
+    assert_eq!(buffer[(105u16, 2u16)].fg, ACCENT);
+    let projects = fixture::projects();
+    let state = pinned();
+    assert_eq!(
+        deck_for(&projects, &state).marker_at(SCREEN, Position::new(103, 2)),
+        Some(3),
+        "the pinned pane still folds from its marker"
+    );
+}
+
+/// A folded pinned pane says the same thing on its strip: the pin is order,
+/// not disclosure, so it keeps its slot folded.
+#[test]
+fn a_folded_pinned_preview_wears_the_mark_on_its_strip() {
+    let mut state = pinned();
+    assert!(state.toggle_collapse(3));
+
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    let rendered = text(&buffer);
+
+    assert!(
+        rendered.contains("▸ ↑ 4 worker · ○ · idle 6m"),
+        "{rendered}"
+    );
+    assert_eq!(state.stack(), [3, 1, 2], "and it is still the top of it");
+}
+
+/// Zoom hides the stack and the narrow fallback has none, so both keep the
+/// pin stated in the census they already draw.
+#[test]
+fn zoom_and_the_narrow_fallback_keep_the_pin_stated() {
+    let mut state = pinned();
+    state.apply(
+        &ActionCommand::ToggleZoom,
+        &fixture::projects(),
+        fixture::NOW,
+    );
+
+    let (zoom, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    assert!(text(&zoom).contains("hidden: ↑4○ 2● 3✕"), "{}", text(&zoom));
+
+    let (narrow, _) = render(&fixture::frontend_active(), &pinned(), (84, 22));
+    assert!(text(&narrow).contains("↑ 4 worker"), "{}", text(&narrow));
+}
+
+/// The explicit unpin #113 asks for: while the master is the pinned pane the
+/// status row advertises the key that undoes the state, accented, exactly as
+/// it advertises `^g c` while a fold is in play. Elsewhere the row keeps its
+/// columns and the pinned pane's own mark carries the state.
+#[test]
+fn the_status_row_advertises_the_unpin_key_while_the_master_is_pinned() {
+    let (stacked, _) = render(&fixture::frontend_active(), &pinned(), (144, 42));
+    assert!(
+        !text(&stacked).contains("^g p"),
+        "the pinned pane is in the stack, so the key would not unpin it"
+    );
+
+    let mut state = pinned();
+    state.apply(
+        &ActionCommand::SelectPosition(3),
+        &fixture::projects(),
+        fixture::NOW,
+    );
+    let (master, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    let rendered = text(&master);
+
+    assert!(rendered.contains("^g p"), "{rendered}");
+    let column = column_of(&master, 0, "^g p").expect("the unpin key");
+    assert_eq!(master[(column, 0u16)].fg, ACCENT, "a state in play");
+    // And the master says it is the pinned pane, in its own title.
+    assert!(rendered.contains("↑ > 4 worker"), "{rendered}");
+}
+
+/// Nothing is pinned on any canvas that predates #113, so nothing about them
+/// moves: the mark and the key are both conditional.
+#[test]
+fn an_unpinned_deck_draws_exactly_what_it_drew_before() {
+    let (buffer, _) = render(&fixture::frontend_active(), &reference_deck(4), (144, 42));
+    let rendered = text(&buffer);
+
+    assert!(!rendered.contains("↑"), "{rendered}");
+    assert!(!rendered.contains("^g p"), "{rendered}");
 }

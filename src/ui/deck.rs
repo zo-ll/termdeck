@@ -839,15 +839,18 @@ impl Deck<'_> {
         };
         let separator = ink(SEPARATOR);
 
-        let mut spans = vec![
-            Span::styled("▸ ", ink(HINT)),
+        let mut spans = vec![Span::styled("▸ ", ink(HINT))];
+        if self.state.pinned() == Some(position) {
+            spans.push(Span::styled(format!("{PIN_MARK} "), ink(ACCENT)));
+        }
+        spans.extend([
             Span::styled(
                 format!("{} {}", position + 1, project.terminal),
                 ink(PREVIEW_FG),
             ),
             Span::styled(" · ", separator),
             Span::styled(glyph, Style::new().fg(glyph_colour).bg(background)),
-        ];
+        ]);
         // The strip sits two columns in, per the export's `padding:0 2ch`, and
         // keeps the same inset on the right.
         let width = area.width.saturating_sub(2 * PADDING);
@@ -994,7 +997,15 @@ impl Deck<'_> {
             // wears the mark until it is promoted (#97).
             let notified = !master && self.notifies.pending(&project.terminal).is_some();
             let label = format!(
-                " {} {}{}{} ",
+                " {}{} {}{}{} ",
+                // The narrow fallback has no stack for the pin to hold, so
+                // its chip is where the state is stated until the width
+                // comes back (#113).
+                if self.state.pinned() == Some(position) {
+                    format!("{PIN_MARK} ")
+                } else {
+                    String::new()
+                },
                 position + 1,
                 project.terminal,
                 chip_tag(&status, &metadata),
@@ -1329,6 +1340,7 @@ impl Deck<'_> {
         // the terminal is running. A folded strip has no such slot, so it
         // keeps the mark the censuses use (#97).
         let (glyph, glyph_colour) = status_glyph(status, metadata);
+        let pinned = self.state.pinned() == Some(position);
         let mut spans = Vec::new();
         // Every stack pane declares its disclosure state, folded or not: the
         // open `▾` is the only thing on a fresh frame that says the stack
@@ -1336,12 +1348,22 @@ impl Deck<'_> {
         if !master {
             spans.push(Span::styled("▾ ", Style::new().fg(HINT)));
         }
+        // The pin leads the row behind that marker, which keeps its own two
+        // cells and its column down the stack (#113). It is drawn on the
+        // master too: the pin is a property of the terminal, so it is stated
+        // wherever that terminal is drawn.
+        if pinned {
+            spans.push(Span::styled(
+                format!("{PIN_MARK} "),
+                Style::new().fg(ACCENT),
+            ));
+        }
         let prefix = if master {
             format!("> {number} ")
         } else {
             format!("{number} ")
         };
-        let leading = usize::from(!master) * 2;
+        let leading = (usize::from(!master) + usize::from(pinned)) * 2;
         let status_width = separator.chars().count()
             + glyph.chars().count()
             + status_label(status).map_or(0, |label| label.chars().count() + 1);
@@ -1735,8 +1757,15 @@ impl Deck<'_> {
                 Some(_) => (NOTIFY_MARK, WARNING),
                 None => status_glyph(&status, &metadata),
             };
+            // Zoom hides the stack, so the census is also where the pin
+            // stays stated (#113).
+            let pin = if self.state.pinned() == Some(position) {
+                PIN_MARK
+            } else {
+                ""
+            };
             spans.push(Span::styled(
-                format!("{}{glyph}", position + 1),
+                format!("{pin}{}{glyph}", position + 1),
                 Style::new().fg(colour).bg(STATUS_BG),
             ));
         }
@@ -1777,25 +1806,24 @@ impl Deck<'_> {
         // there — the spec's "the zoom status line ... says nothing about
         // collapse". Since #39 every run starts folded, so without this the
         // zoomed row would trade its live `^g [` for an inert `^g c`.
-        let folded: [(&str, &str); 5] = [
-            KEY_HINTS[0],
-            ("^g c", "collapse"),
-            KEY_HINTS[1],
-            KEY_HINTS[2],
-            KEY_HINTS[3],
-        ];
-        let entries: &[(&str, &str)] = if self.state.collapsed_count() > 0 && layout != Layout::Zoom
-        {
-            &folded
-        } else {
-            &KEY_HINTS
-        };
+        let mut entries: Vec<(&str, &str)> = vec![KEY_HINTS[0]];
+        if self.state.collapsed_count() > 0 && layout != Layout::Zoom {
+            entries.push(("^g c", "collapse"));
+        }
+        // The same rule for the pin, and the explicit unpin #113 asks for:
+        // the key is advertised exactly while it would unpin, which is while
+        // the master is the pinned pane. Elsewhere the pinned pane wears its
+        // own mark and the row keeps its columns.
+        if self.state.pinned().is_some() && self.state.pinned() == self.state.active() {
+            entries.push(("^g p", "unpin"));
+        }
+        entries.extend_from_slice(&KEY_HINTS[1..]);
         // No collapsed rung here: at four keys the bare row is already
         // narrower than `^g j/k · N · z · [ · ? · q`, so the collapsed form
         // has nothing left to save and belongs to the narrow layout alone.
         vec![
-            self.hints(entries, layout, true),
-            self.hints(entries, layout, false),
+            self.hints(&entries, layout, true),
+            self.hints(&entries, layout, false),
         ]
     }
 
@@ -1807,13 +1835,17 @@ impl Deck<'_> {
             if index > 0 {
                 spans.push(Span::styled("  ", hint));
             }
-            // An active mode names itself in accent: zoom while zoomed, and
-            // collapse while any preview is folded.
+            // An active mode names itself in accent: zoom while zoomed,
+            // collapse while any preview is folded, and the pin while one
+            // stands — the last two are only in the list at all while they
+            // are in play.
             let folded = self.state.collapsed_count() > 0 && *name == "^g c";
             let zoom = layout == Layout::Zoom && *name == "^g z";
+            let pinned = *name == "^g p";
+            let held = zoom || folded || pinned;
             spans.push(Span::styled(
                 (*name).to_owned(),
-                if zoom || folded {
+                if held {
                     Style::new().fg(ACCENT).bg(STATUS_BG)
                 } else {
                     key
@@ -1822,7 +1854,7 @@ impl Deck<'_> {
             if labels {
                 spans.push(Span::styled(
                     format!(" {}", if zoom { "unzoom" } else { *label }),
-                    if zoom || folded { key } else { hint },
+                    if held { key } else { hint },
                 ));
             }
         }

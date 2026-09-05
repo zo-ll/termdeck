@@ -104,8 +104,8 @@ const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 const METER_CELLS: u64 = 6;
 /// Help overlay size: the supplement's 60 columns by 21 rows, grown a row at
 /// a time for the collapse binding, the stack-paging keys, the split
-/// divider's keys, the runtime-add sheet and the close binding.
-const HELP_SIZE: (u16, u16) = (60, 26);
+/// divider's keys, the runtime-add sheet, the close binding and the pin.
+const HELP_SIZE: (u16, u16) = (60, 27);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// The notification toast (#97) borrows the quit confirmation's size language
@@ -129,6 +129,14 @@ const ADD_AFFORDANCE: &str = "+";
 /// against the status dot's [`ERROR`], and the pane's right edge against the
 /// title's left.
 const CLOSE_AFFORDANCE: &str = "×";
+/// The mark the pinned pane wears (#113): held at the top of the stack.
+///
+/// It leads the title row, after the disclosure marker where there is one, in
+/// [`ACCENT`] — the colour the interface keeps for the state the user put the
+/// deck in. The border vocabulary is fully spoken for (idle, demoted, notify,
+/// drag, master), so the pin is ink on a glyph instead: a pinned pane can be
+/// demoted, flashing or held in a drag and still say that it is pinned.
+const PIN_MARK: &str = "↑";
 /// The mark a pane asking for attention wears (#97): in the toast's stead on
 /// a flashing strip, and in the censuses that keep hidden panes accounted for
 /// once the toast has been dismissed.

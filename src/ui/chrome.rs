@@ -121,7 +121,7 @@ pub(super) fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-pub(super) const HELP: [(&str, &str); 18] = [
+pub(super) const HELP: [(&str, &str); 19] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
@@ -129,6 +129,7 @@ pub(super) const HELP: [(&str, &str); 18] = [
     ("VIEW", ""),
     ("^g z", "toggle zoom"),
     ("^g c", "collapse / expand previews"),
+    ("^g p", "pin / unpin at the stack top"),
     ("^g pgup/pgdn", "page the preview stack"),
     ("^g -  ^g =", "narrow / widen the master"),
     ("^g a", "open any folder / repo"),
