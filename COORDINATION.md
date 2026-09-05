@@ -501,6 +501,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   on pristine origin/main in the sandbox (process-group restriction), passes
   on re-run — pre-existing, unrelated to the 1-file ctl diff.
   WAITING: user merge approval for #111 (then close issue #111).
+- 2026-09-05: #116 DONE (codex commit 34fe3d9 "Make termctl peek read active
+  screens", marker RESULT=pass: "Peek now reads active main or alternate grids
+  with screen metadata; full gate green", worktree clean). Routed to CRITIC
+  (same critic pane, assignment .scratch/review/116.critic.md, verdict ping
+  inbox 116-peek-active-screen.critic.ping). Base note: #116 branched PRE-#111;
+  main still awaits the #111 merge — integration rebase of #116 planned once
+  both merges are approved (ctl/mod.rs both touch, small overlap).
 - 2026-09-05: #116 (guaranteed peek, alt-aware active screen) FILED (issue
   created), worktree coord/116-peek-active-screen + brief ready; DISPATCHED to
   the idle codex session (same full session, per user preference) and verified
