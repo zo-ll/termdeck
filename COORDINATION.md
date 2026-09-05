@@ -637,6 +637,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   each), then #122-#126, then #127-#131; #112/#114/#94 resume after.
   No dispatch made — awaiting user direction on the audit queue.
 
+- 2026-09-05 EOD (ALL LANES IDLE, safe to close): wave complete (#111/#113/
+  #115/#116 shipped + critic-passed + merged + closed; binary rebuilt — one
+  deck restart loads all four + the notify/peek fixes). ASTRA AUDIT queue
+  (#117-#131, label astra-audit) DEFERRED TO TOMORROW per user — no dispatch
+  today. Tomorrow's plan: start with the FIRST-priority boundaries #117-#121
+  (blocking socket/PTY freezes, job cleanup, paste, reusable pane IDs) → each
+  slice → critic → user merge approval; research-brief corrections inform
+  #112's gate before decisions lean on it. Resume via COORDINATION.md +
+  docs/RESUME.md. Transcript pointer (ephemeral, non-durable): /tmp/
+  astra-audit-pane.txt + tmux default:1 scrollback — ALL material content is
+  in the issues themselves.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
