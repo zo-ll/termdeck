@@ -564,11 +564,6 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         }
         dirty |= input.expire(&mut deck, &projects, now());
         dirty |= schedule_expiry_repaint(&mut expiry_repaint, &deck, &notifies, now());
-        // A scrollbar hides itself after its window (#115), so while one is
-        // up the loop keeps drawing for the same reason: without this the
-        // last frame with the bar would sit there until something else
-        // redrew it.
-        dirty |= deck.scrolling(now()).is_some();
         #[cfg(unix)]
         {
             let mut quit = false;
@@ -1084,13 +1079,23 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
 /// Continues repainting while a time-bound visual is active, then requests
 /// exactly one final frame once it expires. Both state objects remain pure:
 /// fixtures control their clocks through the `now` supplied here.
+///
+/// Three visuals end on a clock rather than on an event — the demotion
+/// highlight, a notification's flash and toast, and the scrollbar that hides
+/// itself after its window (#115). All three want the same thing from the
+/// loop, and all three were getting it in different amounts: the scrollbar
+/// asked only "am I up?", which keeps drawing while the bar is there and
+/// then stops one pass too early, leaving the bar on screen until something
+/// unrelated redrew (#132). The edge is what matters, so it is asked once,
+/// for all of them.
 fn schedule_expiry_repaint(
     was_active: &mut bool,
     deck: &DeckState,
     notifies: &Notifications,
     now: Timestamp,
 ) -> bool {
-    let active = deck.demoted(now).is_some() || notifies.settling(now);
+    let active =
+        deck.demoted(now).is_some() || deck.scrolling(now).is_some() || notifies.settling(now);
     let repaint = active || *was_active;
     *was_active = active;
     repaint
