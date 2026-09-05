@@ -3,7 +3,7 @@ use super::dispatch_control;
 use super::{
     InputEvent, KeyReader, MouseAction, WheelRoute, add_terminal, app_wheel, chosen,
     close_terminal, dispatch_live_input, master_terminal, mouse_action, now, open_terminals,
-    request_close, resize_terminals, route_wheel, spawn_terminals, terminal_sizes,
+    request_close, resize_terminals, resized, route_wheel, spawn_terminals, terminal_sizes,
 };
 use crate::{
     contracts::{
@@ -969,4 +969,26 @@ fn a_bell_marks_its_pane_and_the_master_ignores_its_own() {
 
     // An unknown terminal rings nothing at all.
     assert!(engine.bell(&TerminalId::new("gone")).is_empty());
+}
+
+/// The picker read the terminal's size every pass and never compared it, so
+/// a resized window kept its old layout until the next keypress (#127). A
+/// resize is a redraw by itself — and only for the pass it happens on.
+#[test]
+fn a_resize_alone_is_a_reason_to_redraw() {
+    let mut size = ScreenSize::new(80, 24);
+
+    assert!(
+        !resized(&mut size, ScreenSize::new(80, 24)),
+        "nothing moved"
+    );
+    assert!(
+        resized(&mut size, ScreenSize::new(100, 40)),
+        "the window did"
+    );
+    assert_eq!(size, ScreenSize::new(100, 40), "and is remembered");
+    assert!(
+        !resized(&mut size, ScreenSize::new(100, 40)),
+        "one redraw, not one per pass"
+    );
 }
