@@ -661,6 +661,11 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   the codex lane (all engine/session/ctl — no UI overlap), each → critic →
   user merge approval → next. Claude lane: holds unless user opts into a
   parallel non-overlapping slice (candidates: #127 picker, #129 docs).
+  ENV NOTE: the deck restart loaded the #116 alt-aware peek — claude's TUI
+  is now VISIBLE via termctl peek (blind spot fixed in practice, verified
+  this session); claude pane recreated at the 113-pin worktree (full
+  session, opus, idle) so the canonical env (coord|critic|claude|codex)
+  is whole.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
