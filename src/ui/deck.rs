@@ -801,6 +801,68 @@ impl Deck<'_> {
         }
     }
 
+    /// One pane's scrollback position, drawn into its right border (#115).
+    ///
+    /// The border is the track and the thumb is that border drawn heavy, so
+    /// the bar takes no column from the layout and no cell from the terminal:
+    /// a scrollbar that resized the pane it measures would change the thing it
+    /// describes every time it appeared.
+    ///
+    /// Three conditions, all of which must hold: the pane holds the master
+    /// frame — its caller's guard, because a preview says the same thing in
+    /// words on its own last row — it has scrollback to report, and it is in
+    /// play: scrollback mode
+    /// is on, which carries no countdown because the mode is the signal, or a
+    /// scroll moved it inside [`crate::ui::SCROLLBAR_WINDOW`]. Otherwise the
+    /// pane renders exactly as it did before this existed.
+    ///
+    /// The arithmetic is [`Deck::scroll_track`]'s, with the preview list's
+    /// counts swapped for the viewport's, anchoring included: at the tail the
+    /// thumb is flush with the bottom, so "there is nothing further down" is
+    /// never a rounding question.
+    fn scrollbar(
+        &self,
+        buffer: &mut Buffer,
+        area: Rect,
+        position: usize,
+        scrollback: ScrollbackPosition,
+        rows: u16,
+        style: Style,
+    ) {
+        if area.height < 4 || area.width == 0 {
+            return;
+        }
+        let raised = self.state.scrollback() || self.state.scrolling(self.now) == Some(position);
+        if !raised {
+            return;
+        }
+        let (above, below) = (
+            scrollback.lines_above as usize,
+            scrollback.lines_below as usize,
+        );
+        // Nothing above and nothing below is a viewport with no position to
+        // report — the stack track's own rule, and the reason a fresh pane
+        // draws no bar even in scrollback mode.
+        if above + below == 0 {
+            return;
+        }
+        let track = usize::from(area.height - 2);
+        let window = usize::from(rows.max(1));
+        let total = above + window + below;
+        let length = (window * track).div_ceil(total).clamp(1, track);
+        let top = match below {
+            0 => track - length,
+            _ => (above * track / total).min(track - length),
+        };
+        let column = area.x + area.width - 1;
+        for row in top..top + length {
+            let Some(cell) = buffer.cell_mut((column, area.y + 1 + row as u16)) else {
+                continue;
+            };
+            cell.set_symbol(SCROLL_THUMB).set_style(style);
+        }
+    }
+
     /// A collapsed preview: one row, no box, on the export's `#101317`.
     ///
     /// `▸ {n} {name} · {dot} · {tail}`, where the tail is the pane's last
@@ -1226,10 +1288,25 @@ impl Deck<'_> {
             Pane::DragMasterTarget | Pane::DragPreviewTarget => (ACCENT, DEMOTED_BG),
             _ => (ACCENT, CANVAS),
         };
+        let border_style = Style::new().fg(border).bg(background);
         Block::bordered()
             .style(Style::new().bg(background))
-            .border_style(Style::new().fg(border).bg(background))
+            .border_style(border_style)
             .render(area, buffer);
+        // The scrollbar is drawn into that border rather than over the
+        // content, so it costs the terminal no cell and the layout no column
+        // (#115). It is the master's alone: a preview says the same thing in
+        // words, on its own last row.
+        if pane.master() {
+            self.scrollbar(
+                buffer,
+                area,
+                position,
+                metadata.scrollback,
+                engine.frame(id).map_or(0, |frame| frame.size.rows),
+                border_style,
+            );
+        }
 
         // Content columns, also the columns the title chrome aligns to.
         let left = area.x + 1 + PADDING;
@@ -1243,7 +1320,6 @@ impl Deck<'_> {
 
         // Title chrome aligns with the content columns and clears one border
         // cell on each side, matching the export's 2-column title inset.
-        let border_style = Style::new().fg(border).bg(background);
         // The close affordance takes the right end of the title row (#84).
         // The narrow fallback's master has none, for the reason its right
         // slot goes too — and it is the only pane there, so the pointer

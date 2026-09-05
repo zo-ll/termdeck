@@ -19,6 +19,15 @@ const DEMOTION_WINDOW: Elapsed = Elapsed { millis: 1_500 };
 /// happened, and shorter than the 30s activity window, so it settles rather
 /// than becoming another permanent state.
 pub const NOTIFY_WINDOW: Elapsed = Elapsed { millis: 4_000 };
+/// How long the scrollbar stands after the last scroll (#115).
+///
+/// Longer than the demotion highlight, which reports something that has
+/// finished, and the same window as the notification flash, which reports
+/// something still going on: a scrollbar is the second kind, and the pause
+/// between two wheel flicks while a line is read is longer than a second and
+/// a half. Well short of the 30s activity window, which measures whether a
+/// process is alive rather than whether a person is doing something.
+pub const SCROLLBAR_WINDOW: Elapsed = Elapsed { millis: 4_000 };
 /// How long the toast stays up before it settles by itself. Long enough to
 /// read four lines, short enough not to sit over the master.
 pub const TOAST_WINDOW: Elapsed = Elapsed { millis: 8_000 };
@@ -235,6 +244,13 @@ pub enum Modal {
 /// workspace and survives promotion". Every terminal starts folded except the
 /// one that opens as master, per issue #39.
 ///
+/// `scrolled` is the pane a scroll command last moved and when it moved
+/// (#115), which is what raises that pane's scrollbar and what expires it.
+/// Like the demotion highlight it is read back against the `now` the frame is
+/// drawn at, so every frame of the countdown is a fixture, and like the
+/// demotion highlight it belongs to a pane: it follows that pane through a
+/// close's renumbering and goes when the pane does.
+///
 /// `pinned` is the configured position of the terminal held at the top of the
 /// stack (#113), or `None`. It is a property of a terminal rather than of a
 /// slot: it holds while that terminal is master, and every reordering puts the
@@ -261,6 +277,7 @@ pub struct DeckState {
     scrollback: bool,
     modal: Option<Modal>,
     demotion: Option<(usize, Timestamp)>,
+    scrolled: Option<(usize, Timestamp)>,
     drag: Option<(usize, Option<usize>)>,
     stack_offset: usize,
     master_ratio: f64,
@@ -291,6 +308,7 @@ impl DeckState {
             scrollback: false,
             modal: None,
             demotion: None,
+            scrolled: None,
             drag: None,
             stack_offset: 0,
             master_ratio: DEFAULT_MASTER_RATIO,
@@ -421,11 +439,17 @@ impl DeckState {
             pinned => pinned,
         };
         // A highlight belongs to a pane, so it goes when the pane does and
-        // follows it down otherwise.
+        // follows it down otherwise. The scrollbar's arm is the same kind of
+        // thing and travels the same way (#115).
         self.demotion = match self.demotion {
             Some((demoted, _)) if demoted == position => None,
             Some((demoted, at)) if demoted > position => Some((demoted - 1, at)),
             demotion => demotion,
+        };
+        self.scrolled = match self.scrolled {
+            Some((scrolled, _)) if scrolled == position => None,
+            Some((scrolled, at)) if scrolled > position => Some((scrolled - 1, at)),
+            scrolled => scrolled,
         };
         // Whatever the pointer was holding is gone or has moved under it.
         self.drag = None;
@@ -625,6 +649,30 @@ impl DeckState {
         let (position, at) = self.demotion?;
         let elapsed = now.unix_millis.saturating_sub(at.unix_millis);
         (elapsed < DEMOTION_WINDOW.millis).then_some(position)
+    }
+
+    /// Records that a scroll command moved this pane's viewport, which is what
+    /// raises its scrollbar (#115). Every scroll restarts the window, so a
+    /// slow, deliberate scroll is one continuous appearance rather than a
+    /// stutter.
+    ///
+    /// The session calls this wherever it dispatches a scroll — the keyboard's
+    /// `Reaction::Scroll`, the `esc` that returns to the live tail, and the
+    /// wheel over a pane. The wheel arms the pane under the pointer, not the
+    /// master, so wheeling a preview raises nothing.
+    pub fn mark_scrolled(&mut self, position: usize, now: Timestamp) {
+        self.scrolled = Some((position, now));
+    }
+
+    /// The pane whose scrollbar is in play, while its window lasts. `None`
+    /// once [`SCROLLBAR_WINDOW`] has passed or nothing has been scrolled.
+    ///
+    /// Scrollback mode is the other way a bar is raised, and it carries no
+    /// countdown: the mode is the signal, so the renderer asks the mode first.
+    pub fn scrolling(&self, now: Timestamp) -> Option<usize> {
+        let (position, at) = self.scrolled?;
+        let elapsed = now.unix_millis.saturating_sub(at.unix_millis);
+        (elapsed < SCROLLBAR_WINDOW.millis).then_some(position)
     }
 
     /// Applies one outer-interface action. Returns whether anything changed.
@@ -1624,5 +1672,46 @@ mod tests {
         let mut empty = DeckState::new(0);
         assert!(!empty.toggle_pin(), "no master, nothing to pin");
         assert_eq!(empty.pinned(), None);
+    }
+
+    /// #115: a scroll raises its pane for the scrollbar's window and no
+    /// longer, read against the `now` the frame is drawn at.
+    #[test]
+    fn a_scroll_raises_its_pane_for_the_scrollbar_window() {
+        let mut state = DeckState::new(4);
+        assert_eq!(state.scrolling(NOW), None, "nothing has been scrolled");
+
+        state.mark_scrolled(2, NOW);
+
+        assert_eq!(state.scrolling(NOW), Some(2));
+        assert_eq!(state.scrolling(later(3_999)), Some(2));
+        assert_eq!(state.scrolling(later(4_000)), None, "the window passed");
+
+        // Every scroll restarts it, so a slow scroll is one appearance.
+        state.mark_scrolled(2, later(3_000));
+        assert_eq!(state.scrolling(later(6_000)), Some(2));
+    }
+
+    /// It belongs to a pane, like the demotion highlight: it follows that pane
+    /// down a close's renumbering and goes when the pane goes (#84).
+    #[test]
+    fn a_raised_scrollbar_follows_the_pane_it_belongs_to() {
+        let mut state = DeckState::new(4);
+        state.mark_scrolled(3, NOW);
+
+        assert!(state.close(1), "close a pane below it");
+        assert_eq!(state.scrolling(NOW), Some(2), "the old 4 is the new 3");
+
+        assert!(state.close(2));
+        assert_eq!(
+            state.scrolling(NOW),
+            None,
+            "the pane it belonged to is gone"
+        );
+
+        let mut state = DeckState::new(4);
+        state.mark_scrolled(0, NOW);
+        assert!(state.close(3), "close a pane above it");
+        assert_eq!(state.scrolling(NOW), Some(0), "which changes nothing");
     }
 }
