@@ -1131,6 +1131,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   user: (a) wait for the 19:44 reset → codex resumes in place; (b) hand
   the half-done CLI slice to the claude lane (cross-ownership + resume
   in place, adjudicated); (c) second codex usage reset if any remain.
+- 2026-09-05: #129-DOCS CRITIC VERDICT = PASS (spot-checked against a
+  running binary: resolve_path semantics, contract enum exact match,
+  bindings PgUp/PgDn-c-p-a-x, walk(start,3), cli arms; the #119
+  Lifecycle amendment preserved byte-for-byte; A1-A5 dated+attributed;
+  LICENSE=MIT 2026 Andrea Zollini; Horizon only the pinned export +
+  one 'horizontal' false positive; boundary clean) → MERGED (issue
+  #129 STAYS OPEN). Nits: (1) MERGE-ORDER hazard — README cargo-run
+  paragraph falsified when default-run (#129-A) lands → reconcile the
+  paragraph at the CLI merge; (2) #129 can't close yet — Cargo.toml
+  repository '', serde_yaml 0.9, no dep scan (→ #129-A/#130);
+  COORDINATION.md stale tables NOW PRUNED (archived to journal, this
+  turn); (3) amendment preamble oversells purity (minor); (4) NEW
+  ISSUE #133 filed — folders named check/list unreachable (parse-arm
+  shadowing), bug label. #129-A (CLI/help) still parked on the codex
+  quota (uncommitted edits on disk); resume at 19:44 or hand to claude.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
