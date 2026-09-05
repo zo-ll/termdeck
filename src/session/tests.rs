@@ -2033,8 +2033,18 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
         served,
         "the request was complete, so the poll dispatched it"
     );
+    // The reply arrives because the listener closes the connection after
+    // writing it. A change that stops closing it would leave this read
+    // blocking forever, so it fails fast instead: CI's job ceiling would
+    // catch the hang eventually, but a local run should not have to be
+    // noticed and killed by hand.
+    client
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .unwrap();
     let mut response = String::new();
-    client.read_to_string(&mut response).unwrap();
+    client
+        .read_to_string(&mut response)
+        .expect("the listener closes the connection after its reply");
     assert!(
         response.contains("\"schema\":\"ctl.v1\"") && response.contains("\"ok\":true"),
         "{response}"
