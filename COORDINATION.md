@@ -908,6 +908,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   honesty, gate). Verdict ping inbox 120-bracketed-paste.critic.ping.
   FIRST-priority: 5/5 after #120 merges; #121 (pane-ID reuse) next.
 
+- 2026-09-05: #120 CRITIC VERDICT = PASS (no nits) → MERGED (standing
+  approval) — f390ef4, gate 380 lib + 4 green; issue #120 CLOSED; binary
+  rebuilt. Audit FIRST-priority COMPLETE (5/5: #117 #118 #119 #120 + NB).
+  #121 (opaque session-unique pane IDs, tombstones, stale-ID truthfulness)
+  DISPATCHED to the muse worker (WORKING; worktree coord/121-pane-ids off
+  f390ef4; brief guards TERMDECK_PANE/list/peek coherence + additive-only
+  wire). NEXT after: SECOND batch #122-#126.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
