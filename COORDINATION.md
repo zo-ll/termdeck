@@ -783,6 +783,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   engine truth + pump delivery + ctl refusal. No nits. WAITING: user
   merge approval for #118 → then #119 to the pi-worker lane.
 
+- 2026-09-05 (USER: "fix the nb first"): #118 MERGE HELD (critic pass stands,
+  but merge deferred until the NB batch lands — user ordering). NB CLEANUP
+  dispatched to the pi-worker lane (task nb-cleanup-2026-09-05, worktree
+  coord/nb-cleanup-2026-09-05): (1) #116 fake-engine active_screen_lines
+  Some([]) fallback shadow — make None-when-unset; (2) #117 wall-clock
+  deadline test margins — harden against CI load, keep discriminating;
+  (3) #117 zero-write-as-complete in write_response — fix-or-document with
+  comment. Each NB = fix OR explicit decide+document. UI-lane NBs queued for
+  claude after #128: #113 toggle_pin doc overpromise + pinned()/active()
+  double-call; #115 SCROLLBAR_WINDOW ≡ NOTIFY_WINDOW const dedupe.
+  In flight: worker→NB batch; claude→#128. #118 merge follows the batch.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
