@@ -821,6 +821,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   sandbox flake once during its gate run; expected — assignment covers
   clean-re-run).
 
+- 2026-09-05: #118 MERGED (standing approval) — --no-ff merge f27fe25,
+  pushed; merged-gate FIRST run hit the known shutdown_…_threads sandbox
+  flake (1 fail) → re-run green 363 lib + 4 (×2); flake documented, merge
+  stands. #128 MERGE CONFLICT (src/session.rs: #118 ctl-input wiring vs #128
+  add-failure toast); merge aborted, main clean post-#118; integration
+  ROUTED to claude (task 128-integration: merge origin/main into
+  coord/128-picker-git, resolve keeping BOTH behaviors, gate, commit local,
+  marker+ping slug 128-integration; never push). NB batch REVIEW dispatched
+  to the critic (2nd assignment, .scratch/review/nb-cleanup.critic.md).
+  Pending: claude-integration → merge #128 → merge NB (rebase) → close
+  #118/#128 → rebuild → #119 + UI NB batch (#113/#115).
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
