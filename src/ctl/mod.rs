@@ -547,7 +547,10 @@ fn write_response(pending: &mut Pending) -> bool {
     };
     let end = (*written + IO_CHUNK).min(bytes.len());
     match pending.stream.write(&bytes[*written..end]) {
-        Ok(0) => true,
+        // A zero write moved nothing: retry on a later poll, exactly like
+        // WouldBlock. The response deadline still bounds a peer that stalls
+        // here, so this cannot wedge its slot (#117 NB-3).
+        Ok(0) => false,
         Ok(count) => {
             *written += count;
             *written == bytes.len()
@@ -919,6 +922,37 @@ mod tests {
         assert_eq!(data["screen"], "alt");
     }
 
+    /// #116 NB-1: an unset active screen is `None`, not an empty screen, so
+    /// peek falls through to retained history through the real `or_else`
+    /// path instead of answering with no lines.
+    #[test]
+    fn peek_falls_back_to_history_when_active_screen_is_unset() {
+        let projects = vec![project("one")];
+        let terminal = projects[0].terminal.clone();
+        let mut engine = FakeEngine::new([terminal.clone()]);
+        engine.set_history_lines(&terminal, vec!["old output".to_owned(), "tail".to_owned()]);
+        // No `set_active_screen_lines`: the screen stays unset.
+        let deck = DeckState::new(1);
+        let mut notifies = Notifications::new();
+        let workspace = Workspace::discovered(std::env::temp_dir(), projects.clone());
+
+        let peek = dispatch(
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "peek".to_owned(),
+                id: Some("one".to_owned()),
+                lines: Some(5),
+                ..Default::default()
+            },
+            state(&workspace, &engine, &projects, &deck, &mut notifies),
+        );
+
+        assert!(peek.ok);
+        let data = peek.data.unwrap();
+        assert_eq!(data["lines"], serde_json::json!(["old output", "tail"]));
+        assert_eq!(data["screen"], "main");
+    }
+
     #[test]
     fn control_requests_require_their_arguments_and_keep_input_kinds_distinct() {
         let missing = Request {
@@ -1226,7 +1260,12 @@ mod tests {
         let timeout_listener = UnixListener::bind(&timeout_path).unwrap();
         let timeout_server = thread::spawn(move || {
             let _client = timeout_listener.accept().unwrap();
-            thread::sleep(Duration::from_millis(100));
+            // Far beyond the client deadline below: without a deadline the
+            // call would stall here, with one it fails at the timeout. The
+            // gap between the two is the whole assertion, so it is
+            // deliberately wide — CI scheduling jitter must not close it
+            // from either side (#117 NB-2).
+            thread::sleep(Duration::from_millis(500));
         });
         let request = Request {
             schema: SCHEMA.to_owned(),
@@ -1234,9 +1273,9 @@ mod tests {
             ..Default::default()
         };
         let started = Instant::now();
-        let timeout = call_with_limits(&timeout_path, &request, Duration::from_millis(20), 1024);
+        let timeout = call_with_limits(&timeout_path, &request, Duration::from_millis(50), 1024);
         assert!(timeout.is_err());
-        assert!(started.elapsed() < Duration::from_millis(80));
+        assert!(started.elapsed() < Duration::from_millis(300));
         timeout_server.join().unwrap();
         fs::remove_file(&timeout_path).unwrap();
 
