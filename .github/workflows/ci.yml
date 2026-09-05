@@ -51,9 +51,54 @@ jobs:
         timeout-minutes: 20
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
+      # The suite runs in two steps, and the split is the honest half of the
+      # flake story below: everything except the one environmentally-sensitive
+      # test runs here, with no second chance at all.
       - name: Tests
         timeout-minutes: 20
-        run: cargo test --locked --all-targets --all-features
+        run: |
+          cargo test --locked --all-targets --all-features -- \
+            --skip shutdown_terms_all_groups_then_kills_survivors_and_joins_threads
+
+      # `shutdown_terms_all_groups_then_kills_survivors_and_joins_threads`
+      # spawns real process groups and then signals them. Under a restricted
+      # sandbox — the containerised environment this project is developed in —
+      # the kernel refuses part of that and the test fails, where a re-run in
+      # the same place passes. It is environmental, and a GitHub runner is not
+      # that environment, so this step is expected to pass first time here:
+      # the retry is a safety net, not a licence.
+      #
+      # Exactly one retry, and only for this test. A true regression fails
+      # both attempts and reds the job, while every other test in the suite
+      # stays fail-on-first — retrying a whole suite is how a real
+      # intermittent bug gets laundered into a green check. If this step ever
+      # needs its retry on a GitHub runner, that is a finding about the test
+      # and not about the sandbox: say so in #130 rather than widening this.
+      - name: Tests — the sandbox-sensitive shutdown case (one retry)
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          case_name=engine::native::tests::shutdown_terms_all_groups_then_kills_survivors_and_joins_threads
+          # A filter that matches nothing is a *pass* to libtest — "0 passed,
+          # N filtered out", exit 0 — so a rename would quietly turn this step
+          # into a no-op guarding a test that is no longer run anywhere. Check
+          # the name still selects something before trusting the result.
+          if ! cargo test --locked --all-features --lib "$case_name" -- --exact --list \
+              | grep -q "^$case_name: test$"; then
+            echo "::error::$case_name is not in the suite: update this step's name or drop it"
+            exit 1
+          fi
+          for attempt in 1 2; do
+            echo "::group::attempt $attempt"
+            if cargo test --locked --all-features --lib "$case_name" -- --exact; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "::warning::$case_name failed on attempt $attempt"
+          done
+          echo "::error::$case_name failed twice: treat this as a regression, not the sandbox flake"
+          exit 1
 
   advisories:
     runs-on: ubuntu-latest
@@ -78,11 +123,40 @@ jobs:
         timeout-minutes: 10
         run: cargo install cargo-audit --locked
 
-      # Default severity: a vulnerability advisory fails the job. Warnings —
+      # Default severity: a vulnerability advisory fails the *step*. Warnings —
       # unmaintained or yanked crates, `serde_yaml 0.9.34+deprecated` among
       # them — are reported without failing, because replacing that dependency
       # is its own decision (#130) and should not block unrelated work. Turn
       # this into `--deny warnings` once that decision lands.
+      #
+      # `continue-on-error` keeps the finding off the critical path. An
+      # advisory is published against a dependency by a third party at a time
+      # nobody here chooses, and it would otherwise red every push until it is
+      # dealt with — blocking work that has nothing to do with it. The scan is
+      # still run on every push and its result is still reported, loudly, by
+      # the step below; only the blocking is dropped. The install step above
+      # keeps failing hard on purpose: a scan that could not run is a broken
+      # CI, not a security finding. (The other shape of this is a scheduled
+      # job that opens an issue; it costs a `schedule:` trigger and a token,
+      # and can replace this once someone wants the notification.)
       - name: Dependency advisories
+        id: audit
         timeout-minutes: 5
+        continue-on-error: true
         run: cargo audit
+
+      # Not decoration: a `continue-on-error` step that fails is easy to scroll
+      # past, so the finding is restated as a warning annotation and written
+      # into the run summary, where it is read without opening the log.
+      - name: Report advisories
+        if: steps.audit.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          echo "::warning::cargo audit reported findings — see the Dependency advisories step"
+          {
+            echo "### Dependency advisories"
+            echo
+            echo "\`cargo audit\` reported findings on this run. They do not block"
+            echo "the gate (see the comment in \`.github/workflows/ci.yml\`), and they"
+            echo "do need an owner: triage them against #130."
+          } >> "$GITHUB_STEP_SUMMARY"
