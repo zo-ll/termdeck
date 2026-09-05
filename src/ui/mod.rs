@@ -38,12 +38,13 @@ pub use picker::{
 };
 pub use state::{
     DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal, NOTIFY_WINDOW,
-    Notifications, Notify, TOAST_WINDOW,
+    Notifications, Notify, SCROLLBAR_WINDOW, TOAST_WINDOW,
 };
 
 use crate::contracts::{
-    CellContent, CellStyle, Cursor, Elapsed, NotifyKind, Project, Rgb, ScreenSize, TerminalEngine,
-    TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
+    CellContent, CellStyle, Cursor, Elapsed, NotifyKind, Project, Rgb, ScreenSize,
+    ScrollbackPosition, TerminalEngine, TerminalFrame, TerminalId, TerminalMetadata,
+    TerminalStatus, Timestamp,
 };
 
 /// Accepted palette. Every value comes from the design export's palette board.
@@ -129,6 +130,13 @@ const ADD_AFFORDANCE: &str = "+";
 /// against the status dot's [`ERROR`], and the pane's right edge against the
 /// title's left.
 const CLOSE_AFFORDANCE: &str = "×";
+/// The thumb of a pane's scrollbar (#115): the border drawn heavy.
+///
+/// The border is the track, so the bar costs the master no column and the
+/// terminal no cell, and it adds no colour to a border whose colours are
+/// already spoken for (#113) — `│` to `┃` is the same weight signal the
+/// stack's own track carries.
+const SCROLL_THUMB: &str = "┃";
 /// The mark the pinned pane wears (#113): held at the top of the stack.
 ///
 /// It leads the title row, after the disclosure marker where there is one, in

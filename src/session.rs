@@ -461,6 +461,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         // loop keeps drawing: without this the last frame of a notification
         // would sit there until the next keystroke redrew it (#97).
         dirty |= notifies.settling(now());
+        // A scrollbar hides itself after its window (#115), so while one is
+        // up the loop keeps drawing for the same reason: without this the
+        // last frame with the bar would sit there until something else
+        // redrew it.
+        dirty |= deck.scrolling(now()).is_some();
         #[cfg(unix)]
         {
             let mut quit = false;
@@ -577,6 +582,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             projects[active].terminal.clone(),
                             ScrollCommand::Bottom,
                         );
+                        // Returning to the tail is a scroll like any other,
+                        // so the bar stays for its window and shows the thumb
+                        // snap to the bottom (#115).
+                        deck.mark_scrolled(active, now());
                     }
                     // Esc and any outer-interface command clear the batch;
                     // typing into the master does not, because the toast is
@@ -608,6 +617,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     projects[active].terminal.clone(),
                                     command,
                                 );
+                                deck.mark_scrolled(active, now());
                             }
                         }
                         // One page of the preview list is rendered geometry,
@@ -649,6 +659,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     }
                 }
                 InputEvent::Wheel { pointer, command } => {
+                    // The renderer borrows the deck while the wheel is being
+                    // routed, so what it armed is applied once that is done.
+                    let mut scrolled = None;
                     deck.cancel_drag();
                     last_click = None;
                     marker_press = None;
@@ -664,7 +677,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             master_ratio: deck.master_ratio(),
                             now: now(),
                         };
-                        let (terminal, list) = {
+                        let (pointed, terminal, list) = {
                             let pointed = pane.position_at(area, pointer);
                             let terminal = pointed
                                 // A collapsed preview has no viewport, so there
@@ -676,7 +689,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             // the gutter, the gaps and the footer page it.
                             let list = (pointed.is_none() && pane.stack_scroll_at(area, pointer))
                                 .then(|| pane.stack_window(area));
-                            (terminal, list)
+                            (pointed, terminal, list)
                         };
                         if let Some(terminal) = terminal {
                             // A full-screen app owns its grid: termdeck
@@ -686,6 +699,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             match route_wheel(engine.metadata(&terminal), command) {
                                 WheelRoute::Scrollback(command) => {
                                     dispatch_scroll(&mut engine, terminal, command);
+                                    // The pane under the pointer, not the
+                                    // master: wheeling a preview raises no
+                                    // bar on the pane that has the frame
+                                    // (#115).
+                                    if let Some(position) = pointed {
+                                        scrolled = Some(position);
+                                    }
                                 }
                                 WheelRoute::App { up, mouse } => {
                                     let (column, row) = pane
@@ -714,6 +734,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             };
                             deck.set_stack_offset(window.scrolled(items));
                         }
+                    }
+                    if let Some(position) = scrolled {
+                        deck.mark_scrolled(position, now());
                     }
                 }
                 // The deck has no gesture of its own for either, but the

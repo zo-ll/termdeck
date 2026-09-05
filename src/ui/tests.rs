@@ -2478,3 +2478,211 @@ fn an_unpinned_deck_draws_exactly_what_it_drew_before() {
     assert!(!rendered.contains("↑"), "{rendered}");
     assert!(!rendered.contains("^g p"), "{rendered}");
 }
+
+/// #115: the master's scrollbar. The border is the track, so these read the
+/// pane's right border column; the thumb is `┃` where the border draws `│`.
+fn thumb_rows(buffer: &Buffer, column: u16) -> Vec<u16> {
+    (0..buffer.area().height)
+        .filter(|row| buffer[(column, *row)].symbol() == "┃")
+        .collect()
+}
+
+/// The master's right border at the export's split: 98 columns of master, so
+/// its border is column 97 and the gutter's divider is column 98.
+const MASTER_BORDER: u16 = 97;
+
+/// Scrollback mode raises the bar with no countdown — the mode is the signal
+/// — and the thumb reports where in the history the viewport sits. The
+/// fixture is 2179 lines above and 214 below, so it sits low and is one cell
+/// long: 38 visible rows of 2431.
+#[test]
+fn the_master_scrollbar_reports_where_the_viewport_sits() {
+    let (buffer, _) = render(&fixture::scrolled(), &scrolling(), (144, 42));
+
+    assert_eq!(thumb_rows(&buffer, MASTER_BORDER), [37]);
+    assert_eq!(
+        buffer[(MASTER_BORDER, 37u16)].fg,
+        ACCENT,
+        "the border's own"
+    );
+    // It costs the terminal no cell: the content column beside it is the
+    // pane's text, exactly as it was.
+    assert_eq!(buffer[(MASTER_BORDER, 36u16)].symbol(), "│");
+    assert_eq!(buffer[(MASTER_BORDER, 41u16)].symbol(), "┘");
+}
+
+/// A viewport with nothing above and nothing below has no position to report,
+/// so it draws no bar — the stack track's own rule, and in scrollback mode
+/// too, where the bar would otherwise be a full-height thumb saying "all".
+#[test]
+fn a_pane_with_no_scrollback_draws_no_bar_even_in_the_mode() {
+    let mut engine = fixture::frontend_active();
+    engine.set_metadata(
+        &TerminalId::new("frontend"),
+        TerminalMetadata {
+            scrollback: ScrollbackPosition {
+                lines_above: 0,
+                lines_below: 0,
+            },
+            ..TerminalMetadata::default()
+        },
+    );
+
+    let (buffer, _) = render(&engine, &scrolling(), (144, 42));
+
+    assert!(thumb_rows(&buffer, MASTER_BORDER).is_empty());
+    assert!(text(&buffer).contains(" SCROLL "), "the mode is still on");
+}
+
+/// Outside the mode a scroll raises the bar for `SCROLLBAR_WINDOW` and the
+/// window then hides it: the countdown is read against the `now` the frame is
+/// drawn at, so both frames are here.
+#[test]
+fn a_scroll_raises_the_bar_and_its_window_hides_it_again() {
+    let mut state = reference_deck(4);
+    state.mark_scrolled(0, fixture::NOW);
+    let engine = fixture::scrolled();
+
+    let raised = render_at(&engine, &state, quiet(), fixture::NOW, (144, 42)).0;
+    assert_eq!(thumb_rows(&raised, MASTER_BORDER), [37]);
+    // Nothing else about the pane says it: no mode tag, no footer.
+    assert!(!text(&raised).contains(" SCROLL "), "no mode, just the bar");
+
+    let last = render_at(&engine, &state, quiet(), at(3_999), (144, 42)).0;
+    assert_eq!(thumb_rows(&last, MASTER_BORDER), [37], "still in play");
+
+    let settled = render_at(&engine, &state, quiet(), at(4_000), (144, 42)).0;
+    assert!(
+        thumb_rows(&settled, MASTER_BORDER).is_empty(),
+        "the window has passed"
+    );
+    // And the settled frame is the frame the deck drew before #115.
+    let untouched = render_at(&engine, &reference_deck(4), quiet(), at(4_000), (144, 42)).0;
+    assert_eq!(text(&settled), text(&untouched));
+}
+
+/// Output arriving at the tail is not a scroll: an unarmed pane draws no bar
+/// however much history stands behind it.
+#[test]
+fn output_at_the_live_tail_raises_nothing() {
+    let (buffer, _) = render(&fixture::scrolled(), &reference_deck(4), (144, 42));
+
+    assert!(thumb_rows(&buffer, MASTER_BORDER).is_empty());
+}
+
+/// Returning to the tail is a scroll like any other, so the bar stays for its
+/// window — anchored flush with the bottom of the track, which is what says
+/// there is nothing further down.
+#[test]
+fn at_the_live_tail_the_thumb_is_flush_with_the_bottom() {
+    let mut state = reference_deck(4);
+    state.mark_scrolled(0, fixture::NOW);
+
+    // The reference frontend sits at its tail with 214 lines above it.
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+    let rows = thumb_rows(&buffer, MASTER_BORDER);
+    assert_eq!(*rows.last().expect("a thumb"), 40, "the last track row");
+    assert_eq!(
+        buffer[(MASTER_BORDER, 41u16)].symbol(),
+        "┘",
+        "not the corner"
+    );
+}
+
+/// Master only (v1): a preview says the same thing in words on its own last
+/// row, and the wheel over one arms that pane, not the pane holding the frame.
+#[test]
+fn a_scrolled_preview_draws_no_bar_of_its_own() {
+    let mut engine = fixture::backend_promoted();
+    engine.set_metadata(
+        &TerminalId::new("frontend"),
+        TerminalMetadata {
+            scrollback: ScrollbackPosition {
+                lines_above: 214,
+                lines_below: 1,
+            },
+            ..TerminalMetadata::default()
+        },
+    );
+    // Frontend has held the frame, so it is the open preview here — the
+    // pane whose marker states the same fact the bar would.
+    let mut state = promote(1);
+    state.mark_scrolled(0, fixture::NOW);
+
+    let (buffer, _) = render(&engine, &state, (144, 42));
+
+    // The stack's right edge is the screen's, and the master's border is
+    // where a master's bar would be: neither carries one.
+    assert!(thumb_rows(&buffer, 143).is_empty(), "no preview bar");
+    assert!(
+        thumb_rows(&buffer, MASTER_BORDER).is_empty(),
+        "and the master was not the pane that scrolled"
+    );
+    assert!(
+        text(&buffer).contains("↑ 214 lines above · ^g ["),
+        "the preview says it in words instead"
+    );
+}
+
+/// The bar is drawn into the master's own border, so the chrome that was
+/// already there stays where it was: the stack's list track in the gutter
+/// (#34b) and the pin's mark in the title (#113).
+#[test]
+fn the_bar_leaves_the_stack_track_and_the_pin_where_they_are() {
+    let projects = synthetic(8);
+    let mut state = expanded(8);
+    state.apply(&ActionCommand::SelectPosition(2), &projects, fixture::NOW);
+    assert!(state.toggle_pin());
+    state.apply(&ActionCommand::SelectPosition(0), &projects, fixture::NOW);
+    state.mark_scrolled(0, fixture::NOW);
+    let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    engine.set_metadata(
+        &projects[0].terminal,
+        TerminalMetadata {
+            scrollback: ScrollbackPosition {
+                lines_above: 100,
+                lines_below: 100,
+            },
+            ..TerminalMetadata::default()
+        },
+    );
+    let deck = Deck {
+        workspace: "idp",
+        projects: &projects,
+        state: &state,
+        notifies: quiet(),
+        master_ratio: state.master_ratio(),
+        now: fixture::NOW,
+    };
+    let mut terminal = Terminal::new(TestBackend::new(144, 42)).unwrap();
+    terminal
+        .draw(|frame| deck.render(&engine as &dyn TerminalEngine, frame))
+        .unwrap();
+    let buffer = terminal.backend().buffer().clone();
+
+    assert!(!thumb_rows(&buffer, MASTER_BORDER).is_empty(), "the bar");
+    // The list is longer than the column, so its own track is in the gutter
+    // column beside the stack, thumb and all.
+    assert!(
+        !thumb_rows(&buffer, 99).is_empty(),
+        "the stack's track is untouched"
+    );
+    assert!(text(&buffer).contains("▾ ↑ 3 t3"), "{}", text(&buffer));
+}
+
+/// A wheel-raised bar with none of the mode's chrome: the canvas #115 adds.
+///
+/// It is `frontend-active.txt` with one cell changed — the thumb on the
+/// master's border — which is the whole claim of the design: the bar costs the
+/// layout no column and the terminal no cell, so nothing else on the frame
+/// moves when it appears.
+#[test]
+fn scrollbar_matches_the_canvas() {
+    let mut state = reference_deck(4);
+    state.mark_scrolled(0, fixture::NOW);
+
+    let (buffer, _) = render(&fixture::scrolled(), &state, (144, 42));
+
+    assert_snapshot("scrollbar", &buffer);
+}
