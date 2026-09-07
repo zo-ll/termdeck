@@ -1519,6 +1519,17 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   flight: muse-worker → #136-r4; critic idle; claude idle (user has 2 NEW
   requests queued: mouse text-selection + an un-pasteable auto message at
   open — scoped, dispatch after lanes free).
+- 2026-09-07 (USER, 2 new requests): (1) cannot select text with the mouse in
+  termdeck → filed #148 (mouse text selection, design-first per the #113/#115
+  pattern; gesture/rendering/copy-target/alt-screen decisions in a slice doc;
+  UI lane) — DISPATCHED to a fresh claude (worktree coord/148-mouse-select,
+  brief .scratch/tasks/148-mouse-select.brief.md, Working). (2) an automatic
+  message appears when termdeck opens and cannot be pasted — the likely cause
+  is the absence of any clipboard/selection surface at all (grep: zero
+  clipboard code in the repo) + possibly the zsh first-run wizard on a fresh
+  HOME (same mechanism under investigation for #136-r4 on CI); user to
+  confirm what the message says; mouse selection #148 likely resolves the
+  copy side. In flight: muse-worker → #136-r4; claude → #148.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
