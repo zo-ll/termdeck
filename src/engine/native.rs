@@ -679,11 +679,11 @@ impl TerminalEngine for NativeEngine {
         for terminal in &mut self.terminals {
             let waiting_for_input_ready = terminal
                 .transport
-                .as_ref()
+                .as_mut()
                 .is_some_and(PtyTransport::waiting_for_input_ready);
-            // Hooked shells reset terminal state during startup. Consume
-            // their first output before flushing queued input so that reset
-            // cannot discard the first bytes (#136).
+            // Hooked shells reset terminal state during startup. Their PTY
+            // must report interactive termios before queued input is flushed
+            // so that reset cannot discard its first bytes (#136).
             if !waiting_for_input_ready && let Some(transport) = terminal.transport.as_mut() {
                 // Preserve the established flush-before-events order for
                 // ordinary panes and hooked panes after startup.
@@ -1370,10 +1370,10 @@ mod tests {
     }
 
     /// #136: input dispatched in the same turn as a hooked shell spawn stays
-    /// queued until the shell has emitted startup output, then arrives whole.
+    /// queued until its interactive termios is ready, then arrives whole.
     #[cfg(target_os = "linux")]
     #[test]
-    fn hooked_shell_keeps_same_turn_input_until_startup_output() {
+    fn hooked_shell_keeps_same_turn_input_until_termios_ready() {
         let terminal = TerminalId::new("startup-input");
         let projects = [Project {
             terminal: terminal.clone(),
