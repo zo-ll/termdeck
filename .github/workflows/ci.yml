@@ -82,9 +82,12 @@ jobs:
           # A filter that matches nothing is a *pass* to libtest — "0 passed,
           # N filtered out", exit 0 — so a rename would quietly turn this step
           # into a no-op guarding a test that is no longer run anywhere. Check
-          # the name still selects something before trusting the result.
-          if ! cargo test --locked --all-features --lib "$case_name" -- --exact --list \
-              | grep -q "^$case_name: test$"; then
+          # the name still selects something before trusting the result. The
+          # listing is captured before grep: a live pipe closes on `-q`'s first
+          # match and cargo's BrokenPipe then fails the whole pipeline under
+          # `pipefail`, which this guard exists to detect, not to imitate.
+          case_list="$(cargo test --locked --all-features --lib "$case_name" -- --exact --list 2>/dev/null || true)"
+          if ! grep -q "^$case_name: test$" <<< "$case_list"; then
             echo "::error::$case_name is not in the suite: update this step's name or drop it"
             exit 1
           fi
