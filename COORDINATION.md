@@ -1579,6 +1579,26 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   note: same file as #136-r4 — serialize, small diff, keep marker/PROMPT-
   COMMAND untouched). Claustra: claude fresh.session; muse-worker → #136-r4.
 
+- 2026-09-07: #149 MERGED + CLOSED (4895ec0 via conflict-resolved no-ff merge
+  a4e9cad; gate 438 lib + 5 + 1; binary rebuilt) — login-bash bootstrap echo
+  suppressed (PTY ECHO-off pre-spawn + `stty echo`-first restore). Critic PASS
+  (login-bash-only guard, #136/#123 non-regression). TWO follow-ups same
+  session: (1) CI red on the merge was NOT code — a pre-existing race in the
+  #130 retry-step guard (`cargo --list | grep -q` closes the pipe on its first
+  match; cargo BrokenPipe fails the pipeline under `pipefail`) surfaced at 438
+  tests; FIXED by capturing the listing into a var before grep; CI run
+  34132349287 GREEN. (2) USER REPORTED a DOUBLE PROMPT at pane open ("automatic
+  enter": two stacked `andrea@horizon:~/personal$`). Coordinator probe proved:
+  every default pane is `bash -l`; --rcfile is ignored for interactive login
+  bash; the hook installs by feeding `. '/tmp/…/bashrc'` as a COMMAND → bash
+  re-prompts. Pre-#149 the echoed line masked it; echo-off exposed it. FILED
+  #151 (profile-shim fix: hook rc as generated-dir .bash_profile + HOME
+  scoped then restored, mirroring the zsh ZDOTDIR / fish XDG_DATA_DIRS
+  pattern; one prompt, #123 fidelity preserved). DISPATCHED to codex (fresh
+  session, engine owner, worktree coord/151-login-single-prompt, Working).
+  Lane notes: muse-worker r4 session exhausted at prompt (10.3% ctx) — idle;
+  claude idle.
+
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
 - tmux personal: 0 coordinator | 1 critic (idle) | 2 claude (idle) | 3 codex
