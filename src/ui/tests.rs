@@ -3164,6 +3164,65 @@ fn a_child_inverted_cell_still_reads_as_selected() {
     assert_eq!(inverted.bg, super::MASTER_FG);
 }
 
+/// The highlight is a copy receipt, so the copy is the start of its life
+/// rather than the end (#150): the same canvas drawn two seconds later has
+/// the pane back to itself, with nothing pressed in between.
+#[test]
+fn the_highlight_the_copy_leaves_behind_goes_by_itself() {
+    let (_projects, mut state) = selectable();
+    state.set_selection(Selection::new(0, (0, 0)).to((3, 0)));
+    state.mark_copied(fixture::NOW);
+    let later = |millis: u64| Timestamp {
+        unix_millis: fixture::NOW.unix_millis + millis,
+    };
+
+    // The receipt, at the moment the release took the copy.
+    let (receipt, _) = render_at(
+        &fixture::frontend_active(),
+        &state,
+        quiet(),
+        fixture::NOW,
+        (144, 42),
+    );
+    let plain = receipt[(7u16, 3u16)].clone();
+    assert_eq!(
+        receipt[(3u16, 3u16)].fg,
+        plain.bg,
+        "inverted while it stands"
+    );
+
+    // A frame inside the window still has it, and one on the far side of the
+    // window does not: no press, no key, no wheel, no resize.
+    let (standing, _) = render_at(
+        &fixture::frontend_active(),
+        &state,
+        quiet(),
+        later(1_999),
+        (144, 42),
+    );
+    assert_eq!(standing[(3u16, 3u16)].fg, plain.bg);
+    let (settled, _) = render_at(
+        &fixture::frontend_active(),
+        &state,
+        quiet(),
+        later(2_000),
+        (144, 42),
+    );
+    for column in 3u16..=6 {
+        let cell = &settled[(column, 3u16)];
+        assert_eq!(cell.fg, plain.fg, "{column} is the pane's own ink again");
+        assert_eq!(cell.bg, plain.bg, "{column} is the pane's own ground again");
+    }
+    let (never, _) = render_at(
+        &fixture::frontend_active(),
+        &selectable().1,
+        quiet(),
+        later(2_000),
+        (144, 42),
+    );
+    assert_eq!(settled, never, "the canvas is one nothing was selected on");
+}
+
 /// Every command that can move a pane, renumber it or resize it drops the
 /// selection, including the ones `termctl` reaches without a key press.
 #[test]
@@ -3173,20 +3232,28 @@ fn any_deck_command_drops_a_standing_selection() {
     let mut applied = expanded(4);
     applied.set_selection(selection);
     applied.apply(&ActionCommand::SelectPosition(1), &projects, fixture::NOW);
-    assert_eq!(applied.selection(), None, "a promotion, however it arrived");
+    assert_eq!(
+        applied.selection(fixture::NOW),
+        None,
+        "a promotion, however it arrived"
+    );
 
     let mut folded = expanded(4);
     folded.set_selection(selection);
     folded.toggle_collapse(1);
-    assert_eq!(folded.selection(), None, "a fold");
+    assert_eq!(folded.selection(fixture::NOW), None, "a fold");
 
     let mut split = expanded(4);
     split.set_selection(selection);
     split.set_master_ratio(0.5);
-    assert_eq!(split.selection(), None, "a resize of the split");
+    assert_eq!(split.selection(fixture::NOW), None, "a resize of the split");
 
     let mut closed = expanded(4);
     closed.set_selection(selection);
     closed.close(1);
-    assert_eq!(closed.selection(), None, "a close, which renumbers");
+    assert_eq!(
+        closed.selection(fixture::NOW),
+        None,
+        "a close, which renumbers"
+    );
 }

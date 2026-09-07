@@ -1964,6 +1964,56 @@ fn the_scrollbar_disappearance_schedules_its_final_repaint() {
     );
 }
 
+/// The copy receipt is the third transient on that scheduler (#150): the
+/// highlight goes on the clock rather than on an event, so the pass that
+/// crosses its deadline is the one that has to draw — otherwise the inverted
+/// cells sit there until something unrelated redraws, which is the whole of
+/// what #150 is about.
+#[test]
+fn the_copy_receipt_schedules_its_final_repaint() {
+    let mut deck = DeckState::new(2);
+    deck.set_selection(Selection::new(0, (0, 0)).to((3, 0)));
+    let notifies = Notifications::new();
+    let mut was_active = false;
+
+    assert!(
+        !schedule_expiry_repaint(&mut was_active, &deck, &notifies, Timestamp::default()),
+        "a selection still being dragged repaints on its own pointer moves"
+    );
+
+    deck.mark_copied(Timestamp::default());
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp::default(),
+    ));
+    assert!(schedule_expiry_repaint(
+        &mut was_active,
+        &deck,
+        &notifies,
+        Timestamp { unix_millis: 1_999 },
+    ));
+    assert!(
+        schedule_expiry_repaint(
+            &mut was_active,
+            &deck,
+            &notifies,
+            Timestamp { unix_millis: 2_000 },
+        ),
+        "the highlight's disappearance receives a final frame"
+    );
+    assert!(
+        !schedule_expiry_repaint(
+            &mut was_active,
+            &deck,
+            &notifies,
+            Timestamp { unix_millis: 2_001 },
+        ),
+        "and exactly one: the loop goes idle again behind it"
+    );
+}
+
 #[test]
 fn expiry_transitions_schedule_their_final_repaint() {
     let mut deck = DeckState::new(2);

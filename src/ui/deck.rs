@@ -1607,7 +1607,7 @@ impl Deck<'_> {
             // pane's own cells are inverted (#148).
             let selection = self
                 .state
-                .selection()
+                .selection(self.now)
                 .filter(|selection| selection.position == position);
             draw_terminal(
                 buffer,

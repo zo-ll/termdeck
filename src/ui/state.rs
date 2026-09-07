@@ -38,6 +38,15 @@ pub const NOTIFY_WINDOW: Elapsed = Elapsed { millis: 4_000 };
 /// facts: a change to the flash made for a reason about notifications is the
 /// point at which this earns a literal of its own again.
 pub const SCROLLBAR_WINDOW: Elapsed = NOTIFY_WINDOW;
+/// How long the selection highlight stands after the copy it reports (#150).
+///
+/// The highlight is a copy receipt (`mouse-selection.md` §3.2), and a receipt
+/// that never goes away stops reading as one: a pane left inverted after the
+/// copy has landed reads as still-selected. Shorter than every other window
+/// here — the demotion highlight included — because there is nothing left to
+/// wait for once the copy is on the clipboard: this is long enough to see
+/// which cells went, and no longer.
+pub const SELECTION_WINDOW: Elapsed = Elapsed { millis: 2_000 };
 /// How long the toast stays up before it settles by itself. Long enough to
 /// read four lines, short enough not to sit over the master.
 pub const TOAST_WINDOW: Elapsed = Elapsed { millis: 8_000 };
@@ -410,11 +419,16 @@ impl Selection {
 /// like the split ratio — nothing is written back to the configuration.
 ///
 /// `selection` is the run of visible terminal cells the pointer has selected
-/// in one pane (#148), or `None`. It is frame coordinates rather than text,
-/// so anything that can move a pane, renumber it, resize it or reflow its
-/// child drops it — which is why the invalidation lives here rather than in
-/// the session loop: `termctl` reaches these same methods without passing the
-/// key reader (`mouse-selection.md` §3.3).
+/// in one pane (#148), or `None`, paired with when the copy it reports was
+/// taken (#150) once the release has taken one. It is frame coordinates
+/// rather than text, so anything that can move a pane, renumber it, resize it
+/// or reflow its child drops it — which is why the invalidation lives here
+/// rather than in the session loop: `termctl` reaches these same methods
+/// without passing the key reader (`mouse-selection.md` §3.3). The stamp is
+/// what makes the highlight a receipt rather than a mode: it is read back
+/// against the `now` the frame is drawn at, like the demotion highlight and
+/// the scrollbar, so [`SELECTION_WINDOW`] later the highlight is gone with
+/// nothing to press.
 ///
 /// `stack_offset` is the index into `stack()` of the first preview the stack
 /// column draws. The list can hold more previews than the column has rows, so
@@ -438,7 +452,7 @@ pub struct DeckState {
     demotion: Option<(usize, Timestamp)>,
     scrolled: Option<(usize, Timestamp)>,
     drag: Option<(usize, Option<usize>)>,
-    selection: Option<Selection>,
+    selection: Option<(Selection, Option<Timestamp>)>,
     stack_offset: usize,
     master_ratio: f64,
     resizing: bool,
@@ -814,16 +828,50 @@ impl DeckState {
         self.drag.and_then(|(_, target)| target)
     }
 
-    /// The standing pointer selection, if any (#148).
-    pub fn selection(&self) -> Option<Selection> {
-        self.selection
+    /// The standing pointer selection, if any (#148), while it is still to be
+    /// drawn: a selection whose copy receipt has run out is gone here the way
+    /// an expired demotion highlight is (#150).
+    pub fn selection(&self, now: Timestamp) -> Option<Selection> {
+        let (selection, copied) = self.selection?;
+        match copied {
+            Some(at) if elapsed(now, at) >= SELECTION_WINDOW.millis => None,
+            _ => Some(selection),
+        }
     }
 
     /// Replaces the selection. The session builds it as the pointer moves:
     /// the deck only holds it, because it is the renderer that has to draw it
     /// and the renderer reads nothing else.
+    ///
+    /// A selection being dragged carries no stamp: the drag is still going on,
+    /// so there is nothing for a receipt to report yet.
     pub fn set_selection(&mut self, selection: Selection) {
-        self.selection = Some(selection);
+        self.selection = Some((selection, None));
+    }
+
+    /// Starts the receipt's countdown: the copy has landed, so the highlight
+    /// now has [`SELECTION_WINDOW`] to say so (#150). Returns whether there
+    /// was a selection to stamp.
+    ///
+    /// The session calls this at the release that copies, which is the only
+    /// moment a highlight stops being feedback on a gesture in progress.
+    pub fn mark_copied(&mut self, now: Timestamp) -> bool {
+        match &mut self.selection {
+            Some((_, copied)) => {
+                *copied = Some(now);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether a copy receipt is still counting down (#150): what keeps the
+    /// session repainting until the frame that takes the highlight away.
+    ///
+    /// A selection with no stamp is not counting down — the drag that is
+    /// making it repaints on its own pointer moves.
+    pub fn selection_expiring(&self, now: Timestamp) -> bool {
+        matches!(self.selection, Some((_, Some(at))) if elapsed(now, at) < SELECTION_WINDOW.millis)
     }
 
     /// Drops the selection. Returns whether there was one, so a caller that
@@ -941,7 +989,7 @@ impl DeckState {
 
 #[cfg(test)]
 mod tests {
-    use super::{DeckState, Notifications, TOAST_WINDOW};
+    use super::{DeckState, Notifications, Selection, TOAST_WINDOW};
     use crate::{
         contracts::{ActionCommand, Elapsed, NotifyKind, TerminalId, Timestamp},
         ui::fixture,
@@ -1695,6 +1743,62 @@ mod tests {
 
         assert!(!notifies.clear(&worker), "there is nothing left to clear");
         assert!(notifies.pending(&worker).is_none());
+    }
+
+    /// The highlight the copy leaves behind is a receipt, so it goes by
+    /// itself (#150): the stamp the release puts on it is read against the
+    /// `now` the frame is drawn at, the way the demotion highlight and the
+    /// scrollbar are, and 2s later there is nothing to press to be rid of.
+    #[test]
+    fn a_copied_selection_expires_on_the_clock_it_is_read_with() {
+        let mut state = DeckState::new(4);
+        state.set_selection(Selection::new(0, (0, 0)).to((3, 0)));
+
+        assert!(
+            state.selection(later(60_000)).is_some(),
+            "a selection still being dragged is not counting down"
+        );
+        assert!(!state.selection_expiring(later(60_000)));
+
+        assert!(state.mark_copied(NOW), "there was a selection to stamp");
+
+        assert!(state.selection(NOW).is_some(), "the receipt is the copy");
+        assert!(state.selection(later(1_999)).is_some());
+        assert!(
+            state.selection(later(2_000)).is_none(),
+            "the window is over on the millisecond, not after it"
+        );
+        assert_eq!(super::SELECTION_WINDOW, Elapsed { millis: 2_000 });
+
+        // What keeps the session repainting until the frame that takes the
+        // highlight off the screen, and no pass longer.
+        assert!(state.selection_expiring(later(1_999)));
+        assert!(!state.selection_expiring(later(2_000)));
+    }
+
+    /// The manual clears (§3.3) still come first: the countdown is something
+    /// added under them, not something they now have to wait for.
+    #[test]
+    fn a_manual_clear_beats_the_countdown_either_way() {
+        let mut state = DeckState::new(4);
+        state.set_selection(Selection::new(0, (0, 0)).to((3, 0)));
+        state.mark_copied(NOW);
+
+        assert!(state.clear_selection(), "there was one to clear");
+        assert!(state.selection(NOW).is_none(), "mid-window, on the press");
+        assert!(!state.selection_expiring(NOW), "and nothing to repaint for");
+
+        // An expired receipt is not a state the next gesture has to get out
+        // of: the press that starts one replaces it, unstamped.
+        state.set_selection(Selection::new(0, (0, 0)).to((3, 0)));
+        state.mark_copied(NOW);
+        assert!(state.selection(later(2_000)).is_none());
+        state.set_selection(Selection::new(1, (2, 2)).to((4, 2)));
+        assert_eq!(
+            state.selection(later(60_000)),
+            Some(Selection::new(1, (2, 2)).to((4, 2))),
+            "the new drag stands as long as it is being made"
+        );
     }
 
     /// Both windows are read off the clock the caller hands in, so a fixture

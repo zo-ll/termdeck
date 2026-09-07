@@ -1068,7 +1068,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 deck.cancel_drag();
                                 last_click = None;
                                 if let Some(text) =
-                                    deck.selection().as_ref().and_then(|selection| {
+                                    deck.selection(now()).as_ref().and_then(|selection| {
                                         selection_text(&engine, &projects, selection)
                                     })
                                 {
@@ -1079,6 +1079,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                     let _ = out.write_all(&clipboard_sequence(&text));
                                     let _ = out.flush();
                                     copied = text;
+                                    // The highlight now reports a finished
+                                    // copy rather than a gesture in progress,
+                                    // so it starts its own countdown (#150).
+                                    deck.mark_copied(now());
                                 } else {
                                     // A drag over blank cells copies nothing
                                     // and leaves no highlight behind.
@@ -1199,8 +1203,10 @@ fn schedule_expiry_repaint(
     notifies: &Notifications,
     now: Timestamp,
 ) -> bool {
-    let active =
-        deck.demoted(now).is_some() || deck.scrolling(now).is_some() || notifies.settling(now);
+    let active = deck.demoted(now).is_some()
+        || deck.scrolling(now).is_some()
+        || deck.selection_expiring(now)
+        || notifies.settling(now);
     let repaint = active || *was_active;
     *was_active = active;
     repaint
