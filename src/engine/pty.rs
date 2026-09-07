@@ -17,9 +17,6 @@ use crate::{
     engine::shell_hook::ShellHook,
 };
 
-#[cfg(unix)]
-use crate::engine::shell_hook::silence_bootstrap_echo;
-
 const EVENT_CAPACITY: usize = 16;
 const READ_BUFFER_SIZE: usize = 4096;
 /// Upper bound for confirming a force SIGKILL landed before reaping helper
@@ -173,25 +170,14 @@ impl PtyTransport {
             .master
             .try_clone_reader()
             .map_err(|error| error.to_string())?;
-        let mut writer = pair
+        let writer = pair
             .master
             .take_writer()
             .map_err(|error| error.to_string())?;
-        // Before the shell exists, so the bootstrap below is never echoed
-        // back at the first prompt (#149).
-        #[cfg(unix)]
-        if shell_hook.as_ref().and_then(ShellHook::bootstrap).is_some() {
-            silence_bootstrap_echo(read_fd)?;
-        }
         let mut child = pair
             .slave
             .spawn_command(command)
             .map_err(|error| error.to_string())?;
-        if let Some(bootstrap) = shell_hook.as_ref().and_then(ShellHook::bootstrap) {
-            writer
-                .write_all(bootstrap)
-                .map_err(|error| error.to_string())?;
-        }
         let process_group = child.process_id();
         let killer = child.clone_killer();
         // Recorded before anything can exit: the reuse guard below
