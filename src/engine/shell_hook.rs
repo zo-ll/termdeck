@@ -35,10 +35,11 @@ __td_prompt() {
   printf '\033]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\a' "$code" "$secs" "$cmd"
 }
 __td_prompt_end() { __td_prompting=; }
+__td_ready() { local code=$?; printf '\033]7777;termdeck;ready\a'; return "$code"; }
 trap '__td_preexec' DEBUG
 case "$(declare -p PROMPT_COMMAND 2>/dev/null)" in
-  "declare -a "*) PROMPT_COMMAND=(__td_prompt "${PROMPT_COMMAND[@]}" __td_prompt_end);;
-  *) PROMPT_COMMAND="__td_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __td_prompt_end";;
+  "declare -a "*) PROMPT_COMMAND=(__td_ready __td_prompt "${PROMPT_COMMAND[@]}" __td_prompt_end);;
+  *) PROMPT_COMMAND="__td_ready; __td_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __td_prompt_end";;
 esac
 "#;
 
@@ -57,9 +58,17 @@ __td_precmd() {
   cmd=${cmd//[$'\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037\177']/}; cmd=${cmd[1,512]}
   printf '\033]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\a' "$code" "$secs" "$cmd"
 }
-autoload -Uz add-zsh-hook
-add-zsh-hook preexec __td_preexec
-add-zsh-hook precmd __td_precmd
+__td_ready() { printf '\033]7777;termdeck;ready\a'; }
+typeset -ga preexec_functions precmd_functions
+preexec_functions+=(__td_preexec)
+precmd_functions+=(__td_precmd)
+if (( $+widgets[zle-line-init] )); then
+  zle -A zle-line-init __td_user_zle_line_init
+  zle-line-init() { __td_user_zle_line_init "$@"; __td_ready; }
+else
+  zle-line-init() { __td_ready; }
+fi
+zle -N zle-line-init
 "#;
 
 const FISH_RC: &str = r#"if status is-interactive; and not set -q TERMDECK_SHELL_HOOK; and set -q TERMDECK_SOCK; and set -q TERMDECK_PANE
@@ -82,8 +91,14 @@ const FISH_RC: &str = r#"if status is-interactive; and not set -q TERMDECK_SHELL
     set -l cmd (string replace -ra '[\\x00-\\x1f\\x7f]' '' -- "$__td_cmd")
     printf '\\e]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\\a' "$code" "$secs" (string sub -l 512 -- "$cmd")
   end
+  function __td_ready --on-event fish_prompt
+    printf '\\e]7777;termdeck;ready\\a'
+    functions -e __td_ready
+  end
 end
 "#;
+
+const READY_MARKER: &[u8] = b"\x1b]7777;termdeck;ready\x07";
 
 /// A short-lived generated startup directory. Its lifetime is the owned PTY.
 pub(super) struct ShellHook {
@@ -150,6 +165,10 @@ impl ShellHook {
 
     pub(super) fn bootstrap(&self) -> Option<&[u8]> {
         self.bootstrap.as_deref()
+    }
+
+    pub(super) fn ready_marker(&self) -> &'static [u8] {
+        READY_MARKER
     }
 }
 

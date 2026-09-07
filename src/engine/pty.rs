@@ -100,16 +100,11 @@ pub struct PtyTransport {
     /// `dispatch` appends without blocking; the frame pump (`flush_input`
     /// from `drain_events`) moves it to the PTY in nonblocking slices.
     pending_input: VecDeque<u8>,
-    /// Interactive shell hooks reset terminal state while starting. Their
-    /// line editor switches the PTY to its interactive termios mode. External
-    /// input queued before then cannot be discarded by that setup (#136).
+    /// Hooked shells acknowledge their first prompt with a private marker.
+    /// Input queued before that child-side signal stays out of the PTY (#136).
     input_ready: bool,
-    /// On Linux the master reflects the slave's termios. Keeping its fd lets
-    /// a hooked shell prove it installed the interactive line discipline.
-    #[cfg(target_os = "linux")]
-    readiness_fd: RawFd,
-    #[cfg(target_os = "linux")]
-    termios_at_spawn: Option<libc::tcflag_t>,
+    input_ready_marker: Option<Vec<u8>>,
+    input_ready_carry: Vec<u8>,
     events: Option<Receiver<PtyEvent>>,
     reader: Option<JoinHandle<()>>,
     waiter: Option<JoinHandle<()>>,
@@ -163,8 +158,6 @@ impl PtyTransport {
             .master
             .as_raw_fd()
             .ok_or_else(|| "pty master has no file descriptor".to_owned())?;
-        #[cfg(target_os = "linux")]
-        let termios_at_spawn = termios_lflag(read_fd);
         // The whole master shares one open file description across the
         // reader, the writer and the handle below, so this one flag makes
         // every direction nonblocking at once (#118). The slave side the
@@ -223,6 +216,7 @@ impl PtyTransport {
         });
 
         let input_ready = shell_hook.is_none();
+        let input_ready_marker = shell_hook.as_ref().map(|hook| hook.ready_marker().to_vec());
         Ok(Self {
             master: pair.master,
             writer,
@@ -234,10 +228,8 @@ impl PtyTransport {
             descendants: Vec::new(),
             pending_input: VecDeque::new(),
             input_ready,
-            #[cfg(target_os = "linux")]
-            readiness_fd: read_fd,
-            #[cfg(target_os = "linux")]
-            termios_at_spawn,
+            input_ready_marker,
+            input_ready_carry: Vec::new(),
             events: Some(events),
             reader: Some(reader),
             waiter: Some(waiter),
@@ -268,8 +260,8 @@ impl PtyTransport {
             }
             self.pending_input.extend(bytes);
             // A same-turn hooked-shell dispatch is always acknowledged as
-            // queued. The frame pump releases it only after the PTY reports
-            // a post-spawn interactive termios transition (#136).
+            // queued. The frame pump releases it only after the shell's
+            // first prompt emits its private ready marker (#136).
             if !self.input_ready {
                 return Ok(InputOutcome::Queued);
             }
@@ -293,7 +285,6 @@ impl PtyTransport {
         }
         #[cfg(unix)]
         {
-            self.refresh_input_ready();
             if !self.input_ready {
                 return Ok(InputOutcome::Queued);
             }
@@ -340,8 +331,7 @@ impl PtyTransport {
         self.process_group
     }
 
-    pub(crate) fn waiting_for_input_ready(&mut self) -> bool {
-        self.refresh_input_ready();
+    pub(crate) fn waiting_for_input_ready(&self) -> bool {
         !self.input_ready
     }
 
@@ -351,24 +341,49 @@ impl PtyTransport {
             .as_ref()
             .map(|events| events.try_iter().collect())
             .unwrap_or_default();
-        // Linux shells must prove their line editor installed termios; output
-        // may precede it. Other Unix platforms retain the old output-based
-        // fallback because their PTY master does not expose this probe.
-        #[cfg(not(target_os = "linux"))]
-        if events
-            .iter()
-            .any(|event| matches!(event, PtyEvent::Output { .. }))
-        {
-            self.input_ready = true;
+        let mut filtered = Vec::with_capacity(events.len());
+        for event in events {
+            match event {
+                PtyEvent::Output { terminal, bytes } => {
+                    let bytes = self.consume_input_ready_marker(bytes);
+                    if !bytes.is_empty() {
+                        filtered.push(PtyEvent::Output { terminal, bytes });
+                    }
+                }
+                PtyEvent::StatusChanged { terminal, status } => {
+                    if !self.input_ready_carry.is_empty() {
+                        filtered.push(PtyEvent::Output {
+                            terminal: terminal.clone(),
+                            bytes: std::mem::take(&mut self.input_ready_carry),
+                        });
+                    }
+                    filtered.push(PtyEvent::StatusChanged { terminal, status });
+                }
+            }
         }
-        events
+        filtered
     }
 
-    fn refresh_input_ready(&mut self) {
-        #[cfg(target_os = "linux")]
-        if !self.input_ready && interactive_termios(self.readiness_fd, self.termios_at_spawn) {
+    fn consume_input_ready_marker(&mut self, bytes: Vec<u8>) -> Vec<u8> {
+        let Some(marker) = self.input_ready_marker.as_ref() else {
+            return bytes;
+        };
+        let mut combined = std::mem::take(&mut self.input_ready_carry);
+        combined.extend(bytes);
+        if let Some(start) = combined
+            .windows(marker.len())
+            .position(|window| window == marker)
+        {
+            combined.drain(start..start + marker.len());
             self.input_ready = true;
+            return combined;
         }
+        let tail = (1..marker.len().min(combined.len() + 1))
+            .rev()
+            .find(|&length| marker.starts_with(&combined[combined.len() - length..]))
+            .unwrap_or(0);
+        self.input_ready_carry = combined.split_off(combined.len() - tail);
+        combined
     }
 
     /// Hangs up and terminates every owned process, bounded in time.
@@ -714,28 +729,6 @@ fn set_nonblocking(fd: RawFd) -> Result<(), String> {
         return Err(std::io::Error::last_os_error().to_string());
     }
     Ok(())
-}
-
-/// ZLE, Readline, and Fish's reader all put their interactive prompt in raw
-/// input mode while retaining signals. Output is not a readiness signal: zsh
-/// can paint startup output before making this change (#136).
-#[cfg(target_os = "linux")]
-fn interactive_termios(fd: RawFd, at_spawn: Option<libc::tcflag_t>) -> bool {
-    let Some(at_spawn) = at_spawn else {
-        return false;
-    };
-    let Some(current) = termios_lflag(fd) else {
-        return false;
-    };
-    current != at_spawn && current & (libc::ICANON | libc::ECHO | libc::ISIG) == libc::ISIG
-}
-
-#[cfg(target_os = "linux")]
-fn termios_lflag(fd: RawFd) -> Option<libc::tcflag_t> {
-    // SAFETY: a zeroed termios is valid output storage for `tcgetattr`, and
-    // `fd` is the owned PTY master retained by `PtyTransport`.
-    let mut termios = unsafe { std::mem::zeroed::<libc::termios>() };
-    (unsafe { libc::tcgetattr(fd, &mut termios) == 0 }).then_some(termios.c_lflag)
 }
 
 #[cfg(not(unix))]
@@ -1166,13 +1159,13 @@ mod tests {
     }
 
     /// #136: startup output is not enough to release hooked-shell input. The
-    /// child deliberately emits output, waits for the test to let its line
-    /// editor install termios, then receives the same-turn input whole.
+    /// child deliberately emits output, waits before its first prompt, then
+    /// receives the same-turn input whole after the private ready marker.
     #[cfg(target_os = "linux")]
     #[test]
-    fn same_turn_input_waits_for_termios_then_arrives_whole() {
+    fn same_turn_input_waits_for_the_prompt_marker_then_arrives_whole() {
         let test_dir = std::env::temp_dir().join(format!(
-            "termdeck-termios-{}-{}",
+            "termdeck-ready-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1187,13 +1180,13 @@ mod tests {
             "printf 'STARTUP-OUTPUT\\n'\nwhile [ ! -e \"$TERMDECK_READY\" ]; do :; done\n",
         )
         .unwrap();
-        let terminal = TerminalId::new("termios-gate");
+        let terminal = TerminalId::new("ready-gate");
         let mut command = CommandBuilder::new("bash");
         let hook = ShellHook::install("bash", &["--noprofile".to_owned()], &mut command).unwrap();
         command.env("HOME", &home);
         command.env("TERMDECK_READY", &marker);
         command.env("TERMDECK_SOCK", "/tmp/termdeck-termios.sock");
-        command.env("TERMDECK_PANE", "termios-gate");
+        command.env("TERMDECK_PANE", "ready-gate");
         let mut transport =
             PtyTransport::spawn_command(terminal, command, ScreenSize::new(80, 24), hook).unwrap();
         let input = b"printf 'WHOLE-STARTUP-INPUT\\n'\\r";
@@ -1225,7 +1218,7 @@ mod tests {
         }
         assert!(
             !transport.waiting_for_input_ready(),
-            "termios gate did not open"
+            "prompt marker did not open the gate"
         );
         assert_eq!(transport.flush_input().unwrap(), InputOutcome::Flushed);
 
@@ -1240,7 +1233,7 @@ mod tests {
         }
         assert!(
             String::from_utf8_lossy(&output).contains("WHOLE-STARTUP-INPUT"),
-            "the termios-gated input must arrive whole: {:?}",
+            "the prompt-gated input must arrive whole: {:?}",
             String::from_utf8_lossy(&output)
         );
         transport.shutdown().unwrap();
