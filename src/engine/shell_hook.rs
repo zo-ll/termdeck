@@ -64,11 +64,21 @@ preexec_functions+=(__td_preexec)
 precmd_functions+=(__td_precmd)
 if (( $+widgets[zle-line-init] )); then
   zle -A zle-line-init __td_user_zle_line_init
-  zle-line-init() { __td_user_zle_line_init "$@"; __td_ready; }
-else
-  zle-line-init() { __td_ready; }
 fi
-zle -N zle-line-init
+__td_zle_line_init() {
+  if (( $+widgets[__td_user_zle_line_init] )); then
+    zle __td_user_zle_line_init "$@"
+  fi
+  __td_ready
+}
+zle -N zle-line-init __td_zle_line_init
+"#;
+
+/// Ubuntu's system zshrc honours this when it is set in `$ZDOTDIR/.zshenv`
+/// (which runs before the global file): skip its own `compinit`, whose
+/// interactive insecure-directory prompt would otherwise wait on stdin
+/// ahead of the first prompt while the readiness gate holds our input.
+const ZSH_ENV: &str = r#"skip_global_compinit=1
 "#;
 
 const FISH_RC: &str = r#"if status is-interactive; and not set -q TERMDECK_SHELL_HOOK; and set -q TERMDECK_SOCK; and set -q TERMDECK_PANE
@@ -141,6 +151,7 @@ impl ShellHook {
                 command.args(arguments);
             }
         } else if name == "zsh" {
+            fs::write(dir.join(".zshenv"), ZSH_ENV).map_err(|error| error.to_string())?;
             fs::write(dir.join(".zshrc"), ZSH_RC).map_err(|error| error.to_string())?;
             if let Some(user_zdotdir) = env::var_os("ZDOTDIR") {
                 command.env("TERMDECK_USER_ZDOTDIR", user_zdotdir);
@@ -230,7 +241,36 @@ mod tests {
 
     use portable_pty::CommandBuilder;
 
-    use super::{FISH_RC, ShellHook, bash_is_login, bash_rc, unique_dir};
+    use super::{FISH_RC, ShellHook, ZSH_ENV, ZSH_RC, bash_is_login, bash_rc, unique_dir};
+
+    /// #136 r4: Ubuntu's system zshrc runs an interactive `compinit`
+    /// (insecure-directory prompt) ahead of the first prompt while the
+    /// readiness gate holds our input — a deadlock. The hook opts out via
+    /// the flag that file documents, set in `$ZDOTDIR/.zshenv` which runs
+    /// before the global file. This pins the opt-out and the recursion-free
+    /// widget form (the old `zle -A` + same-name function redefinition
+    /// could not invoke the saved widget and dropped the user's own).
+    #[test]
+    fn zsh_hook_skips_global_compinit_and_preserves_widgets_by_alias() {
+        let mut command = CommandBuilder::new("zsh");
+        let hook = ShellHook::install("zsh", &[], &mut command)
+            .unwrap()
+            .unwrap();
+        let zshenv = fs::read_to_string(hook.dir.join(".zshenv")).unwrap();
+        assert_eq!(zshenv, ZSH_ENV);
+        assert!(
+            zshenv.contains("skip_global_compinit=1"),
+            "the Ubuntu global-compinit opt-out must be set: {zshenv:?}"
+        );
+        assert!(
+            ZSH_RC.contains("zle -N zle-line-init __td_zle_line_init"),
+            "the widget must keep its own function name so the saved alias stays callable"
+        );
+        assert!(
+            !ZSH_RC.contains("zle-line-init()"),
+            "redefining the same-name function shadows what `zle -A` saved"
+        );
+    }
 
     #[test]
     fn bash_login_detection_preserves_argv_and_stops_after_c() {
