@@ -22,6 +22,25 @@ if [ -n "${HOME-}" ]; then
 fi
 "#;
 
+/// Why HOME is scoped and restored here, and what that cannot reach.
+///
+/// Login bash has no startup-file override (no `--rcfile` for `-l`, and no
+/// ZDOTDIR equivalent), so the only way to source a hook before the first
+/// prompt is to own the `.bash_profile` the shell reads. This shim sets HOME
+/// to the generated dir, runs the user's real profile chain (first-found
+/// rule), then installs the hook — before bash paints its first prompt. That
+/// is the #151 fix: one prompt, no fed command.
+///
+/// KNOWN RESIDUAL (accepted, see issue #152): bash sources `/etc/profile`
+/// and `/etc/bash.bashrc` BEFORE `~/.bash_profile`, at a point where HOME is
+/// still the generated (scoped) dir. So a login pane may repeat the sudo
+/// hint (Ubuntu's `/etc/profile` prints it unless `~/.hushlogin` exists),
+/// ignore `~/.hushlogin`, and miss the user's `bash_completion` — all
+/// because those system files resolve `~` against the scoped HOME. There is
+/// no mechanism that runs our profile earlier (bash has no ZDOTDIR
+/// equivalent), and the previous fed-command approach was strictly worse.
+/// Revisit if Ubuntu's `/etc/profile` gains a documented extension point.
+
 const BASH_HOOK: &str = r#"case $- in *i*) ;; *) return;; esac
 if [ -n "${TERMDECK_SHELL_HOOK-}" ] || [ -z "${TERMDECK_SOCK-}" ] || [ -z "${TERMDECK_PANE-}" ]; then return; fi
 export TERMDECK_SHELL_HOOK=1
