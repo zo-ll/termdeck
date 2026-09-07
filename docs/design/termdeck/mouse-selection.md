@@ -1,6 +1,7 @@
 # Mouse text selection in a pane — decisions (issue #148)
 
-Status: implemented on `coord/148-mouse-select`. UI plus session mouse routing;
+Status: implemented on `coord/148-mouse-select`; the highlight's auto-expiry
+(§3.3) followed on `coord/150-selection-expiry`. UI plus session mouse routing;
 no engine, contract, configuration or CLI change, and no new dependency.
 Runtime state, like the split ratio (#41), the pin (#113) and the scrollbar
 window (#115): the session holds it and writes nothing back.
@@ -201,8 +202,8 @@ idempotent over child output, which is the case above.
 
 No border colour changes, no title changes, no status-row text is added while a
 selection stands. The inverted cells are the whole of the feedback, and they
-appear at the moment the copy happens (§4.1), which is what makes them a copy
-receipt rather than a mode indicator.
+appear at the moment the copy happens (§4.1) and go a couple of seconds later
+(§3.3), which is what makes them a copy receipt rather than a mode indicator.
 
 **Rejected:** *a `copied n lines` status notice*. `DeckState::notice` has no
 expiry — it is the surface for a refused command and is cleared by the next
@@ -214,6 +215,7 @@ user is already looking.
 
 | event | why |
 | --- | --- |
+| ~2s after the copy, by itself (#150) | the receipt has been read; nothing is waiting on it |
 | any mouse press | the next gesture starts; §1.1 |
 | any key press | the user moved on, and typing changes what is under the highlight |
 | any wheel tick | the content scrolls out from under the cell range |
@@ -224,6 +226,32 @@ The last row is why the invalidation lives in `DeckState` rather than in the
 session loop: `termctl select`/`zoom`/`close` reach the deck without passing
 through the key reader, and a selection left standing across a remote promotion
 would be drawn over a different terminal's output.
+
+The first row is #150. Every other row is something the *user* does, and a
+receipt that waits for the user to do something else is not a receipt: with the
+copy already on the clipboard, the inverted cells kept the pane reading as
+still-selected for as long as it was left alone. So the release that copies
+(§4.1) stamps the selection with the time it copied, and `DeckState::selection`
+takes the `now` the frame is drawn at and answers `None` once
+`SELECTION_WINDOW` (2s) has passed — the pattern the demotion highlight (1.5s)
+and the scrollbar (#115, 4s) already use, which means the clock is injected and
+every frame of the countdown is a fixture rather than a sleep. It is the
+shortest of the three because nothing is still going on: the copy has landed,
+and the highlight is only saying which cells went. A selection still being
+dragged carries no stamp and does not expire — the gesture is not over.
+
+`schedule_expiry_repaint` (#125/#132) gains the receipt as its third transient,
+because a highlight that goes by the clock has no event behind it: without that
+pass the frame that takes the inversion off the screen is never asked for.
+
+The manual clears still come first and are unchanged: a press, key, wheel,
+resize or command inside the window takes the highlight immediately. The
+expiry is only the floor under them.
+
+What does *not* expire is the copy itself. The clipboard write (§4.2) has
+already left, and the session's own copy of the text — what `^g v` pastes
+(§4.3) — is a separate field that no highlight lifetime touches, so the yank
+works just as well after the pane has settled back.
 
 ## 4. The copy (decisions 5 and 6)
 
@@ -240,7 +268,8 @@ what a terminal user's hands already expect.
 
 A drag that ends with nothing but blank cells under it copies nothing and
 leaves no highlight: an accidental twitch on a blank pane cannot clear the
-clipboard.
+clipboard. A release that does copy starts the highlight's own countdown
+(§3.3): the copy is where the receipt begins, not where it ends.
 
 ### 4.2 Where (decision 6)
 
