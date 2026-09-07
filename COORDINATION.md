@@ -1530,6 +1530,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   HOME (same mechanism under investigation for #136-r4 on CI); user to
   confirm what the message says; mouse selection #148 likely resolves the
   copy side. In flight: muse-worker → #136-r4; claude → #148.
+- 2026-09-07: #148 DONE (claude, f8b52c5 design doc + a9a2f6d impl, rebased by
+  coordinator) — design doc committed (docs/design/termdeck/mouse-selection.md)
+  settles all 7 decisions: press-location-decides gesture (content=select,
+  title/border=reorder, no modifier/mode), cell-range-not-text invariant
+  (what's inverted = what's copied), inversion rendering (fg/bg swap, drop
+  REVERSED), copy-on-release via OSC 52 (no new dependency, right for SSH),
+  ^g v fallback paste through encode_paste, selection does NOT yield to
+  alt-screen apps (no clicks forwarded anyway), contracts/engine unchanged
+  (src/ui + src/session only). +1476/-48, 13 new tests (baseline 419 → 432
+  lib). Coordinator gate: debug 431+1 (documented grace flake, passes
+  isolated) / release 432+5+1 green, fmt+clippy clean. Routed to CRITIC
+  (assignment .scratch/tasks/148-mouse-select.critic.md — doc-vs-code
+  agreement, gesture machine, selection math incl. base64 padding, viewport
+  hit-test vs draw_pane agreement, inversion post-style, invalidation incl.
+  termctl path, old-gesture regression, zero boundary diff).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
