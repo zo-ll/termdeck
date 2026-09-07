@@ -5,7 +5,7 @@ Gate: **RED.** CI fails on `main` (run 33983698411 on `b3df768`, and every run s
 Open — correctness (fix before any new feature work): #136 (spawn drops first input byte; the live CI failure), #139 (paste executes payload, P1), #140 (small geometry kills the session, P1), #141 (shutdown leaves escaped descendants, P1), #142 (unbounded parser memory, P1), #143 (panic guard aborts; fix first — it amplifies #140), #144 (picker Unicode panic + discovery collision), #145 (termctl help swallow + zoom contract), #146 (PID reuse + connect timeout), #147 (bash hook clobbers `$?`), #137 (gate depends on ambient `TERMDECK_SOCK`).
 Open — process: #138 ("gate green" must mean CI green; this status block is exhibit A), #134 (CI scheduled advisories).
 Open (user-gated): #94 (MCP HELD), #112 (persistent+agent-aware deck DECISION GATE), #114 (agent discovery), #33 (animations parked).
-Freshness: 2026-09-05 — main `b3df768`; CI run 33983698411 = **failure**. Per #138, this line cites a run, not a local invocation.
+Freshness: 2026-09-07 — main `48853b1`; CI run 33985358331 (and every run since `8ae14fc`) = **failure** on the zsh-hook test (#136). Per #138, this line cites a run, not a local invocation.
 
 ## Goal
 
@@ -1385,6 +1385,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   tomorrow: bound critic agent (.claude/agents/critic.md + claude --agent
   critic) before the wave-2 loop; lane plan codex/claude/critic idle + ready.
   NO DISPATCH TODAY. Safe to close.
+
+- 2026-09-07 TAKEOVER (pi, day after the EOD lock): env rebuilt — tmux `personal`
+  windows 0 coordinator (this), 1 critic (pi muse-spark-1.3-contributor,
+  critic-skill only, per user), 2 claude (opus 5 high), 3 codex (gpt-5.6-terra
+  high, full access, weekly 69%). Relay restarted detached
+  (personal:coordinator.0, pid in relay.log), inbox empty. Main `48853b1`
+  clean; CI still RED (#136 zsh first-byte drop — confirmed live on the runner;
+  #137 local repro verified here: 4/5 termctl pass). WAVE-2 STEP 0 DISPATCHED
+  in parallel: #136 spawn-readiness → codex (worktree coord/136-spawn-readiness,
+  brief .scratch/tasks/136; Working verified — will use shipwright/ponytail
+  discipline per its own callout); #137 termctl env test → claude
+  (coord/137-test-env, test-only, cross-lane CLI adjudication per the #130/#133
+  precedent; Working verified — reading the failing test). Both on
+  post-EOD origin/main, zero overlap. On merge of both → first CI-green since
+  `8ae14fc`, then close #136/#137/#138, then #143 (codex) + #140 (claude).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
