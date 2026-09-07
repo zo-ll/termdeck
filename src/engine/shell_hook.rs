@@ -40,7 +40,6 @@ fi
 /// no mechanism that runs our profile earlier (bash has no ZDOTDIR
 /// equivalent), and the previous fed-command approach was strictly worse.
 /// Revisit if Ubuntu's `/etc/profile` gains a documented extension point.
-
 const BASH_HOOK: &str = r#"case $- in *i*) ;; *) return;; esac
 if [ -n "${TERMDECK_SHELL_HOOK-}" ] || [ -z "${TERMDECK_SOCK-}" ] || [ -z "${TERMDECK_PANE-}" ]; then return; fi
 export TERMDECK_SHELL_HOOK=1
