@@ -1409,6 +1409,26 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   env test. Worktree + branch removed. #136 still in flight on the codex lane
   (no marker yet). CI will STAY red until #136 lands (zsh test is the blocker);
   step-0 green = both merged.
+- 2026-09-07: #136 HANDBACK (lesson #138, live again) — codex e9f3377 merged +
+  closed on critic PASS, then CI run 34106468353 STILL FAILED the zsh hook test
+  with the same `[("alse", exit 127)]` (panic native.rs:1456). Root cause: the
+  readiness gate flips on FIRST output (`input_ready=true` on first
+  `PtyEvent::Output`), but a hooked shell can emit output (hook-bootstrap echo,
+  prompt paint) BEFORE its termios setup completes — first output is not
+  readiness. Merge NOT reverted (strict improvement, local gate green) but issue
+  REOPENED with the CI evidence. Coordinator owns the slip: merged on critic
+  PASS before CI judged criterion 2 — the exact #138 failure mode. Correction
+  dispatched: FRESH codex (context 12% < reuse bar; relaunched, self-updated
+  OK) on coord/136-spawn-readiness (ahead 0; no rebase — add on top), brief
+  .scratch/tasks/136-correction.brief.md; sanction: termios-set readiness
+  (tcgetattr on master reflects child's termios — interactive icanon/echo bit
+  pattern) + deterministic local proof (zsh absent here) + preserve #118
+  backpressure + flush-before-events order. NEW NB from the #137 critic
+  (socket_from_environment fallback uncovered) — claude offered
+  single-threaded/Command test; user has QUEUED that instruction in claude's
+  composer (staged, unsubmitted) — claude NOT clean-idle; #140 NOT dispatched
+  to it yet (hard rule: no staged messages). #140 will go to claude once its
+  composer is clean; merge order per lock: #136-correction → #143 → #140.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
