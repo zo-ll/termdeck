@@ -1552,8 +1552,32 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   canvas; align guards; (2) release full-suite note (verified by coordinator:
   green). Mouse selection now LIVE: drag content = select+copy (OSC 52), drag
   title/border = reorder, ^g v = paste last copy. Likely resolves the user's
-  "un-pasteable auto message" request (copy side); user to confirm the
-  message source.
+- 2026-09-07 (USER follow-up on #148): now confirmed the COPY works on
+  release (OSC 52 reaches the host clipboard) — the confusion was that the
+  highlight NEVER clears on its own (design §3.3 clears only on next
+  press/key/wheel/resize/command), so a finished copy reads as "still
+  selected". User also identified the "automatic message" at open: the stray
+  line `. '/tmp/termdeck-shell-…/bashrc'` — the shell-hook bootstrap source
+  echo at pane start (recorded #123 nit). FILED: #150 (selection highlight
+  auto-expiry, injected-clock idle window per #115, S/UI) and #149 (bootstrap
+  line echo, S/engine-lane shell_hook.rs). USER: give claude BOTH — claude
+  DISPATCHED on #150 first (worktree coord/150-selection-expiry), #149 queued
+  to the same lane next (worktree coord/149-bootstrap-echo off origin/main;
+  note: same file as #136-r4 — serialize, small diff, keep marker/PROMPT-
+  COMMAND untouched). Claustra: claude fresh; muse-worker → #136-r4.
+- 2026-09-07 (USER follow-up on #148): now confirmed the COPY works on
+  release (OSC 52 reaches the host clipboard) — the confusion was that the
+  highlight NEVER clears on its own (design §3.3 clears only on next
+  press/key/wheel/resize/command), so a finished copy reads as "still
+  selected". User also identified the "automatic message" at open: the stray
+  line `. '/tmp/termdeck-shell-…/bashrc'` — the shell-hook bootstrap source
+  echo at pane start (recorded #123 nit). FILED: #150 (selection highlight
+  auto-expiry, injected-clock idle window per #115, S/UI) and #149 (bootstrap
+  line echo, S/engine-lane shell_hook.rs). USER: give claude BOTH — claude
+  DISPATCHED on #150 first (worktree coord/150-selection-expiry), #149 queued
+  to the same lane next (worktree coord/149-bootstrap-echo off origin/main;
+  note: same file as #136-r4 — serialize, small diff, keep marker/PROMPT-
+  COMMAND untouched). Claustra: claude fresh.session; muse-worker → #136-r4.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
