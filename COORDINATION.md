@@ -1498,6 +1498,27 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   check, OSC finished-path non-corruption, $? preservation). On PASS → rebase
   onto origin/main (post-#140) → merge → watch CI for the FIRST green since
   8ae14fc → close #136 #138.
+- 2026-09-07: #136-R3 CRITIC PASS → MERGED (8afc045, no-ff; gate 419 lib (only
+  the documented grace flake, isolated-green); pushed). CI run 34114581675
+  STILL FAILED the zsh hook test — `[]` at 18.34s = the ready marker NEVER
+  opened the gate on CI, while the identical binary passed 10/10 locally
+  (real zsh, incl. 0.5s delayed startup) + in-suite. Issue REOPENED (round 4).
+  Suspected CI-vs-local deltas: (B) zsh first-run wizard on a fresh CI $HOME
+  (no rc → zsh-newuser-install → no zle-line-init, marker never fires) —
+  STRONGEST suspect; (C) CI $HOME/.zshrc interfering with zle widget
+  install order; (A) CI zsh version ≠ local 5.9-6ubuntu2; (D/E) chunk-split
+  timing under load / OSC pre-scan ordering. PER USER (codex unusable for 2h):
+  MUSE WORKER dispatched (pi muse-spark-1.3-contributor, worker skill newly
+  recreated at ~/.pi/agent/skills/worker/SKILL.md, window muse-worker on
+  coord/136-spawn-readiness-r4 off origin/main) — brief demands: reproduce
+  `[]` under a simulated CI first-run HOME (empty HOME, no rc, no ZDOTDIR),
+  fix so the marker fires on the runner, 10x green under CI-like conditions,
+  REAL gate numbers; task slug 136-spawn-readiness-correction-r4. Local zsh
+  prepped for the worker: /tmp/zsh-local/bin/zsh + ZDOTDIR=/tmp/zshlocal-home
+  (module_path fix; apt-extracted zsh lacks the compiled-in module dir). In
+  flight: muse-worker → #136-r4; critic idle; claude idle (user has 2 NEW
+  requests queued: mouse text-selection + an un-pasteable auto message at
+  open — scoped, dispatch after lanes free).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
