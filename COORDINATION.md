@@ -1444,6 +1444,31 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   slave claim, ISIG pattern across bash/zsh/fish, gate-never-opens vs
   opens-too-early, fd safety, discriminating test). In flight: critic→#136-r2,
   claude→#140 (Working).
+- 2026-09-07: #136 round-2 ALSO FAILED CI (run 34109001179): failure changed
+  signature from `alse` to `[]` — NO notifications, test ran the full 15s
+  deadline → round-2's termios gate NEVER OPENED. Root cause PROVEN locally by
+  a coordinator probe: zsh's termios on the master NEVER changes
+  (lflag 0x8a3b canonical at spawn, idle prompt, after keypress, after Enter) —
+  zsh does not install the raw-with-signals state the gate waits for, so the
+  gate can never open for zsh. ALSO corrected my earlier "alse" readings:
+  those were substring false-positives (`alse` ⊂ `false`); on this fast machine
+  the ORIGINAL race doesn't even reproduce — CI's slower zsh under load is the
+  only place it shows. Key unlock: a real zsh downloaded locally
+  (zsh 5.9 from apt, /tmp/zsh-local/bin/zsh) — the zsh hook tests now RUN
+  locally instead of skipping; no more blind CI iterations. Round-3 correction
+  dispatched to the SAME codex session (context 49%, mid-series on this exact
+  branch): brief .scratch/tasks/136-correction-r3.brief.md requires a
+  readiness signal that cannot falsely satisfy (first-output races the startup
+  burst; termios never transitions; bounded fallback vs deadlock weighed),
+  real-zsh local iteration, 10x zsh-run robustness, REAL gate numbers.
+  #136 stays OPEN; CI stays red until round 3 lands.
+- 2026-09-07: #140 DONE (claude 2ab4fd3, rebased clean) — MIN_CANVAS 7x7 guard
+  + size_notice fallback, pane_content/right_aligned checked-math replacing
+  subtraction in deck.rs/chrome.rs, sheet clamp fixed; 9 new tests incl.
+  release-mode + resize-transition coverage; debug (2 documented sandbox
+  shutdown/grace flakes, pass isolated) + release 419+5+1 green; fmt+clippy
+  clean. Routed to CRITIC (assignment .scratch/tasks/140-small-geometry.
+  critic.md). Merge order STILL: #136-r3 → #143 → #140.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
