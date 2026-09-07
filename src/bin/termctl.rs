@@ -416,6 +416,8 @@ mod tests {
         assert_eq!(notify.msg.as_deref(), Some("build done"));
 
         let (_, _, literal_notify) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
             "--".to_owned(),
             "notify".to_owned(),
             "--help".to_owned(),
