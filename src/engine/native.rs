@@ -752,7 +752,9 @@ fn now() -> Timestamp {
 mod tests {
     use std::{
         collections::BTreeSet,
+        fs,
         path::PathBuf,
+        process::Command,
         time::{Duration, Instant},
     };
 
@@ -1366,6 +1368,103 @@ mod tests {
             "{messages:?}; {frame:?}"
         );
         engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    /// #151: exercise the production `CommandBuilder::new` path in a child
+    /// process whose inherited HOME is an isolated fixture. The generated
+    /// login profile must restore that HOME before the user's normal profile
+    /// selection, install the hook before Bash paints its first prompt, and
+    /// never feed a bootstrap command through the PTY.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn login_bash_inherits_real_home_and_paints_one_first_prompt() {
+        const CHILD_HOME: &str = "TERMDECK_LOGIN_FIXTURE_HOME";
+        const PROMPT: &str = "TD-FIRST-PROMPT>";
+
+        if let Some(home) = std::env::var_os(CHILD_HOME) {
+            let terminal = TerminalId::new("login-prompt");
+            let projects = [Project {
+                terminal: terminal.clone(),
+                path: PathBuf::from(&home),
+                command: vec!["/usr/bin/bash".to_owned(), "-l".to_owned()],
+                shell_hook: true,
+            }];
+            let mut engine = NativeEngine::spawn_sized_with_socket(
+                &projects,
+                &[ScreenSize::new(80, 24)],
+                DEFAULT_SCROLLBACK,
+                std::path::Path::new("/tmp/termdeck-login-prompt.sock"),
+            )
+            .unwrap();
+
+            wait_for_frame(&mut engine, &terminal, PROMPT);
+            let frame = frame_text(engine.frame(&terminal).unwrap());
+            assert_eq!(frame.matches("PROFILE-MARKER").count(), 1, "{frame:?}");
+            assert_eq!(frame.matches("BASHRC-MARKER").count(), 1, "{frame:?}");
+            assert_eq!(frame.matches(PROMPT).count(), 1, "{frame:?}");
+            assert!(
+                frame.find("PROFILE-MARKER") < frame.find("BASHRC-MARKER")
+                    && frame.find("BASHRC-MARKER") < frame.find(PROMPT),
+                "{frame:?}"
+            );
+            assert!(!frame.contains("BASH-LOGIN-FALLBACK"), "{frame:?}");
+            assert!(!frame.contains("PROFILE-FALLBACK"), "{frame:?}");
+            assert!(!frame.contains(". '/tmp/termdeck-shell-"), "{frame:?}");
+
+            engine.dispatch(EngineCommand::Input {
+                terminal: terminal.clone(),
+                bytes: b"printf 'HOOK=%s HOME=%s\\n' \"$TERMDECK_SHELL_HOOK\" \"$HOME\"\n".to_vec(),
+            });
+            wait_for_frame(&mut engine, &terminal, "HOOK=1 HOME=");
+            let frame = frame_text(engine.frame(&terminal).unwrap());
+            assert!(
+                frame.contains(&home.to_string_lossy().into_owned()),
+                "{frame:?}"
+            );
+            engine.dispatch(EngineCommand::Shutdown);
+            return;
+        }
+
+        let home = std::env::temp_dir().join(format!(
+            "termdeck-login-home-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&home).unwrap();
+        fs::write(
+            home.join(".bash_profile"),
+            "printf 'PROFILE-MARKER\\n'\n. \"$HOME/.bashrc\"\nPS1='TD-FIRST-PROMPT>'\n",
+        )
+        .unwrap();
+        fs::write(home.join(".bashrc"), "printf 'BASHRC-MARKER\\n'\n").unwrap();
+        fs::write(
+            home.join(".bash_login"),
+            "printf 'BASH-LOGIN-FALLBACK\\n'\n",
+        )
+        .unwrap();
+        fs::write(home.join(".profile"), "printf 'PROFILE-FALLBACK\\n'\n").unwrap();
+
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "engine::native::tests::login_bash_inherits_real_home_and_paints_one_first_prompt",
+                "--nocapture",
+            ])
+            .env("HOME", &home)
+            .env(CHILD_HOME, &home)
+            .env_remove("TERMDECK_SOCK")
+            .output()
+            .unwrap();
+        fs::remove_dir_all(&home).unwrap();
+        assert!(
+            output.status.success(),
+            "child failed:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     /// #136: input dispatched in the same turn as a hooked shell spawn stays
