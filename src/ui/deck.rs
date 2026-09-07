@@ -16,7 +16,11 @@ impl Deck<'_> {
         Block::new()
             .style(Style::new().bg(CANVAS))
             .render(area, frame.buffer_mut());
-        if area.width < GUTTER + 4 || area.height < 4 {
+        // The interface's own minimum, established before anything is laid
+        // out: below it the deck says what it is waiting for and draws no
+        // chrome, rather than laying out panes the canvas cannot hold (#140).
+        if area.width < MIN_CANVAS.0 || area.height < MIN_CANVAS.1 {
+            size_notice(frame.buffer_mut(), area);
             return;
         }
 
@@ -1371,15 +1375,14 @@ impl Deck<'_> {
             );
         }
 
-        // Content columns, also the columns the title chrome aligns to.
-        let left = area.x + 1 + PADDING;
-        let right = area.x + area.width - 2 - PADDING;
-        let content = Rect {
-            x: left,
-            y: area.y + 1,
-            width: right - left + 1,
-            height: area.height - 2,
+        // Content columns, also the columns the title chrome aligns to. A
+        // pane below [`MIN_PANE`] has none: it keeps the border it has just
+        // been given and says nothing, which is all that fits (#140).
+        let Some(content) = pane_content(area) else {
+            return;
         };
+        let left = content.x;
+        let right = content.x + content.width - 1;
 
         // Title chrome aligns with the content columns and clears one border
         // cell on each side, matching the export's 2-column title inset.
@@ -1408,9 +1411,16 @@ impl Deck<'_> {
             &Line::from(clear_around(title, border_style)),
             content.width + 2,
         );
-        if slot_width > 0 {
+        // Right-aligned, and only where the columns are there: on a pane
+        // too narrow for the slot and the blank that keeps it off the title,
+        // the placement wrapped past the pane's own left edge (#140).
+        if slot_width > 0
+            && let Some(column) = right
+                .checked_sub(reserved + slot_width)
+                .filter(|column| *column > left)
+        {
             buffer.set_line(
-                right - reserved - slot_width,
+                column,
                 area.y,
                 &Line::from(clear_around(slot, border_style)),
                 slot_width + 2,
@@ -2030,7 +2040,9 @@ impl Deck<'_> {
         };
         let x = master.x + 1 + PADDING + column;
         let y = master.y + 1 + row;
-        if x < master.x + master.width - 1 && y < master.y + master.height - 1 {
+        if x < (master.x + master.width).saturating_sub(1)
+            && y < (master.y + master.height).saturating_sub(1)
+        {
             frame.set_cursor_position(Position::new(x, y));
         }
     }

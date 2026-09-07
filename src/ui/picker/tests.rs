@@ -1,6 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Position};
+use ratatui::{
+    Terminal,
+    backend::TestBackend,
+    buffer::Buffer,
+    layout::{Position, Rect},
+};
 
 use super::super::Key;
 use super::sheet::SHEET_INSTANCE;
@@ -2002,4 +2007,151 @@ fn the_root_list_is_the_pickers_own_top_level() {
         "{rendered}"
     );
     assert_snapshot("picker-roots", &buffer);
+}
+
+/// The heights the sheet is resized through, ending under the thirteen rows
+/// its own chrome asks for — which is where the audit crashed a live session
+/// by shrinking the terminal with `^g a` open.
+const SHEET_WALK: &[(u16, u16)] = &[
+    (144, 42),
+    (100, 30),
+    (84, 22),
+    (78, 16),
+    (60, 14),
+    (40, 13),
+    (30, 12),
+    (20, 10),
+    (16, 8),
+    (12, 6),
+    (8, 4),
+    (2, 2),
+    (1, 1),
+];
+
+fn render_sheet_at(sheet: &SheetState, open: &[Open], size: (u16, u16)) -> Buffer {
+    let rows = sheet_rows(sheet);
+    let roots = Fixture.roots();
+    let view = Sheet {
+        state: sheet,
+        rows: &rows,
+        roots: &roots,
+        open,
+        home: Some(Path::new("/home/dev")),
+        next_pane: open.len() + 1,
+    };
+    let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
+    terminal.draw(|frame| view.render(frame)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// #140a, the one that killed the live session: the sheet asked `clamp` for
+/// at least eleven rows and at most the canvas less two, and on a canvas
+/// under thirteen rows those bounds cross — which `clamp` panics on whatever
+/// value it is given. Open `^g a`, shrink to twelve rows, abort.
+#[test]
+fn the_sheet_renders_at_every_canvas_size() {
+    let sheet = sheet_state();
+    let open = open_two();
+
+    for width in 1..=90u16 {
+        for height in 1..=30u16 {
+            render_sheet_at(&sheet, &open, (width, height));
+        }
+    }
+    // The resize itself, down past the crash and back up.
+    for size in SHEET_WALK.iter().chain(SHEET_WALK.iter().rev()) {
+        render_sheet_at(&sheet, &open, *size);
+    }
+}
+
+/// The release half: `[profile.release]` sets no `overflow-checks`, so the
+/// box the sheet placed is asserted rather than the panic it raised. It never
+/// leaves the canvas it is centred on, at any size.
+#[test]
+fn the_sheet_never_places_itself_outside_the_canvas() {
+    let sheet = sheet_state();
+    let open = open_two();
+    let rows = sheet_rows(&sheet);
+    let roots = Fixture.roots();
+    let view = Sheet {
+        state: &sheet,
+        rows: &rows,
+        roots: &roots,
+        open: &open,
+        home: Some(Path::new("/home/dev")),
+        next_pane: open.len() + 1,
+    };
+
+    for width in 0..=90u16 {
+        for height in 0..=30u16 {
+            let area = Rect::new(4, 3, width, height);
+            let rect = view.rect(area);
+            assert!(
+                rect.x >= area.x && rect.y >= area.y,
+                "{area:?} placed {rect:?}",
+            );
+            assert!(
+                rect.right() <= area.right() && rect.bottom() <= area.bottom(),
+                "{area:?} placed {rect:?}",
+            );
+        }
+    }
+}
+
+/// A click that arrives between a resize and its redraw is answered against
+/// the box the renderer would have drawn, so the two agree at every size.
+#[test]
+fn the_sheet_answers_the_pointer_at_every_canvas_size() {
+    let sheet = sheet_state();
+    let open = open_two();
+    let rows = sheet_rows(&sheet);
+    let roots = Fixture.roots();
+    let view = Sheet {
+        state: &sheet,
+        rows: &rows,
+        roots: &roots,
+        open: &open,
+        home: Some(Path::new("/home/dev")),
+        next_pane: open.len() + 1,
+    };
+
+    for width in 1..=90u16 {
+        for height in 1..=30u16 {
+            let area = Rect::new(0, 0, width, height);
+            for x in [0, width / 2, width - 1] {
+                for y in [0, height / 2, height - 1] {
+                    view.hit(area, Position::new(x, y));
+                }
+            }
+        }
+    }
+}
+
+/// The picker has the same right-aligned chrome, and the same wrap under it:
+/// its browse panel drops the title it cannot seat rather than placing it
+/// past its own left edge.
+#[test]
+fn the_picker_renders_and_answers_at_every_canvas_size() {
+    let state = PickerState::new();
+    let listing = state.listing(&Fixture);
+    let roots = Fixture.roots();
+
+    for width in 1..=130u16 {
+        for height in 1..=40u16 {
+            let view = Picker {
+                state: &state,
+                listing: &listing,
+                roots: &roots,
+                home: Some(Path::new("/home/dev")),
+            };
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| view.render(frame)).unwrap();
+            let area = Rect::new(0, 0, width, height);
+            for x in [0, width / 2, width - 1] {
+                for y in [0, height / 2, height - 1] {
+                    view.hit(area, Position::new(x, y));
+                }
+            }
+        }
+    }
 }

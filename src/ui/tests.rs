@@ -2716,3 +2716,220 @@ fn scrollbar_matches_the_canvas() {
 
     assert_snapshot("scrollbar", &buffer);
 }
+
+/// Every layout the deck has, from the reference canvas down past its own
+/// minimum and back — the sizes bracket each threshold the renderer reads
+/// (the wide split at 120, the narrow fallback at 100, [`MIN_CANVAS`]) and
+/// end on the three geometries the audit crashed the live session at.
+const RESIZE_WALK: &[(u16, u16)] = &[
+    (144, 42),
+    (120, 42),
+    (119, 30),
+    (110, 24),
+    (100, 22),
+    (99, 22),
+    (84, 22),
+    (80, 14),
+    (60, 12),
+    (40, 9),
+    (24, 8),
+    (20, 7),
+    (12, 7),
+    (144, 5),
+    (120, 4),
+    (80, 4),
+    (6, 4),
+    (1, 1),
+];
+
+/// Renders one canvas and holds it to what #140 asks of every size: the deck
+/// is drawn whole at or above [`MIN_CANVAS`], and below it says what it is
+/// waiting for instead of drawing part of a pane. The cursor it reports is
+/// inside the canvas either way.
+fn check_canvas(
+    engine: &FakeEngine,
+    state: &DeckState,
+    notifies: &Notifications,
+    now: Timestamp,
+    size: (u16, u16),
+) {
+    let (buffer, cursor) = render_at(engine, state, notifies, now, size);
+    let screen = text(&buffer);
+    let drawable = size.0 >= super::MIN_CANVAS.0 && size.1 >= super::MIN_CANVAS.1;
+    assert_eq!(
+        screen.contains('┌'),
+        drawable,
+        "{size:?} drew {} pane\n{screen}",
+        if drawable { "no" } else { "a" },
+    );
+    let cursor = cursor.expect("the test backend always reports a cursor");
+    assert!(
+        cursor.x < size.0 && cursor.y < size.1,
+        "{size:?} put the cursor at {cursor:?}",
+    );
+}
+
+fn check_quiet(engine: &FakeEngine, state: &DeckState, size: (u16, u16)) {
+    check_canvas(engine, state, quiet(), fixture::NOW, size);
+}
+
+/// #140: at six columns, and at four or five rows of any width, the pane
+/// measurement wrapped — a debug panic, and in a release build, which sets
+/// no `overflow-checks`, a rect larger than the buffer.
+#[test]
+fn no_canvas_size_panics_or_half_draws_the_deck() {
+    let engine = fixture::frontend_active();
+    let state = reference_deck(4);
+
+    for width in 1..=48u16 {
+        for height in 1..=48u16 {
+            check_quiet(&engine, &state, (width, height));
+        }
+    }
+    // Ordinary widths at the heights the audit reproduced: 80x4, 120x4, 144x5.
+    for width in [80u16, 100, 110, 119, 120, 144, 200] {
+        for height in 1..=16u16 {
+            check_quiet(&engine, &state, (width, height));
+        }
+    }
+}
+
+/// The audit's live repro is a resize, not a size: each frame is drawn at a
+/// new geometry carrying what the last one left behind — a stack scrolled
+/// where there was a stack to scroll, a fold, a zoom, a held divider, a drag,
+/// an open overlay. Fixed-size snapshots never see that, so every one of
+/// those states walks the ladder down through each layout and back up.
+#[test]
+fn a_resize_through_every_layout_and_back_stays_drawable() {
+    let engine = fixture::frontend_active();
+
+    let mut scrolled = expanded(4);
+    assert!(scrolled.set_stack_offset(2));
+    scrolled.set_resizing(true);
+    let mut dragged = collapsed();
+    assert!(dragged.begin_drag(1));
+    dragged.update_drag(Some(2));
+
+    let states = [
+        reference_deck(4),
+        expanded(4),
+        collapsed(),
+        zoomed(),
+        pinned(),
+        scrolled,
+        dragged,
+        opened(ActionCommand::ShowHelp),
+        opened(ActionCommand::RequestQuit),
+        opened(ActionCommand::ToggleScrollback),
+    ];
+    for state in &states {
+        for size in RESIZE_WALK.iter().chain(RESIZE_WALK.iter().rev()) {
+            check_quiet(&engine, state, *size);
+        }
+    }
+
+    // And the same walk with the toast up, which is the one piece of chrome
+    // the deck draws over itself without a modal's dimming.
+    let mut notifies = Notifications::new();
+    notifies.record(
+        &TerminalId::new("backend"),
+        None,
+        message("tests passed"),
+        at(0),
+    );
+    for size in RESIZE_WALK.iter().chain(RESIZE_WALK.iter().rev()) {
+        check_canvas(&engine, &zoomed(), &notifies, at(1_000), *size);
+    }
+}
+
+/// Below the minimum the fallback is a sentence, not a half-drawn deck: the
+/// status row alone costs two of the seven rows, so there is nothing smaller
+/// for the interface to fall back to.
+#[test]
+fn a_canvas_below_the_minimum_states_the_geometry_it_needs() {
+    let engine = fixture::frontend_active();
+    let state = reference_deck(4);
+
+    // One row short of the minimum, at a perfectly ordinary width.
+    let (buffer, _) = render(&engine, &state, (80, 6));
+    let screen = text(&buffer);
+    assert!(screen.contains("7×7 min"), "{screen}");
+    assert!(!screen.contains('┌'), "no half-drawn chrome, {screen}");
+
+    // One column short of it says the same thing, clipped to what it has.
+    let (buffer, _) = render(&engine, &state, (6, 20));
+    assert!(text(&buffer).contains("7×7 m…"), "{}", text(&buffer));
+
+    // And the smallest canvas that draws at all draws a whole pane: the
+    // status row, the strip, and a bordered master under them.
+    let (buffer, _) = render(&engine, &state, (7, 7));
+    let screen = text(&buffer);
+    assert_eq!(buffer[(0u16, 4u16)].symbol(), "┌", "{screen}");
+    assert_eq!(buffer[(6u16, 6u16)].symbol(), "┘", "{screen}");
+}
+
+/// The release half of #140, asserted as a measurement rather than a panic so
+/// it holds in either profile: `[profile.release]` sets no `overflow-checks`,
+/// so the wrapped subtraction did not panic there — it handed the renderer a
+/// content rect wider and taller than the pane, and than the buffer.
+#[test]
+fn a_pane_never_measures_content_outside_itself() {
+    for width in 0..=24u16 {
+        for height in 0..=24u16 {
+            let pane = Rect::new(3, 5, width, height);
+            let Some(content) = super::pane_content(pane) else {
+                assert!(
+                    width < super::MIN_PANE.0 || height < super::MIN_PANE.1,
+                    "{pane:?} has the room for content",
+                );
+                continue;
+            };
+            assert!(
+                content.x >= pane.x && content.y >= pane.y,
+                "{pane:?} measured {content:?}",
+            );
+            assert!(
+                content.right() <= pane.right() && content.bottom() <= pane.bottom(),
+                "{pane:?} measured {content:?}",
+            );
+            assert!(
+                content.width > 0 && content.height > 0,
+                "{pane:?} measured {content:?}",
+            );
+        }
+    }
+}
+
+/// Every pointer answer is measured against a rect the renderer could have
+/// drawn, so a click that arrives between a resize and its redraw is answered
+/// rather than crashed on.
+#[test]
+fn no_canvas_size_panics_a_pointer_answer() {
+    let projects = fixture::projects();
+    let state = expanded(4);
+    let deck = deck_for(&projects, &state);
+
+    for width in 1..=40u16 {
+        for height in 1..=40u16 {
+            let area = Rect::new(0, 0, width, height);
+            for x in [0, width / 2, width.saturating_sub(1)] {
+                for y in [0, height / 2, height.saturating_sub(1)] {
+                    let pointer = Position::new(x, y);
+                    deck.terminal_at(area, pointer);
+                    deck.position_at(area, pointer);
+                    deck.pane_cell(area, pointer);
+                    deck.marker_at(area, pointer);
+                    deck.close_at(area, pointer);
+                    deck.add_at(area, pointer);
+                    deck.divider_at(area, pointer);
+                    deck.swap_position_at(area, pointer);
+                    deck.stack_scroll_at(area, pointer);
+                    deck.ratio_at(area, x);
+                }
+            }
+            deck.stack_window(area);
+            deck.terminal_sizes(area);
+            deck.timing_terminals(area);
+        }
+    }
+}
