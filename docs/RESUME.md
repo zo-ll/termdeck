@@ -101,3 +101,30 @@ authenticate to GitHub as an account with access. Check synchronization with:
 git remote -v
 git branch -vv
 ```
+
+## Session snapshot — 2026-09-07 EOD
+
+State: main `30eaa4e`, CI GREEN (first since 2026-09-05 — the second astra
+audit queue #136-#147 is fully closed, plus user-visible #148/#149/#150/#151).
+
+Fresh-machine/local notes:
+- Local zsh/fish absent by default. To run the zsh shell-hook tests locally
+  (they skip without zsh), use a real zsh: `PATH=/tmp/zsh-local/bin:$PATH
+  ZDOTDIR=/tmp/zshlocal-home` (apt zsh extracted to /tmp/zsh-local with a
+  module_path fix; /tmp/zshlocal-home/.zshrc sets module_path). CI's apt
+  zsh is the authoritative judge.
+- The zsh ready-gate (#136 r4) works by opting out of Ubuntu's global
+  compinit (skip_global_compinit=1 in the hook's .zshenv) — see
+  src/engine/shell_hook.rs.
+- Login-bash single-prompt (#151) uses a profile shim: HOME scoped to a
+  generated dir whose .bash_profile restores the real HOME, runs the user's
+  login chain, then installs the hook. Accepted residual (issue #152):
+  /etc/profile runs before the shim, so the sudo hint may repeat and user
+  bash_completion may be missed.
+- CI retry-step guard (#130) was race-fixed 2026-09-07: it captures the
+  `--list` output into a var before grep (a live pipe's -q early-exit gave
+  cargo a BrokenPipe that failed the pipeline under pipefail).
+
+Remaining open: audit P1s #143 #139 #142 #141 → P2s #144 #145 #146 #147 →
+#134; user-gated #94 (MCP merge/drop), #112 (persistence gate), #114
+(discovery), #33 (parked); #152; NB backlog (~65).
