@@ -1545,6 +1545,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   agreement, gesture machine, selection math incl. base64 padding, viewport
   hit-test vs draw_pane agreement, inversion post-style, invalidation incl.
   termctl path, old-gesture regression, zero boundary diff).
+- 2026-09-07: #148 MERGED + CLOSED (auto-close keyword) + binary REBUILT —
+  no-ff merge on main (432 lib release-verified + 5 + 1), worktree/branch
+  removed. CRITIC PASS, 2 NBs queued: (1) drawn_rect duplicates layout math
+  with looser guard than MIN_CANVAS — selection can arm on a notice-only
+  canvas; align guards; (2) release full-suite note (verified by coordinator:
+  green). Mouse selection now LIVE: drag content = select+copy (OSC 52), drag
+  title/border = reorder, ^g v = paste last copy. Likely resolves the user's
+  "un-pasteable auto message" request (copy side); user to confirm the
+  message source.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
