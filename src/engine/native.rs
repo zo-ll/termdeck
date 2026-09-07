@@ -677,22 +677,28 @@ impl TerminalEngine for NativeEngine {
     fn drain_events(&mut self) -> Vec<EngineEvent> {
         let mut events = Vec::new();
         for terminal in &mut self.terminals {
-            // The per-frame input pump (#118): whatever `dispatch` queued
-            // while the child was slow goes out in nonblocking slices here,
-            // so queued bytes need no new keystroke to reach the PTY. A
-            // failed flush means the child is gone; its waiter reports the
-            // exit, so the error is dropped rather than failing the pane
-            // from the drain path.
-            if let Some(transport) = terminal.transport.as_mut() {
+            let waiting_for_input_ready = terminal
+                .transport
+                .as_ref()
+                .is_some_and(PtyTransport::waiting_for_input_ready);
+            // Hooked shells reset terminal state during startup. Consume
+            // their first output before flushing queued input so that reset
+            // cannot discard the first bytes (#136).
+            if !waiting_for_input_ready && let Some(transport) = terminal.transport.as_mut() {
+                // Preserve the established flush-before-events order for
+                // ordinary panes and hooked panes after startup.
                 let _ = transport.flush_input();
             }
             let pty_events = terminal
                 .transport
-                .as_ref()
+                .as_mut()
                 .map(PtyTransport::drain_events)
                 .unwrap_or_default();
             for event in pty_events {
                 terminal.handle_pty_event(event, &mut events);
+            }
+            if waiting_for_input_ready && let Some(transport) = terminal.transport.as_mut() {
+                let _ = transport.flush_input();
             }
         }
         if let Some(event) = self.refresh_timing_if_due(Instant::now()) {
@@ -1360,6 +1366,45 @@ mod tests {
                 .any(|(title, body)| title == "sleep 0.01" && body.starts_with("done · ")),
             "{messages:?}; {frame:?}"
         );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    /// #136: input dispatched in the same turn as a hooked shell spawn stays
+    /// queued until the shell has emitted startup output, then arrives whole.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hooked_shell_keeps_same_turn_input_until_startup_output() {
+        let terminal = TerminalId::new("startup-input");
+        let projects = [Project {
+            terminal: terminal.clone(),
+            path: PathBuf::from("/"),
+            command: vec![
+                "/usr/bin/bash".to_owned(),
+                "--noprofile".to_owned(),
+                "--norc".to_owned(),
+            ],
+            shell_hook: true,
+        }];
+        let mut engine = NativeEngine::spawn_sized_with_socket(
+            &projects,
+            &[ScreenSize::new(80, 4)],
+            DEFAULT_SCROLLBACK,
+            std::path::Path::new("/tmp/termdeck-hook-test.sock"),
+        )
+        .unwrap();
+
+        let events = engine.dispatch(EngineCommand::Input {
+            terminal: terminal.clone(),
+            bytes: b"printf 'WHOLE-STARTUP-INPUT\\n'\n".to_vec(),
+        });
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                EngineEvent::InputQueued { terminal: queued } if queued == &terminal
+            )),
+            "same-turn input must wait for shell startup: {events:?}"
+        );
+        wait_for_frame(&mut engine, &terminal, "WHOLE-STARTUP-INPUT");
         engine.dispatch(EngineCommand::Shutdown);
     }
 

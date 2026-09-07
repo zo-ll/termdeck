@@ -100,6 +100,10 @@ pub struct PtyTransport {
     /// `dispatch` appends without blocking; the frame pump (`flush_input`
     /// from `drain_events`) moves it to the PTY in nonblocking slices.
     pending_input: VecDeque<u8>,
+    /// Interactive shell hooks reset terminal state while starting. Their
+    /// first output proves that reset completed, so external input queued
+    /// before then cannot be discarded by the shell's termios setup (#136).
+    input_ready: bool,
     events: Option<Receiver<PtyEvent>>,
     reader: Option<JoinHandle<()>>,
     waiter: Option<JoinHandle<()>>,
@@ -220,6 +224,7 @@ impl PtyTransport {
             #[cfg(target_os = "linux")]
             descendants: Vec::new(),
             pending_input: VecDeque::new(),
+            input_ready: shell_hook.is_none(),
             events: Some(events),
             reader: Some(reader),
             waiter: Some(waiter),
@@ -269,6 +274,9 @@ impl PtyTransport {
         }
         #[cfg(unix)]
         {
+            if !self.input_ready {
+                return Ok(InputOutcome::Queued);
+            }
             while !self.pending_input.is_empty() {
                 let (front, _) = self.pending_input.as_slices();
                 let chunk = &front[..front.len().min(INPUT_WRITE_CHUNK)];
@@ -312,11 +320,23 @@ impl PtyTransport {
         self.process_group
     }
 
-    pub fn drain_events(&self) -> Vec<PtyEvent> {
-        self.events
+    pub(crate) fn waiting_for_input_ready(&self) -> bool {
+        !self.input_ready
+    }
+
+    pub fn drain_events(&mut self) -> Vec<PtyEvent> {
+        let events: Vec<PtyEvent> = self
+            .events
             .as_ref()
             .map(|events| events.try_iter().collect())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if events
+            .iter()
+            .any(|event| matches!(event, PtyEvent::Output { .. }))
+        {
+            self.input_ready = true;
+        }
+        events
     }
 
     /// Hangs up and terminates every owned process, bounded in time.
