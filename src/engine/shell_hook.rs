@@ -300,7 +300,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn bash_login_detection_preserves_argv_and_stops_after_c() {
         assert!(bash_is_login(&["-ilc".to_owned(), "echo hook".to_owned()]));
