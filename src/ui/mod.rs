@@ -99,6 +99,16 @@ const NARROW_COLUMNS: u16 = 100;
 const COMPACT_STACK: u16 = 34;
 /// Horizontal pane padding, inside the border.
 const PADDING: u16 = 2;
+/// The smallest rect one pane can be dressed in: two border columns and
+/// [`PADDING`] on each side around a single content column, and two border
+/// rows around a single content row. Below it a pane has no content rect at
+/// all, and the subtractions that measure one wrap (#140).
+const MIN_PANE: (u16, u16) = (2 + 2 * PADDING + 1, 3);
+/// The smallest canvas the deck draws itself into: the status row, the blank
+/// row under it, the narrow fallback's pane strip and the blank row under
+/// that, then one whole pane. Below it the deck states the geometry it is
+/// waiting for instead of attempting one that does not fit (#140).
+const MIN_CANVAS: (u16, u16) = (MIN_PANE.0, 4 + MIN_PANE.1);
 /// Output within this window counts as recent activity.
 const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 /// Cells in the activity meter.

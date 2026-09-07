@@ -875,10 +875,15 @@ impl Picker<'_> {
         spans.insert(0, gap.clone());
         spans.push(gap);
         let width: usize = spans.iter().map(Span::width).sum();
+        // A panel too narrow to seat the right-hand title drops it rather
+        // than placing it by a subtraction that wraps (#140).
         let x = if left {
             area.x + INSET
         } else {
-            area.x + area.width - width as u16 - INSET
+            let Some(offset) = area.width.checked_sub(width as u16 + INSET) else {
+                return;
+            };
+            area.x + offset
         };
         buffer.set_line(x, area.y, &Line::from(spans), width as u16);
     }
@@ -918,7 +923,7 @@ impl Picker<'_> {
             height: browse.height.saturating_sub(2),
         };
         let first = content.y + self.listing_header().len() as u16;
-        let last = content.y + content.height - self.footer_rows();
+        let last = content.y + content.height.saturating_sub(self.footer_rows());
         if pointer.y < first || pointer.y >= last {
             return None;
         }

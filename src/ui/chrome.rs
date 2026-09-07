@@ -173,6 +173,57 @@ pub(super) fn close_column(pane: Rect) -> Option<u16> {
     (pane.width > 2 * PADDING + 2).then(|| pane.x + pane.width - 2 - PADDING)
 }
 
+/// The content rect inside a bordered, padded pane, or `None` for a pane
+/// below [`MIN_PANE`], which has no content rect at all.
+///
+/// Every caller measured this by subtraction until #140, and on a pane a
+/// resize had made too small the subtraction wrapped: a panic in a debug
+/// build, and in a release one — where `[profile.release]` sets no
+/// `overflow-checks` — a rect wider and taller than the buffer it is drawn
+/// into, which renders garbage until a write lands outside the buffer.
+pub(super) fn pane_content(pane: Rect) -> Option<Rect> {
+    (pane.width >= MIN_PANE.0 && pane.height >= MIN_PANE.1).then(|| Rect {
+        x: pane.x + 1 + PADDING,
+        y: pane.y + 1,
+        width: pane.width - 2 - 2 * PADDING,
+        height: pane.height - 2,
+    })
+}
+
+/// Where a right-aligned run of `width` columns starts inside `content`, or
+/// `None` when the content cannot hold it clear of the left inset.
+///
+/// The right-hand affordances all placed themselves by subtracting their own
+/// width from the right edge, which wraps once the content is narrower than
+/// the run (#140). What does not fit is not drawn.
+pub(super) fn right_aligned(content: Rect, width: u16) -> Option<u16> {
+    let start = content.width.checked_sub(width.saturating_add(1))?;
+    (start >= 1).then(|| content.x + start)
+}
+
+/// What the deck draws on a canvas below [`MIN_CANVAS`]: the geometry it is
+/// waiting for, on the row nearest the middle, clipped to whatever columns
+/// there are.
+///
+/// The interface has no smaller form to fall back to — the status row alone
+/// costs two of the seven rows — and a partly drawn deck at these sizes is
+/// what #140 was. So the fallback states the size rather than attempting one.
+pub(super) fn size_notice(buffer: &mut Buffer, area: Rect) {
+    if area.height == 0 {
+        return;
+    }
+    let (columns, rows) = MIN_CANVAS;
+    buffer.set_line(
+        area.x,
+        area.y + area.height / 2,
+        &Line::styled(
+            clip(&format!("{columns}×{rows} min"), area.width as usize),
+            Style::new().fg(WARNING).bg(CANVAS),
+        ),
+        area.width,
+    );
+}
+
 /// The status row: the canvas's first row (#101).
 ///
 /// Every session frame in the export now opens with the bar — workspace chip,

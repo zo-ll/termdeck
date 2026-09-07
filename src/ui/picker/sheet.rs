@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Clear, Widget},
 };
 
-use super::super::{Key, clip, palette::*};
+use super::super::{Key, clip, palette::*, right_aligned};
 use super::render::{COL_GLYPH, COL_NAME, INSET, display_path};
 use super::{Browse, Entry, EntryKind, Instance, PickerReaction, PickerState};
 
@@ -107,12 +107,25 @@ const SHEET_COLUMNS: u16 = 78;
 const SHEET_SEPARATOR: u16 = 30;
 /// The instance slot's column: `+`, or `×N` once there is more than one.
 pub(super) const SHEET_INSTANCE: u16 = SHEET_SEPARATOR - 3;
+/// The rows the sheet's own chrome costs, which is the height it asks for
+/// before it has a single row to list.
+const SHEET_ROWS: u16 = 11;
 
 impl Sheet<'_> {
     /// Where the sheet sits on `area`.
     pub fn rect(&self, area: Rect) -> Rect {
         let width = SHEET_COLUMNS.min(area.width);
-        let height = (self.rows.len() as u16 + 9).clamp(11, area.height.saturating_sub(2));
+        // A row per target plus the chrome, never below what the chrome
+        // alone costs and never taller than the canvas — bounded in that
+        // order, because on a canvas under thirteen rows the two bounds
+        // cross and `clamp` panics on crossed bounds whatever it is given
+        // (#140). The canvas wins there, and [`Sheet::render`] stops at the
+        // border when what is left will not hold the listing.
+        let height = u16::try_from(self.rows.len())
+            .unwrap_or(u16::MAX)
+            .saturating_add(9)
+            .max(SHEET_ROWS)
+            .min(area.height.saturating_sub(2));
         Rect {
             x: area.x + (area.width - width) / 2,
             y: area.y + (area.height.saturating_sub(height)) / 2,
@@ -195,12 +208,14 @@ impl Sheet<'_> {
         buffer.set_line(content.x + 1, content.y, &Line::from(spans), content.width);
         if self.roots.len() > 1 {
             let hint = "⇧⇥ switch root";
-            buffer.set_line(
-                content.x + content.width - hint.chars().count() as u16 - 1,
-                content.y,
-                &Line::from(Span::styled(hint, Style::new().fg(HINT))),
-                content.width,
-            );
+            if let Some(x) = right_aligned(content, hint.chars().count() as u16) {
+                buffer.set_line(
+                    x,
+                    content.y,
+                    &Line::from(Span::styled(hint, Style::new().fg(HINT))),
+                    content.width,
+                );
+            }
         }
         buffer.set_line(
             content.x + 1,
@@ -367,12 +382,14 @@ impl Sheet<'_> {
         let marked = self.state.marked().len();
         if marked > 0 {
             let appends = format!("appends as pane {}", self.next_pane);
-            buffer.set_line(
-                content.x + content.width - appends.chars().count() as u16 - 1,
-                bottom - 3,
-                &Line::from(Span::styled(appends, Style::new().fg(HINT))),
-                content.width,
-            );
+            if let Some(x) = right_aligned(content, appends.chars().count() as u16) {
+                buffer.set_line(
+                    x,
+                    bottom - 3,
+                    &Line::from(Span::styled(appends, Style::new().fg(HINT))),
+                    content.width,
+                );
+            }
         }
         let label = self.button_label();
         buffer.set_line(
@@ -429,12 +446,19 @@ impl Sheet<'_> {
             width: rect.width.saturating_sub(2),
             height: rect.height.saturating_sub(2),
         };
+        // Nothing is drawn below the render's own guard, so nothing there
+        // can be clicked either: the two agree on the smallest sheet, and
+        // neither measures one it did not draw (#140).
+        if content.width < 2 * INSET || content.height < 5 {
+            return None;
+        }
         let bottom = content.y + content.height;
         // The header's own control, right-aligned where it is drawn.
         if pointer.y == content.y && self.roots.len() > 1 {
             let hint = "⇧⇥ switch root".chars().count() as u16;
-            let start = content.x + content.width - hint - 1;
-            if (start..start + hint).contains(&pointer.x) {
+            if let Some(start) = right_aligned(content, hint)
+                && (start..start + hint).contains(&pointer.x)
+            {
                 return Some(SheetHit::Root);
             }
         }
