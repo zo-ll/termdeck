@@ -212,7 +212,33 @@ fn bash_rc() -> String {
 
 fn source_command(path: &Path) -> Vec<u8> {
     let quoted = path.to_string_lossy().replace('\'', "'\\''");
-    format!(". '{quoted}'\n").into_bytes()
+    // `stty echo` first: echo is off only for this one injected line, and
+    // restoring it before the source keeps a failing `.` from leaving the
+    // pane unable to show what the user types (#149).
+    format!("stty echo; . '{quoted}'\n").into_bytes()
+}
+
+/// Turns the PTY's terminal echo off, for the login-bash bootstrap only
+/// (#149). That bootstrap is fed to the shell as terminal input, so both
+/// the line discipline and readline would otherwise print the source line
+/// at the first prompt. The bootstrap turns echo back on itself, so this
+/// must be called before the shell is spawned and never for a shell that
+/// has no bootstrap to hide.
+#[cfg(unix)]
+pub(super) fn silence_bootstrap_echo(fd: std::os::unix::io::RawFd) -> Result<(), String> {
+    let mut attributes = std::mem::MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: `tcgetattr` on an owned PTY fd, writing one `termios`.
+    if unsafe { libc::tcgetattr(fd, attributes.as_mut_ptr()) } == -1 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    // SAFETY: `tcgetattr` returned success, so the value is initialised.
+    let mut attributes = unsafe { attributes.assume_init() };
+    attributes.c_lflag &= !libc::ECHO;
+    // SAFETY: `tcsetattr` on the same fd with the value read just above.
+    if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &attributes) } == -1 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    Ok(())
 }
 
 impl Drop for ShellHook {
@@ -235,12 +261,14 @@ fn unique_dir() -> Result<PathBuf, String> {
 mod tests {
     use std::{
         fs,
-        io::Write,
+        io::{Read, Write},
         process::{Command, Stdio},
     };
 
-    use portable_pty::CommandBuilder;
+    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
+    #[cfg(unix)]
+    use super::silence_bootstrap_echo;
     use super::{FISH_RC, ShellHook, ZSH_ENV, ZSH_RC, bash_is_login, bash_rc, unique_dir};
 
     /// #136 r4: Ubuntu's system zshrc runs an interactive `compinit`
@@ -271,6 +299,7 @@ mod tests {
             "redefining the same-name function shadows what `zle -A` saved"
         );
     }
+
 
     #[test]
     fn bash_login_detection_preserves_argv_and_stops_after_c() {
@@ -382,5 +411,52 @@ mod tests {
         assert!(stdout.contains("cmd=sleep 0.01\x07"), "{stdout:?}");
         assert!(!stdout.contains("cmd=__systemd_osc_context_"), "{stdout:?}");
         assert!(stdout.contains("LOGOUT=kept"), "{stdout:?}");
+    }
+
+    /// #149: the login bootstrap reaches the shell as terminal input, so it
+    /// must not be echoed back at the first prompt — and echo has to be on
+    /// again for everything the user types afterwards.
+    #[cfg(unix)]
+    #[test]
+    fn bash_login_bootstrap_is_not_echoed_at_the_first_prompt() {
+        let mut command = CommandBuilder::new("bash");
+        // `--noprofile` keeps this to the bootstrap alone: the login profile
+        // fidelity is the neighbouring test's subject, and running the real
+        // one here would only add a system's worth of startup to the suite.
+        let arguments = ["--noprofile".to_owned(), "-l".to_owned()];
+        let hook = ShellHook::install("bash", &arguments, &mut command)
+            .unwrap()
+            .unwrap();
+        command.env("HOME", &hook.dir);
+        command.env("TERMDECK_SOCK", "test");
+        command.env("TERMDECK_PANE", "test");
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: 24,
+                cols: 200,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut writer = pair.master.take_writer().unwrap();
+        silence_bootstrap_echo(pair.master.as_raw_fd().unwrap()).unwrap();
+        let mut child = pair.slave.spawn_command(command).unwrap();
+        drop(pair.slave);
+        writer.write_all(hook.bootstrap().unwrap()).unwrap();
+        writer
+            .write_all(b"printf 'HOOK=%s\\n' \"$TERMDECK_SHELL_HOOK\"\nexit\n")
+            .unwrap();
+        let collector = std::thread::spawn(move || {
+            let mut output = Vec::new();
+            // The master reports the closed slave as an error, not as EOF.
+            let _ = reader.read_to_end(&mut output);
+            output
+        });
+        child.wait().unwrap();
+        let output = String::from_utf8_lossy(&collector.join().unwrap()).into_owned();
+        assert!(!output.contains("termdeck-shell"), "{output:?}");
+        assert!(output.contains("HOOK=1"), "{output:?}");
+        assert!(output.contains("printf 'HOOK="), "{output:?}");
     }
 }
