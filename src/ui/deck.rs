@@ -376,6 +376,143 @@ impl Deck<'_> {
         ))
     }
 
+    /// The pane rectangle a configured position is drawn in, or `None` when
+    /// this layout draws no pane for it.
+    ///
+    /// The pointer hit tests answer "which pane is here"; this answers the
+    /// same question backwards, which is what a drag in progress needs: the
+    /// pane a selection was pressed in keeps the pointer until release,
+    /// wherever the pointer has travelled to (`mouse-selection.md` §2.4).
+    fn drawn_rect(&self, area: Rect, position: usize) -> Option<Rect> {
+        if area.width < GUTTER + 4 || area.height < 4 {
+            return None;
+        }
+        let body = body_of(area);
+        let active = self
+            .state
+            .active()
+            .filter(|position| self.projects.get(*position).is_some());
+        let master = active == Some(position);
+        match self.layout(body) {
+            Layout::Zoom | Layout::Single => master.then_some(body),
+            Layout::Narrow => master.then(|| Rect {
+                y: body.y + 2,
+                height: body.height.saturating_sub(2),
+                ..body
+            }),
+            Layout::Stacked { stack, preview } => {
+                let pane = Rect {
+                    width: body.width - GUTTER - stack,
+                    ..body
+                };
+                if master {
+                    return Some(pane);
+                }
+                self.stack_layout(
+                    Rect {
+                        x: pane.x + pane.width + GUTTER,
+                        width: stack,
+                        ..body
+                    },
+                    preview,
+                )
+                .into_iter()
+                .find(|slot| slot.position == position && !slot.collapsed)
+                .map(|slot| slot.rect)
+            }
+        }
+    }
+
+    /// The rows and columns of a pane that draw terminal cells: inside the
+    /// border and the title inset, and above whatever footer the pane is
+    /// showing. `None` for a pane this layout hides, folds, or draws too
+    /// small to dress (#140).
+    fn viewport_rect(
+        &self,
+        engine: &dyn TerminalEngine,
+        area: Rect,
+        position: usize,
+    ) -> Option<Rect> {
+        if self.state.collapsed(position) {
+            return None;
+        }
+        let project = self.projects.get(position)?;
+        let content = pane_content(self.drawn_rect(area, position)?)?;
+        let status = self.status(engine, project);
+        Some(viewport_of(
+            content,
+            self.state.active() == Some(position),
+            matches!(
+                status,
+                TerminalStatus::Exited { .. } | TerminalStatus::Failed { .. }
+            ),
+            &self.metadata(engine, project),
+            self.state.scrollback(),
+        ))
+    }
+
+    /// The pane and frame cell a selection press lands on (#148), or `None`
+    /// where the pointer is on chrome — a border, a title row, a footer, the
+    /// gutter, a folded strip, or no pane at all.
+    ///
+    /// This is the stricter twin of [`Self::pane_cell`], which measures from
+    /// the same origin but answers for the whole pane because a wheel tick
+    /// forwarded a row or two out is harmless. A selection is not: the cell
+    /// it names is the cell it inverts and the cell it copies.
+    pub fn selection_cell(
+        &self,
+        engine: &dyn TerminalEngine,
+        area: Rect,
+        pointer: Position,
+    ) -> Option<(usize, u16, u16)> {
+        let position = self.position_at(area, pointer)?;
+        let viewport = self.viewport_rect(engine, area, position)?;
+        if !viewport.contains(pointer) {
+            return None;
+        }
+        let (column, row) = self.clamp_cell(engine, position, viewport, pointer)?;
+        Some((position, column, row))
+    }
+
+    /// The frame cell a selection in `position` has been dragged to: the
+    /// pointer clamped into that pane's viewport, so a drag that leaves the
+    /// pane runs to its edge rather than ending or spilling into the next
+    /// one.
+    pub fn selection_head(
+        &self,
+        engine: &dyn TerminalEngine,
+        area: Rect,
+        position: usize,
+        pointer: Position,
+    ) -> Option<(u16, u16)> {
+        let viewport = self.viewport_rect(engine, area, position)?;
+        self.clamp_cell(engine, position, viewport, pointer)
+    }
+
+    /// `pointer` as a frame cell of `position`, clamped to `viewport` and to
+    /// the frame the engine holds. A frame smaller than the pane it is drawn
+    /// in leaves cells with nothing behind them; they are not selectable.
+    fn clamp_cell(
+        &self,
+        engine: &dyn TerminalEngine,
+        position: usize,
+        viewport: Rect,
+        pointer: Position,
+    ) -> Option<(u16, u16)> {
+        if viewport.width == 0 || viewport.height == 0 {
+            return None;
+        }
+        let size = engine.frame(&self.projects.get(position)?.terminal)?.size;
+        let cell = |value: u16, origin: u16, span: u16, limit: u16| -> Option<u16> {
+            let offset = value.clamp(origin, origin + span - 1) - origin;
+            (limit > 0).then(|| offset.min(limit - 1))
+        };
+        Some((
+            cell(pointer.x, viewport.x, viewport.width, size.columns)?,
+            cell(pointer.y, viewport.y, viewport.height, size.rows)?,
+        ))
+    }
+
     /// The configured position whose disclosure marker sits under `pointer`.
     ///
     /// The marker owns two cells at the head of a stack pane's title: the
@@ -1448,20 +1585,38 @@ impl Deck<'_> {
         } else {
             PREVIEW_FG
         };
-        let mut viewport = content;
-        if pane.master() && self.state.scrollback() {
-            // The mode owns the pane foot while it is active.
-            viewport.height = content.height.saturating_sub(2);
-            self.scroll_footer(buffer, content, background);
-        } else if exited {
-            viewport.height = content.height.saturating_sub(2);
-            self.exit_footer(buffer, content, &status, &metadata, background);
-        } else if !pane.master() && metadata.scrollback.lines_below > 0 {
-            viewport.height = content.height.saturating_sub(1);
-            self.scroll_marker(buffer, content, &metadata, background);
+        let viewport = viewport_of(
+            content,
+            pane.master(),
+            exited,
+            &metadata,
+            self.state.scrollback(),
+        );
+        if viewport.height < content.height {
+            // Whichever footer took those rows draws itself into them.
+            if pane.master() && self.state.scrollback() {
+                self.scroll_footer(buffer, content, background);
+            } else if exited {
+                self.exit_footer(buffer, content, &status, &metadata, background);
+            } else {
+                self.scroll_marker(buffer, content, &metadata, background);
+            }
         }
         if let Some(terminal) = engine.frame(id) {
-            draw_terminal(buffer, viewport, terminal, default_fg, background);
+            // The selection is frame coordinates in one pane, so only that
+            // pane's own cells are inverted (#148).
+            let selection = self
+                .state
+                .selection()
+                .filter(|selection| selection.position == position);
+            draw_terminal(
+                buffer,
+                viewport,
+                terminal,
+                default_fg,
+                background,
+                selection.as_ref(),
+            );
         }
     }
 

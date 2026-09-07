@@ -24,15 +24,15 @@
 │  12:05:09 warning  src/components/PaneTi│  TERMINAL                                                │                                          
 │           'status' is declared but its v│  ^g r             respawn active terminal                │                                          
 │  12:05:17 [vite] hmr update /src/compone│  ^g x             close active terminal                  │                                          
-│  12:05:33 [vite] hmr update /src/compone│  ^g ^g            send a literal ^g                      │                                          
-│  12:05:58 [vite] hmr update /src/routes/│                                                          │                                          
-│  12:06:04 [vite] hmr invalidate /src/hoo│  SESSION                                                 │                                          
-│  12:06:04 [vite] page reload src/hooks/u│  ^g ?             this help                              │                                          
-│  12:06:11 [vite] hmr update /src/routes/│  ^g q             quit termdeck                          │                                          
+│  12:05:33 [vite] hmr update /src/compone│  ^g v             paste the last mouse copy              │                                          
+│  12:05:58 [vite] hmr update /src/routes/│  ^g ^g            send a literal ^g                      │                                          
+│  12:06:04 [vite] hmr invalidate /src/hoo│                                                          │                                          
+│  12:06:04 [vite] page reload src/hooks/u│  SESSION                                                 │                                          
+│  12:06:11 [vite] hmr update /src/routes/│  ^g ?             this help                              │                                          
+│                                         │  ^g q             quit termdeck                          │                                          
 │                                         │                                                          │                                          
 │                                         │  esc  close                                              │                                          
 │                                         └──────────────────────────────────────────────────────────┘                                          
-│                                                                                                ││                                             
 │                                                                                                ││                                             
 │                                                                                                ││                                             
 │                                                                                                ││                                             

@@ -6,7 +6,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::contracts::{ActionCommand, Elapsed, NotifyKind, Project, TerminalId, Timestamp};
+use crate::contracts::{
+    ActionCommand, CellContent, Elapsed, NotifyKind, Project, TerminalFrame, TerminalId, Timestamp,
+};
 
 /// How long a just-demoted pane keeps its highlight, per the design export's
 /// "holds ... for ~1.5s, then settles".
@@ -289,6 +291,98 @@ pub enum Modal {
     Quit,
 }
 
+/// A run of visible terminal cells the pointer has selected in one pane
+/// (#148).
+///
+/// It is a range of *cells*, never a copy of text and never an anchor into
+/// the child's history: `position` names the pane, and `anchor` and `head`
+/// are `(column, row)` in that pane's current frame coordinates. The
+/// renderer inverts exactly these cells and the copy reads exactly these
+/// cells, so what is highlighted is what is copied with nothing in between
+/// that could disagree (`mouse-selection.md` §2.3).
+///
+/// The range is normalised on read, so a drag up the pane means the same
+/// thing as a drag down it and there is no backwards state to carry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Selection {
+    /// The configured position of the pane the selection was pressed in.
+    pub position: usize,
+    anchor: (u16, u16),
+    head: (u16, u16),
+}
+
+impl Selection {
+    /// A fresh selection of the single cell the press landed on.
+    pub fn new(position: usize, cell: (u16, u16)) -> Self {
+        Self {
+            position,
+            anchor: cell,
+            head: cell,
+        }
+    }
+
+    /// Moves the loose end. The anchor never moves once the press has set it.
+    #[must_use]
+    pub fn to(mut self, cell: (u16, u16)) -> Self {
+        self.head = cell;
+        self
+    }
+
+    /// First and last selected cell in reading order, whichever way the
+    /// pointer travelled.
+    pub fn bounds(&self) -> ((u16, u16), (u16, u16)) {
+        let key = |(column, row): (u16, u16)| (row, column);
+        if key(self.anchor) <= key(self.head) {
+            (self.anchor, self.head)
+        } else {
+            (self.head, self.anchor)
+        }
+    }
+
+    /// Whether this cell of the pane's frame is inside the range. Rows
+    /// between the ends are selected in full: the shape is text flow, not a
+    /// rectangle (`mouse-selection.md` §2.2).
+    pub fn contains(&self, column: u16, row: u16) -> bool {
+        let ((first, top), (last, bottom)) = self.bounds();
+        if row < top || row > bottom {
+            return false;
+        }
+        (row > top || column >= first) && (row < bottom || column <= last)
+    }
+
+    /// The selected text of `frame`, ready for the clipboard.
+    ///
+    /// A glyph contributes its own string, combining marks and all; the
+    /// continuation of a wide glyph contributes nothing, because the glyph
+    /// to its left already stood for both columns; an empty cell contributes
+    /// a space. Rows are right-trimmed and joined with a newline, and there
+    /// is no trailing one: a selection is a span, not a set of lines, so a
+    /// pasted copy never submits itself (`mouse-selection.md` §4.4).
+    pub fn text(&self, frame: &TerminalFrame) -> String {
+        let ((first, top), (last, bottom)) = self.bounds();
+        let width = frame.size.columns;
+        (top..=bottom.min(frame.size.rows.saturating_sub(1)))
+            .map(|row| {
+                let from = if row == top { first } else { 0 };
+                let to = if row == bottom {
+                    last
+                } else {
+                    width.saturating_sub(1)
+                };
+                let line: String = (from..=to.min(width.saturating_sub(1)))
+                    .filter_map(|column| match &frame.cell(column, row)?.content {
+                        CellContent::Glyph { text, .. } => Some(text.as_str()),
+                        CellContent::Empty => Some(" "),
+                        CellContent::Continuation => None,
+                    })
+                    .collect();
+                line.trim_end().to_owned()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
 /// Which terminal holds the master pane, in which order the rest stack,
 /// whether the stack is hidden, and which previews are folded to a title row.
 ///
@@ -315,6 +409,13 @@ pub enum Modal {
 /// pinned terminal back at `stack()[0]` the moment it is demoted. Runtime only,
 /// like the split ratio — nothing is written back to the configuration.
 ///
+/// `selection` is the run of visible terminal cells the pointer has selected
+/// in one pane (#148), or `None`. It is frame coordinates rather than text,
+/// so anything that can move a pane, renumber it, resize it or reflow its
+/// child drops it — which is why the invalidation lives here rather than in
+/// the session loop: `termctl` reaches these same methods without passing the
+/// key reader (`mouse-selection.md` §3.3).
+///
 /// `stack_offset` is the index into `stack()` of the first preview the stack
 /// column draws. The list can hold more previews than the column has rows, so
 /// the column is a window onto it; the renderer clamps this to whatever the
@@ -337,6 +438,7 @@ pub struct DeckState {
     demotion: Option<(usize, Timestamp)>,
     scrolled: Option<(usize, Timestamp)>,
     drag: Option<(usize, Option<usize>)>,
+    selection: Option<Selection>,
     stack_offset: usize,
     master_ratio: f64,
     resizing: bool,
@@ -368,6 +470,7 @@ impl DeckState {
             demotion: None,
             scrolled: None,
             drag: None,
+            selection: None,
             stack_offset: 0,
             master_ratio: DEFAULT_MASTER_RATIO,
             resizing: false,
@@ -393,6 +496,7 @@ impl DeckState {
     /// Returns whether it moved. This is what the divider drag calls, once per
     /// pointer move.
     pub fn set_master_ratio(&mut self, ratio: f64) -> bool {
+        self.selection = None;
         let ratio = if ratio.is_finite() {
             ratio.clamp(MIN_MASTER_RATIO, MAX_MASTER_RATIO)
         } else {
@@ -455,6 +559,7 @@ impl DeckState {
     /// column. Nothing renumbers, so a promotion made before the addition
     /// still means what it meant.
     pub fn push_terminal(&mut self) -> usize {
+        self.selection = None;
         let position = self.collapsed.len();
         self.collapsed.push(true);
         self.order.push(position);
@@ -478,6 +583,7 @@ impl DeckState {
     /// closed like any other; what an empty deck means is the session's
     /// business, not the state's.
     pub fn close(&mut self, position: usize) -> bool {
+        self.selection = None;
         if position >= self.collapsed.len() {
             return false;
         }
@@ -554,6 +660,7 @@ impl DeckState {
     /// `true` there. It is not the finer "anything changed" the deck's other
     /// commands answer with, and the key that calls it reads nothing from it.
     pub fn toggle_pin(&mut self) -> bool {
+        self.selection = None;
         let Some(active) = self.active() else {
             return false;
         };
@@ -595,6 +702,7 @@ impl DeckState {
     /// the rendered geometry and so owns the clamping; this only refuses an
     /// offset with no preview left to show. Returns whether anything moved.
     pub fn set_stack_offset(&mut self, offset: usize) -> bool {
+        self.selection = None;
         let offset = offset.min(self.stack().len().saturating_sub(1));
         let moved = offset != self.stack_offset;
         self.stack_offset = offset;
@@ -620,6 +728,7 @@ impl DeckState {
 
     /// Folds or unfolds one preview. The master has no fold to toggle.
     pub fn toggle_collapse(&mut self, position: usize) -> bool {
+        self.selection = None;
         if self.active() == Some(position) {
             return false;
         }
@@ -635,6 +744,7 @@ impl DeckState {
     /// Previews now start folded (#39), so on a fresh run the first press is
     /// the expand-all half of that toggle.
     pub fn toggle_collapse_all(&mut self) -> bool {
+        self.selection = None;
         let stack = self.stack().to_vec();
         if stack.is_empty() {
             return false;
@@ -704,6 +814,24 @@ impl DeckState {
         self.drag.and_then(|(_, target)| target)
     }
 
+    /// The standing pointer selection, if any (#148).
+    pub fn selection(&self) -> Option<Selection> {
+        self.selection
+    }
+
+    /// Replaces the selection. The session builds it as the pointer moves:
+    /// the deck only holds it, because it is the renderer that has to draw it
+    /// and the renderer reads nothing else.
+    pub fn set_selection(&mut self, selection: Selection) {
+        self.selection = Some(selection);
+    }
+
+    /// Drops the selection. Returns whether there was one, so a caller that
+    /// repaints on change can tell.
+    pub fn clear_selection(&mut self) -> bool {
+        self.selection.take().is_some()
+    }
+
     /// The pane demoted by the most recent promotion, while its highlight
     /// lasts. `None` once the window has passed or nothing was promoted yet.
     pub fn demoted(&self, now: Timestamp) -> Option<usize> {
@@ -741,6 +869,9 @@ impl DeckState {
     /// `SelectPosition` carries a zero-based configured position. The input
     /// layer turns the user's one-based terminal number into this value.
     pub fn apply(&mut self, action: &ActionCommand, projects: &[Project], now: Timestamp) -> bool {
+        // A selection is frame coordinates in one pane, and every action here
+        // can move that pane, renumber it or resize it (#148).
+        self.selection = None;
         match action {
             ActionCommand::SelectNext => self.step(1, now),
             ActionCommand::SelectPrevious => self.step(-1, now),

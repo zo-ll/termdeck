@@ -63,6 +63,136 @@ pub(super) fn encode_paste(
     bytes
 }
 
+/// The pointer's text-selection gesture (#148).
+///
+/// The press decides what a drag is: on pane content it arms a selection, on
+/// the title row or the border it arms nothing here and the reorder drag
+/// keeps the pointer as it always did. A press that is released without
+/// moving to another cell selects nothing at all, so the double-click that
+/// promotes a pane is untouched (`mouse-selection.md` §1).
+#[derive(Default)]
+pub(super) struct Selecting {
+    /// The content cell the press landed on, while it may still become a
+    /// selection.
+    press: Option<(usize, u16, u16)>,
+    /// The pane a selection is running in, once one has started.
+    active: Option<usize>,
+}
+
+/// What one pointer event means to the selection gesture.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum SelectStep {
+    /// Not this gesture's event: the deck's other pointer gestures own it.
+    Pass,
+    /// The selection now runs from its anchor to here.
+    Extend(Selection),
+    /// The gesture ended. Whatever is selected is what gets copied.
+    Copy,
+}
+
+impl Selecting {
+    /// The pane a press is being held in, if any. The gesture belongs to that
+    /// pane until the release, wherever the pointer has travelled to, so this
+    /// is the pane the caller clamps the pointer into.
+    pub(super) fn pane(&self) -> Option<usize> {
+        self.press.map(|(position, _, _)| position)
+    }
+
+    /// `content` is the cell under the pointer, `None` off a pane's viewport;
+    /// `head` is the same pointer clamped into the pane the press landed in,
+    /// so a drag that leaves the pane runs to its edge.
+    pub(super) fn step(
+        &mut self,
+        action: MouseAction,
+        content: Option<(usize, u16, u16)>,
+        head: Option<(u16, u16)>,
+    ) -> SelectStep {
+        match action {
+            MouseAction::Down => {
+                self.press = content;
+                self.active = None;
+                SelectStep::Pass
+            }
+            MouseAction::Move => {
+                let Some((position, column, row)) = self.press else {
+                    return SelectStep::Pass;
+                };
+                let Some(head) = head else {
+                    return SelectStep::Pass;
+                };
+                // The first move off the pressed cell is what tells a
+                // selection from a click; after that every move extends.
+                if self.active.is_none() && head == (column, row) {
+                    return SelectStep::Pass;
+                }
+                self.active = Some(position);
+                SelectStep::Extend(Selection::new(position, (column, row)).to(head))
+            }
+            MouseAction::Up => {
+                self.press = None;
+                match self.active.take() {
+                    Some(_) => SelectStep::Copy,
+                    None => SelectStep::Pass,
+                }
+            }
+            // Neither button has a selection gesture, and both let go of
+            // whatever the press before them armed.
+            MouseAction::SecondaryUp | MouseAction::RangeUp => {
+                self.press = None;
+                self.active = None;
+                SelectStep::Pass
+            }
+        }
+    }
+}
+
+/// Asks the outer terminal to put `text` on the system clipboard: OSC 52,
+/// base64-encoded, terminated with BEL (#148).
+///
+/// This is the one copy target that reaches the machine the user is sitting
+/// at when termdeck is running over SSH, and it costs no dependency — see
+/// `mouse-selection.md` §4.2 for the providers it was chosen over. It is
+/// fire-and-forget: the host may refuse it and there is no reply to wait
+/// for, which is what `^g v` is the answer to.
+pub(super) fn clipboard_sequence(text: &str) -> Vec<u8> {
+    let mut bytes = b"\x1b]52;c;".to_vec();
+    bytes.extend_from_slice(base64(text.as_bytes()).as_bytes());
+    bytes.push(0x07);
+    bytes
+}
+
+/// Standard base64 with padding. Twenty lines against a dependency.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let mut group = [0_u8; 3];
+        group[..chunk.len()].copy_from_slice(chunk);
+        let packed = u32::from(group[0]) << 16 | u32::from(group[1]) << 8 | u32::from(group[2]);
+        for index in 0..4 {
+            encoded.push(if index <= chunk.len() {
+                ALPHABET[(packed >> (18 - 6 * index)) as usize & 0x3f] as char
+            } else {
+                '='
+            });
+        }
+    }
+    encoded
+}
+
+/// The text a standing selection stands for, read from the frame the engine
+/// holds right now. Empty selections — a drag over blank cells — copy
+/// nothing rather than clearing the clipboard (`mouse-selection.md` §4.1).
+pub(super) fn selection_text(
+    engine: &dyn TerminalEngine,
+    projects: &[Project],
+    selection: &Selection,
+) -> Option<String> {
+    let frame = engine.frame(&projects.get(selection.position)?.terminal)?;
+    let text = selection.text(frame);
+    (!text.trim().is_empty()).then_some(text)
+}
+
 /// What a wheel tick over a pane becomes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum WheelRoute {
