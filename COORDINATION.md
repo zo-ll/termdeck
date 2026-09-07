@@ -1469,6 +1469,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   shutdown/grace flakes, pass isolated) + release 419+5+1 green; fmt+clippy
   clean. Routed to CRITIC (assignment .scratch/tasks/140-small-geometry.
   critic.md). Merge order STILL: #136-r3 → #143 → #140.
+- 2026-09-07: #140 MERGED + CLOSED (auto-close keyword) — no-ff merge on main,
+  gate 419 lib + 5 + 1 green (clean pass; the 2 parallel failures were
+  load-sensitive sandbox flakes — scrollback-timing + documented grace — both
+  pass isolated), pushed. Critic PASS, no nits: MIN_CANVAS 7x7 honest
+  (whole Narrow pane draws), all subtraction audited behind guards, release-
+  meaningful assertions, render.rs hunks verified inset-title/footer NOT
+  #144:567. CI for THIS merge still expected red on the independent #136
+  zsh test — not this slice. In flight: codex → #136-r3. Remaining queue:
+  #136-r3 (blocker) → #143 → P1 #139/#141/#142 → P2s.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
