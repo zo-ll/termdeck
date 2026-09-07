@@ -1478,6 +1478,26 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   #144:567. CI for THIS merge still expected red on the independent #136
   zsh test — not this slice. In flight: codex → #136-r3. Remaining queue:
   #136-r3 (blocker) → #143 → P1 #139/#141/#142 → P2s.
+- 2026-09-07: #136-R3 DONE (codex 9da4b79) — child-side readiness: each shell
+  hook emits a private OSC marker `ESC]7777;termdeck;ready BEL` at its FIRST
+  PROMPT (bash PROMPT_COMMAND __td_ready, zsh zle-line-init widget, fish
+  fish_prompt self-removing); transport holds queued input until the marker
+  is seen (carry buffer + prefix-trim, marker stripped from stream); non-hooked
+  panes unchanged. CORRECTION of my earlier round-2 finding: zsh termios
+  never transitions was right; the fix is not to detect readiness from the
+  OUTSIDE but let the SHELL prove it from INSIDE. Coordinator verification
+  with real zsh (apt 5.9 extracted /tmp/zsh-local + module_path fix via
+  ZDOTDIR — compiled-in module dir absent here): zsh hook test 10/10 isolated
+  + passes in full parallel suite; SAME test with 0.5s DELIBERATE startup
+  delay 5/5 PASS (the robustness round-1 lacked); prompt-gate unit test 3/3;
+  full gate green except the documented sandbox grace flake; fmt+clippy
+  clean. NOTE the local env prerequisite for zsh tests (PATH + ZDOTDIR)
+  documented for future sessions. Routed to CRITIC round-3 (assignment
+  .scratch/tasks/136-correction-r3.critic.md — marker timing per shell,
+  split-marker scanning, marker-never-renders, no-hook-prompt deadlock re-
+  check, OSC finished-path non-corruption, $? preservation). On PASS → rebase
+  onto origin/main (post-#140) → merge → watch CI for the FIRST green since
+  8ae14fc → close #136 #138.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
