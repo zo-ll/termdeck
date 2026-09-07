@@ -1429,6 +1429,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   composer (staged, unsubmitted) — claude NOT clean-idle; #140 NOT dispatched
   to it yet (hard rule: no staged messages). #140 will go to claude once its
   composer is clean; merge order per lock: #136-correction → #143 → #140.
+- 2026-09-07: #136-CORRECTION DONE (codex 08e1d21, rebased 4d57acc) — termios-set
+  readiness gate replacing first-output: Linux captures lflag at spawn
+  (tcgetattr on master = slave termios) and opens the gate on
+  `current != at_spawn && (ICANON|ECHO|ISIG) == ISIG` (readline/ZLE/fish raw
+  mode); `write()` returns Queued while closed; non-Linux keeps documented
+  output fallback. New deterministic test: bash child emits STARTUP-OUTPUT then
+  busy-waits on a marker file — asserts input STAYS queued despite output
+  (discriminating vs the old gate), then releases marker and asserts arrival
+  whole. Coordinator re-gated post-rebase: 410 lib + 5 termctl + 1 main green;
+  the new test runs locally (bash present) and passed; zsh/fish tests still
+  skip locally — CI is the judge. Routed to CRITIC round-2 (assignment
+  .scratch/tasks/136-correction.critic.md; verifies the Linux master-mirrors-
+  slave claim, ISIG pattern across bash/zsh/fish, gate-never-opens vs
+  opens-too-early, fd safety, discriminating test). In flight: critic→#136-r2,
+  claude→#140 (Working).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
