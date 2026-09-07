@@ -2,9 +2,10 @@
 use super::dispatch_control;
 use super::input::{CAPTURE_PAYLOAD, MOUSE_SEQUENCE_CAP, PASTE_CLOSE, PASTE_OPEN};
 use super::{
-    InputEvent, KeyReader, MouseAction, WheelRoute, add_failure, add_terminal, app_wheel, chosen,
-    close_terminal, dispatch_live_input, encode_paste, master_terminal, mouse_action, now,
-    open_terminals, request_close, resize_terminals, resized, route_wheel, schedule_expiry_repaint,
+    InputEvent, KeyReader, MouseAction, SelectStep, Selecting, WheelRoute, add_failure,
+    add_terminal, app_wheel, chosen, clipboard_sequence, close_terminal, dispatch_live_input,
+    encode_paste, master_terminal, mouse_action, now, open_terminals, request_close,
+    resize_terminals, resized, route_wheel, schedule_expiry_repaint, selection_text,
     spawn_terminals, spawn_terminals_with_socket, terminal_sizes, workspace_of,
 };
 use crate::{
@@ -13,7 +14,9 @@ use crate::{
         ScrollCommand, ScrollbackPosition, TerminalEngine, TerminalId, TerminalMetadata, Timestamp,
     },
     engine::FakeEngine,
-    ui::{DeckState, Input, Key, Modal, Notifications, PickerState, Reaction, SheetState},
+    ui::{
+        DeckState, Input, Key, Modal, Notifications, PickerState, Reaction, Selection, SheetState,
+    },
 };
 use ratatui::layout::Position;
 use std::collections::BTreeSet;
@@ -2148,4 +2151,229 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
     assert!(!quit, "a promotion is not a reason to leave");
 
     engine.dispatch(EngineCommand::Shutdown);
+}
+
+// ---------------------------------------------------------------------------
+// #148: the pointer's text-selection gesture.
+
+/// A terminal frame carrying `lines`, wide enough to hold them: the smallest
+/// thing a selection can be read out of.
+fn frame_of(terminal: &TerminalId, lines: &[&str]) -> crate::contracts::TerminalFrame {
+    let columns = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(1);
+    let size = ScreenSize::new(columns.max(1) as u16, lines.len().max(1) as u16);
+    let mut frame = crate::contracts::TerminalFrame::blank(terminal.clone(), size, 1);
+    for (row, line) in lines.iter().enumerate() {
+        for (column, character) in line.chars().enumerate() {
+            let index = frame.cell_index(column as u16, row as u16).unwrap();
+            frame.cells[index].content = crate::contracts::CellContent::Glyph {
+                text: character.to_string(),
+                width: crate::contracts::CellWidth::One,
+            };
+        }
+    }
+    frame
+}
+
+/// The whole of the coexistence rule: where the press lands decides what the
+/// drag is, and a press that never moves off its cell is still a click.
+#[test]
+fn the_press_decides_whether_a_drag_selects_or_reorders() {
+    let mut gesture = Selecting::default();
+
+    // Pressed on chrome — a title row or a border — the gesture owns nothing,
+    // whatever the pointer does next, so the reorder drag keeps the pointer.
+    assert_eq!(
+        gesture.step(MouseAction::Down, None, None),
+        SelectStep::Pass
+    );
+    assert_eq!(gesture.pane(), None);
+    assert_eq!(
+        gesture.step(MouseAction::Move, Some((1, 4, 4)), Some((4, 4))),
+        SelectStep::Pass
+    );
+    assert_eq!(gesture.step(MouseAction::Up, None, None), SelectStep::Pass);
+
+    // Pressed on content and released on the same cell: still nothing, which
+    // is what leaves the double-click promotion alone.
+    assert_eq!(
+        gesture.step(MouseAction::Down, Some((0, 7, 9)), Some((7, 9))),
+        SelectStep::Pass
+    );
+    assert_eq!(gesture.pane(), Some(0), "the press holds the pane");
+    assert_eq!(
+        gesture.step(MouseAction::Move, Some((0, 7, 9)), Some((7, 9))),
+        SelectStep::Pass,
+        "a move that stays on the pressed cell is not a drag"
+    );
+    assert_eq!(gesture.step(MouseAction::Up, None, None), SelectStep::Pass);
+
+    // Pressed on content and dragged: a selection, anchored where the press
+    // landed and extended to wherever the pointer is now, even once that is
+    // outside the pane and the caller has clamped it to the edge.
+    assert_eq!(
+        gesture.step(MouseAction::Down, Some((0, 2, 1)), Some((2, 1))),
+        SelectStep::Pass
+    );
+    assert_eq!(
+        gesture.step(MouseAction::Move, None, Some((9, 1))),
+        SelectStep::Extend(Selection::new(0, (2, 1)).to((9, 1)))
+    );
+    assert_eq!(
+        gesture.step(MouseAction::Move, None, Some((91, 6))),
+        SelectStep::Extend(Selection::new(0, (2, 1)).to((91, 6))),
+        "the gesture stays in the pressed pane wherever the pointer goes"
+    );
+    assert_eq!(gesture.step(MouseAction::Up, None, None), SelectStep::Copy);
+    assert_eq!(gesture.pane(), None, "the release lets go");
+
+    // A secondary or shift release lets go of an armed press too, so a
+    // stray chord can never leave a selection half-made.
+    gesture.step(MouseAction::Down, Some((0, 2, 1)), Some((2, 1)));
+    assert_eq!(
+        gesture.step(MouseAction::SecondaryUp, None, None),
+        SelectStep::Pass
+    );
+    assert_eq!(gesture.pane(), None);
+    assert_eq!(
+        gesture.step(MouseAction::Move, None, Some((9, 1))),
+        SelectStep::Pass
+    );
+}
+
+/// A drag that selects text and one that reorders panes are the same three
+/// events: this pins that the reorder half still reaches `mouse_action`
+/// untouched when the press was on chrome.
+#[test]
+fn a_chrome_drag_still_reorders_while_a_content_drag_selects() {
+    let mut gesture = Selecting::default();
+    let mut state = DeckState::new(4);
+    let mut last_click = None;
+    let at = |millis| Timestamp {
+        unix_millis: millis,
+    };
+
+    // Pressed on preview 1's title row: no content cell, so the gesture
+    // passes and the existing promotion drag runs exactly as it did.
+    assert_eq!(
+        gesture.step(MouseAction::Down, None, None),
+        SelectStep::Pass
+    );
+    mouse_action(
+        &mut state,
+        Some(1),
+        MouseAction::Down,
+        at(0),
+        &mut last_click,
+    );
+    assert_eq!(
+        gesture.step(MouseAction::Move, Some((0, 3, 3)), Some((3, 3))),
+        SelectStep::Pass
+    );
+    mouse_action(
+        &mut state,
+        Some(0),
+        MouseAction::Move,
+        at(1),
+        &mut last_click,
+    );
+    assert_eq!(gesture.step(MouseAction::Up, None, None), SelectStep::Pass);
+    let action = mouse_action(&mut state, Some(0), MouseAction::Up, at(2), &mut last_click);
+
+    assert_eq!(action, Some(ActionCommand::SelectPosition(1)));
+}
+
+/// The copy reads the frame the engine holds, and a drag over blank cells
+/// copies nothing rather than clearing the clipboard.
+#[test]
+fn a_copy_reads_the_pane_under_the_selection() {
+    let projects = sleepers(2);
+    let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    engine.set_frame(frame_of(&projects[0].terminal, &["$ pnpm dev", ""]));
+
+    // `$ pnpm dev` is the frame's first row.
+    let selection = Selection::new(0, (0, 0)).to((5, 0));
+    assert_eq!(
+        selection_text(&engine as &dyn TerminalEngine, &projects, &selection),
+        Some("$ pnpm".to_owned())
+    );
+    // Two rows, the second of which is blank: the blank one is an empty line.
+    let selection = Selection::new(0, (7, 0)).to((3, 1));
+    assert_eq!(
+        selection_text(&engine as &dyn TerminalEngine, &projects, &selection),
+        Some("dev\n".to_owned())
+    );
+    // Nothing but blanks copies nothing at all.
+    let selection = Selection::new(0, (0, 1)).to((40, 1));
+    assert_eq!(
+        selection_text(&engine as &dyn TerminalEngine, &projects, &selection),
+        None
+    );
+    // A pane the deck has no project for answers nothing rather than panicking.
+    let selection = Selection::new(9, (0, 0)).to((5, 0));
+    assert_eq!(
+        selection_text(&engine as &dyn TerminalEngine, &projects, &selection),
+        None
+    );
+}
+
+/// The copy leaves as OSC 52, base64 with padding, terminated with BEL: the
+/// one target that reaches the user's own clipboard over SSH, and the only
+/// one that costs no dependency (`mouse-selection.md` §4.2).
+#[test]
+fn a_copy_leaves_as_an_osc_52_clipboard_request() {
+    assert_eq!(clipboard_sequence("man"), b"\x1b]52;c;bWFu\x07".to_vec());
+    // The two padding cases, and a byte sequence that exercises the top of
+    // the alphabet rather than only its letters.
+    assert_eq!(clipboard_sequence("ma"), b"\x1b]52;c;bWE=\x07".to_vec());
+    assert_eq!(clipboard_sequence("m"), b"\x1b]52;c;bQ==\x07".to_vec());
+    assert_eq!(clipboard_sequence(""), b"\x1b]52;c;\x07".to_vec());
+    assert_eq!(
+        clipboard_sequence("\u{fb}\u{ff}\u{fe}"),
+        b"\x1b]52;c;w7vDv8O+\x07".to_vec()
+    );
+    // Multi-line copies travel as their own bytes; nothing is escaped away.
+    assert_eq!(clipboard_sequence("a\nb"), b"\x1b]52;c;YQpi\x07".to_vec());
+}
+
+/// `^g v` is the way back out of a copy on a host that refuses OSC 52 and
+/// never says so. It is a paste operation like every other (#120).
+#[test]
+fn the_pointer_copy_pastes_back_as_a_paste_operation() {
+    let mut input = Input::new(38);
+    let mut deck = DeckState::new(2);
+    let projects = sleepers(2);
+    let at = Timestamp { unix_millis: 0 };
+
+    assert_eq!(input.press(Key::Ctrl('g'), &mut deck, &projects, at), None);
+    assert_eq!(
+        input.press(Key::Char('v'), &mut deck, &projects, at),
+        Some(Reaction::PasteCopy)
+    );
+
+    // The session's half: bracketed for a child that holds DEC 2004, raw for
+    // one that does not.
+    let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
+    let frontend = projects[0].terminal.clone();
+    assert_eq!(
+        encode_paste(&engine, &frontend, "ls -l".to_owned()),
+        b"ls -l".to_vec()
+    );
+    engine.set_metadata(
+        &frontend,
+        TerminalMetadata {
+            bracketed_paste: true,
+            ..TerminalMetadata::default()
+        },
+    );
+    let mut expected = PASTE_OPEN.to_vec();
+    expected.extend_from_slice(b"ls -l");
+    expected.extend_from_slice(PASTE_CLOSE);
+    assert_eq!(
+        encode_paste(&engine, &frontend, "ls -l".to_owned()),
+        expected
+    );
 }

@@ -42,7 +42,7 @@ use crate::{
     engine::NativeEngine,
     ui::{
         Browse, Deck, DeckState, FsBrowse, Input, Key, Listing, Notifications, Picker,
-        PickerReaction, PickerState, Reaction, Sheet, SheetState, picker,
+        PickerReaction, PickerState, Reaction, Selection, Sheet, SheetState, picker,
     },
 };
 
@@ -526,6 +526,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     let mut marker_press: Option<usize> = None;
     // The pane whose close affordance is being pressed, if any (#84).
     let mut close_press: Option<usize> = None;
+    // The pointer's text-selection gesture, and what it last copied (#148).
+    // The copy goes to the host's clipboard by OSC 52, which no host
+    // acknowledges and some refuse, so the session keeps the text: `^g v`
+    // pastes it back into the active terminal.
+    let mut selecting = Selecting::default();
+    let mut copied = String::new();
     // The runtime-add sheet, while it is open. It owns every key it sees.
     let mut sheet: Option<SheetState> = None;
     // Closed pane identities, tombstoned on every close path (#121).
@@ -551,6 +557,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
         }
         let current_size = screen_size()?;
         if current_size != size {
+            // The children reflow, so a selection's cells now hold something
+            // else (#148).
+            deck.clear_selection();
             resize_terminals(&mut engine, &projects, &deck, current_size);
             input.set_page(current_size.rows.saturating_sub(4));
             size = current_size;
@@ -679,6 +688,9 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     last_click = None;
                     marker_press = None;
                     close_press = None;
+                    // The user has moved on, and typing changes what is under
+                    // a standing highlight (#148).
+                    deck.clear_selection();
                     deck.set_resizing(false);
                     let was_scrollback = deck.scrollback();
                     let application_cursor = deck
@@ -784,6 +796,25 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 );
                             }
                         }
+                        // The pointer's copy, back out (#148). It is a
+                        // paste operation like any other, so it is bracketed
+                        // for a child that holds DEC 2004 (#120).
+                        Some(Reaction::PasteCopy) => {
+                            if let Some(active) = deck.active()
+                                && !copied.is_empty()
+                            {
+                                let bytes = encode_paste(
+                                    &engine,
+                                    &projects[active].terminal,
+                                    copied.clone(),
+                                );
+                                dispatch_live_input(
+                                    &mut engine,
+                                    projects[active].terminal.clone(),
+                                    bytes,
+                                );
+                            }
+                        }
                         Some(Reaction::Quit) => break 'session,
                         None => {}
                     }
@@ -796,6 +827,8 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     last_click = None;
                     marker_press = None;
                     close_press = None;
+                    // The content scrolls out from under the cells (#148).
+                    deck.clear_selection();
                     deck.set_resizing(false);
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -890,12 +923,18 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 } => {
                     marker_press = None;
                     close_press = None;
+                    selecting.step(action, None, None);
                     mouse_action(&mut deck, None, action, now(), &mut last_click);
                 }
                 InputEvent::Mouse { pointer, action } => {
                     // A click anywhere is the batch read and answered.
                     if action == MouseAction::Up {
                         notifies.dismiss(now());
+                    }
+                    // Any press ends the selection before it: the next
+                    // gesture starts here (#148).
+                    if action == MouseAction::Down {
+                        deck.clear_selection();
                     }
                     if deck.modal().is_none() {
                         let area = ratatui::layout::Rect::new(0, 0, size.columns, size.rows);
@@ -932,7 +971,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 master_ratio: deck.master_ratio(),
                                 now: now(),
                             };
-                            action == MouseAction::Up && bar.add_at(area, pointer)
+                            // The release that ends a selection drag is not
+                            // a click on the bar, wherever the pointer has
+                            // wandered to by then (#148).
+                            action == MouseAction::Up
+                                && selecting.pane().is_none()
+                                && bar.add_at(area, pointer)
                         };
                         if plus {
                             sheet = Some(SheetState::new(&roots));
@@ -987,6 +1031,63 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                         if closing {
                             continue;
                         }
+                        // Where the press landed decides what the drag is:
+                        // on pane content it selects text, on the title row
+                        // or the border it reorders panes as it always did
+                        // (#148). A press released without moving off its
+                        // cell selects nothing, so the double-click that
+                        // promotes a pane is untouched.
+                        let step = {
+                            let pane = Deck {
+                                workspace: &workspace.name,
+                                projects: &projects,
+                                state: &deck,
+                                notifies: &notifies,
+                                master_ratio: deck.master_ratio(),
+                                now: now(),
+                            };
+                            let content = pane.selection_cell(&engine, area, pointer);
+                            let head = selecting
+                                .pane()
+                                .or(content.map(|(position, _, _)| position))
+                                .and_then(|position| {
+                                    pane.selection_head(&engine, area, position, pointer)
+                                });
+                            selecting.step(action, content, head)
+                        };
+                        match step {
+                            SelectStep::Extend(selection) => {
+                                deck.cancel_drag();
+                                last_click = None;
+                                marker_press = None;
+                                close_press = None;
+                                deck.set_selection(selection);
+                                continue;
+                            }
+                            SelectStep::Copy => {
+                                deck.cancel_drag();
+                                last_click = None;
+                                if let Some(text) =
+                                    deck.selection().as_ref().and_then(|selection| {
+                                        selection_text(&engine, &projects, selection)
+                                    })
+                                {
+                                    // Fire-and-forget: the host may refuse
+                                    // OSC 52 and never says so, so the copy
+                                    // is kept for `^g v` either way.
+                                    let mut out = io::stdout();
+                                    let _ = out.write_all(&clipboard_sequence(&text));
+                                    let _ = out.flush();
+                                    copied = text;
+                                } else {
+                                    // A drag over blank cells copies nothing
+                                    // and leaves no highlight behind.
+                                    deck.clear_selection();
+                                }
+                                continue;
+                            }
+                            SelectStep::Pass => {}
+                        }
                         // The disclosure marker owns its two cells: pressing
                         // there starts no drag and arms no promotion, and the
                         // release folds or unfolds that preview.
@@ -1023,6 +1124,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     last_click = None;
                     marker_press = None;
                     close_press = None;
+                    deck.clear_selection();
                     deck.set_resizing(false);
                     if let Some(active) = deck.active()
                         && deck.modal().is_none()

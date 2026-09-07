@@ -121,7 +121,7 @@ pub(super) fn modal_hints(modal: Modal) -> Line<'static> {
 
 /// The help overlay's bindings, from the plan. An empty description marks a
 /// section heading.
-pub(super) const HELP: [(&str, &str); 19] = [
+pub(super) const HELP: [(&str, &str); 20] = [
     ("NAVIGATE", ""),
     ("^g j  ^g k", "promote next / previous"),
     ("^g ↓  ^g ↑", "same, with arrow keys"),
@@ -137,6 +137,7 @@ pub(super) const HELP: [(&str, &str); 19] = [
     ("TERMINAL", ""),
     ("^g r", "respawn active terminal"),
     ("^g x", "close active terminal"),
+    ("^g v", "paste the last mouse copy"),
     ("^g ^g", "send a literal ^g"),
     ("SESSION", ""),
     ("^g ?", "this help"),
@@ -188,6 +189,35 @@ pub(super) fn pane_content(pane: Rect) -> Option<Rect> {
         width: pane.width - 2 - 2 * PADDING,
         height: pane.height - 2,
     })
+}
+
+/// The rows of `content` that draw terminal cells, once whatever footer this
+/// pane is showing has taken its own.
+///
+/// Scrollback mode owns two rows of the master's foot, an exited pane spends
+/// two on its exit summary, and a preview holding a detached viewport spends
+/// one on its `↑ n lines below` marker. The rule lives here because two
+/// callers need the same answer: [`super::Deck::draw_pane`] draws into it,
+/// and the selection hit test (#148) must never offer a footer row as a
+/// selectable cell.
+pub(super) fn viewport_of(
+    content: Rect,
+    master: bool,
+    exited: bool,
+    metadata: &TerminalMetadata,
+    scrollback: bool,
+) -> Rect {
+    let footer = if (master && scrollback) || exited {
+        2
+    } else if !master && metadata.scrollback.lines_below > 0 {
+        1
+    } else {
+        0
+    };
+    Rect {
+        height: content.height.saturating_sub(footer),
+        ..content
+    }
 }
 
 /// Where a right-aligned run of `width` columns starts inside `content`, or
@@ -433,6 +463,7 @@ pub(super) fn draw_terminal(
     terminal: &TerminalFrame,
     default_fg: Color,
     background: Color,
+    selection: Option<&Selection>,
 ) {
     let clipped = terminal.size.columns > area.width;
     for row in 0..area.height.min(terminal.size.rows) {
@@ -443,7 +474,10 @@ pub(super) fn draw_terminal(
             let Some(target) = buffer.cell_mut((area.x + column, area.y + row)) else {
                 continue;
             };
-            let style = cell_style(&cell.style, default_fg, background);
+            let mut style = cell_style(&cell.style, default_fg, background);
+            if selection.is_some_and(|selection| selection.contains(column, row)) {
+                style = inverted(style);
+            }
             match &cell.content {
                 CellContent::Glyph { text, .. } => {
                     target.set_symbol(text);
@@ -478,6 +512,22 @@ pub(super) fn cell_style(style: &CellStyle, default_fg: Color, background: Color
         }
     }
     result
+}
+
+/// A selected cell, drawn as the negative of what is there (#148).
+///
+/// The palette has no selection colour to spare — `pin-terminal.md` §3 found
+/// the border vocabulary spoken for and the same holds of the rest — and a
+/// wash would be illegible over child output termdeck does not choose. So the
+/// resolved colours are swapped, and the cell's own `REVERSED` attribute is
+/// dropped with them: a cell the child had already inverted would otherwise
+/// re-invert and read as the one cell in the range that is *not* selected.
+pub(super) fn inverted(style: Style) -> Style {
+    Style::new()
+        .fg(style.bg.unwrap_or(Color::Reset))
+        .bg(style.fg.unwrap_or(Color::Reset))
+        .add_modifier(style.add_modifier.difference(Modifier::REVERSED))
+        .remove_modifier(Modifier::REVERSED)
 }
 
 pub(super) const fn colour(rgb: Rgb) -> Color {

@@ -38,7 +38,7 @@ pub use picker::{
 };
 pub use state::{
     DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal, NOTIFY_WINDOW,
-    Notice, Notifications, Notify, SCROLLBAR_WINDOW, TOAST_WINDOW,
+    Notice, Notifications, Notify, SCROLLBAR_WINDOW, Selection, TOAST_WINDOW,
 };
 
 use crate::contracts::{
@@ -115,8 +115,9 @@ const ACTIVE_WINDOW: Elapsed = Elapsed { millis: 30_000 };
 const METER_CELLS: u64 = 6;
 /// Help overlay size: the supplement's 60 columns by 21 rows, grown a row at
 /// a time for the collapse binding, the stack-paging keys, the split
-/// divider's keys, the runtime-add sheet, the close binding and the pin.
-const HELP_SIZE: (u16, u16) = (60, 27);
+/// divider's keys, the runtime-add sheet, the close binding, the pin and
+/// the pointer copy's paste (#148).
+const HELP_SIZE: (u16, u16) = (60, 28);
 /// Quit confirmation size, from the supplement: 52 columns by 10 rows.
 const QUIT_SIZE: (u16, u16) = (52, 10);
 /// The notification toast (#97) borrows the quit confirmation's size language

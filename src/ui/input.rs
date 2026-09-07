@@ -99,6 +99,13 @@ pub enum Reaction {
     /// identity is the engine's and the session's business, not the deck's,
     /// so the reflow waits for the caller to do it (#84).
     Close,
+    /// `^g v`: paste the last mouse copy into the active terminal (#148).
+    ///
+    /// The copy itself went to the host's clipboard by OSC 52, which some
+    /// hosts refuse and none of them acknowledges. The session keeps the
+    /// text so there is always a way back out of it; the deck holds nothing,
+    /// so it only asks.
+    PasteCopy,
     /// Quit confirmed at the confirmation modal that
     /// [`ActionCommand::RequestQuit`] opened.
     Quit,
@@ -274,6 +281,10 @@ impl Input {
             // one every other prefixed command already acts on, and the
             // deck cannot reflow until the caller has ended that shell.
             Key::Char('x') => return Some(Reaction::Close),
+            // The pointer's copy, back out (#148). The session holds the
+            // text — the deck has no terminal data of its own and is not
+            // about to start.
+            Key::Char('v') => return Some(Reaction::PasteCopy),
             Key::Char('[') => ActionCommand::ToggleScrollback,
             Key::Char('r') => ActionCommand::RespawnActive,
             Key::Char('?') => ActionCommand::ShowHelp,

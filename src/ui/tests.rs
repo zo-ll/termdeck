@@ -7,12 +7,12 @@ use ratatui::{
 
 use super::{
     ACCENT, CHIP_BG, DEMOTED_BG, DEMOTED_BORDER, Deck, DeckState, ERROR, HINT, IDLE_BORDER,
-    Notifications, SEPARATOR, STATUS_BG, UNDER_FG, UNDER_HINT, WARNING, fixture,
+    Notifications, SEPARATOR, STATUS_BG, Selection, UNDER_FG, UNDER_HINT, WARNING, fixture,
 };
 use crate::{
     contracts::{
-        ActionCommand, NotifyKind, Project, ScrollbackPosition, TerminalEngine, TerminalId,
-        TerminalMetadata, TerminalStatus, Timestamp,
+        ActionCommand, CellContent, CellWidth, NotifyKind, Project, ScreenSize, ScrollbackPosition,
+        TerminalEngine, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
     },
     engine::FakeEngine,
 };
@@ -1446,12 +1446,12 @@ fn the_help_overlay_takes_the_focus_the_master_gives_up() {
 
     let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
 
-    // 60x27 centred on the canvas: columns 42..101, rows 7..33. The
+    // 60x28 centred on the canvas: columns 42..101, rows 7..34. The
     // overlay grew a row for the split divider's keys (#41), another for
-    // the runtime-add sheet (#50), another for `^g x` (#84) and another
-    // for the pin (#113).
+    // the runtime-add sheet (#50), another for `^g x` (#84), another for
+    // the pin (#113) and another for the pointer copy's paste (#148).
     assert_eq!(buffer[(42u16, 7u16)].symbol(), "┌");
-    assert_eq!(buffer[(101u16, 33u16)].symbol(), "┘");
+    assert_eq!(buffer[(101u16, 34u16)].symbol(), "┘");
     assert_eq!(buffer[(42u16, 7u16)].fg, ACCENT);
     // Focus is singular: the master border is no longer the accent, and
     // the underlay recedes by foreground alone.
@@ -2932,4 +2932,261 @@ fn no_canvas_size_panics_a_pointer_answer() {
             deck.timing_terminals(area);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// #148: mouse text selection.
+
+/// A deck with the reference stack open, so the previews have viewports.
+fn selectable() -> (Vec<Project>, DeckState) {
+    (fixture::projects(), expanded(4))
+}
+
+/// The reference canvas, whose geometry every assertion below is measured
+/// against: the master's viewport is columns 3..94 and rows 3..40, and the
+/// stack's first preview starts at column 103, row 3.
+const CANVAS: Rect = Rect {
+    x: 0,
+    y: 0,
+    width: 144,
+    height: 42,
+};
+
+/// The gesture's hit test is stricter than `pane_cell`, which wheel
+/// forwarding uses: a cell it names is a cell it will invert and copy, so
+/// chrome must never answer.
+#[test]
+fn selection_hit_testing_answers_content_and_refuses_chrome() {
+    let engine = fixture::frontend_active();
+    let (projects, state) = selectable();
+    let pane = deck_for(&projects, &state);
+    let cell =
+        |x, y| pane.selection_cell(&engine as &dyn TerminalEngine, CANVAS, Position::new(x, y));
+
+    // The master's own cells, measured from the same origin `pane_cell` uses.
+    assert_eq!(cell(10, 12), Some((0, 7, 9)));
+    assert_eq!(cell(3, 3), Some((0, 0, 0)), "the viewport's first cell");
+    assert_eq!(cell(94, 40), Some((0, 91, 37)), "and its last");
+
+    // Chrome answers nothing, in every direction.
+    assert_eq!(cell(0, 2), None, "the border ring");
+    assert_eq!(cell(10, 2), None, "the title row a drag reorders from");
+    assert_eq!(cell(0, 41), None, "the bottom border");
+    assert_eq!(cell(99, 12), None, "the gutter belongs to no pane");
+    assert_eq!(cell(10, 1), None, "the blank row above the panes");
+
+    // An open preview is selectable on the same terms; a folded strip has no
+    // viewport at all.
+    assert_eq!(cell(110, 7), Some((1, 7, 4)), "the first open preview");
+    let folded = DeckState::new(4);
+    let strip = deck_for(&projects, &folded);
+    let strips: Vec<Position> = (2..42)
+        .flat_map(|y| (0..144).map(move |x| Position::new(x, y)))
+        .filter(|pointer| {
+            strip
+                .position_at(CANVAS, *pointer)
+                .is_some_and(|position| position != 0)
+        })
+        .collect();
+    assert!(!strips.is_empty(), "a fresh deck folds every preview");
+    assert!(
+        strips.iter().all(|pointer| strip
+            .selection_cell(&engine as &dyn TerminalEngine, CANVAS, *pointer)
+            .is_none()),
+        "a folded strip draws no cell to select"
+    );
+}
+
+/// The footer rows are chrome too, and they move: scrollback mode takes two
+/// rows of the master's foot, and an exited pane takes two of its own.
+#[test]
+fn a_footer_row_is_never_offered_as_a_selectable_cell() {
+    let engine = fixture::frontend_active();
+    let (projects, state) = selectable();
+    let live = deck_for(&projects, &state);
+    let hit = |pane: &Deck<'_>, x, y| {
+        pane.selection_cell(&engine as &dyn TerminalEngine, CANVAS, Position::new(x, y))
+    };
+
+    // `app` exited, so its preview spends two rows on the exit summary.
+    assert_eq!(hit(&live, 110, 20), Some((2, 7, 4)));
+    assert_eq!(hit(&live, 110, 24), None, "the exit footer");
+
+    // Scrollback mode takes the master's last two rows while it is on.
+    let mut scrolled = state.clone();
+    scrolled.apply(&ActionCommand::ToggleScrollback, &projects, fixture::NOW);
+    let detached = deck_for(&projects, &scrolled);
+    assert_eq!(
+        hit(&live, 10, 39),
+        Some((0, 7, 36)),
+        "an ordinary master row"
+    );
+    assert_eq!(hit(&detached, 10, 39), None, "the scrollback footer");
+    assert_eq!(hit(&detached, 10, 38), Some((0, 7, 35)), "the row above it");
+}
+
+/// A drag that leaves the pane runs to the pane's edge: the press keeps the
+/// pointer until the release, the way the divider's does.
+#[test]
+fn a_drag_past_the_pane_clamps_to_its_edge() {
+    let engine = fixture::frontend_active();
+    let (projects, state) = selectable();
+    let pane = deck_for(&projects, &state);
+    let head = |x, y| {
+        pane.selection_head(
+            &engine as &dyn TerminalEngine,
+            CANVAS,
+            0,
+            Position::new(x, y),
+        )
+    };
+
+    assert_eq!(head(10, 12), Some((7, 9)), "inside, it is the cell");
+    assert_eq!(head(130, 12), Some((91, 9)), "past the right edge");
+    assert_eq!(head(0, 0), Some((0, 0)), "above and left of the pane");
+    assert_eq!(head(130, 41), Some((91, 37)), "past the bottom corner");
+}
+
+/// The range is normalised on read, so dragging up the pane and dragging
+/// down it select the same cells, and the middle rows go in whole.
+#[test]
+fn a_selection_normalises_in_both_directions() {
+    let down = Selection::new(0, (5, 1)).to((2, 3));
+    let up = Selection::new(0, (2, 3)).to((5, 1));
+
+    assert_eq!(down.bounds(), ((5, 1), (2, 3)));
+    assert_eq!(up.bounds(), down.bounds());
+    for (column, row, inside) in [
+        (4, 1, false),
+        (5, 1, true),
+        (40, 1, true),
+        (0, 2, true),
+        (99, 2, true),
+        (2, 3, true),
+        (3, 3, false),
+        (5, 0, false),
+        (5, 4, false),
+    ] {
+        assert_eq!(down.contains(column, row), inside, "{column},{row}");
+        assert_eq!(up.contains(column, row), inside, "{column},{row}");
+    }
+}
+
+/// The copy reads the same cells the highlight inverts: glyphs as written,
+/// a wide glyph once rather than twice, blanks as spaces, each row
+/// right-trimmed, and no trailing newline to submit what was only read.
+#[test]
+fn selected_text_is_built_row_by_row_from_the_frame() {
+    let mut frame = TerminalFrame::blank(TerminalId::new("t1"), ScreenSize::new(8, 3), 1);
+    let write = |frame: &mut TerminalFrame, row: u16, text: &str| {
+        let mut column = 0;
+        for character in text.chars() {
+            let wide = character == '界';
+            let index = frame.cell_index(column, row).unwrap();
+            frame.cells[index].content = CellContent::Glyph {
+                text: character.to_string(),
+                width: if wide { CellWidth::Two } else { CellWidth::One },
+            };
+            column += 1;
+            if wide {
+                let index = frame.cell_index(column, row).unwrap();
+                frame.cells[index].content = CellContent::Continuation;
+                column += 1;
+            }
+        }
+    };
+    write(&mut frame, 0, "ab界cd");
+    write(&mut frame, 1, "xy");
+    write(&mut frame, 2, "zzzz");
+
+    // One row, part way across.
+    assert_eq!(Selection::new(0, (0, 0)).to((1, 0)).text(&frame), "ab");
+    // The wide glyph counts once; its continuation contributes nothing.
+    assert_eq!(Selection::new(0, (2, 0)).to((3, 0)).text(&frame), "界");
+    // Three rows: the middle one goes in whole, and every row is trimmed of
+    // the blanks that follow it.
+    assert_eq!(
+        Selection::new(0, (1, 0)).to((1, 2)).text(&frame),
+        "b界cd\nxy\nzz"
+    );
+    // A row of nothing is an empty line, not a row of spaces.
+    assert_eq!(Selection::new(0, (4, 1)).to((7, 1)).text(&frame), "");
+    // A range that runs past the frame stops at it rather than wrapping.
+    assert_eq!(Selection::new(0, (0, 2)).to((7, 9)).text(&frame), "zzzz");
+}
+
+/// The highlight is the negative of what is there: no colour is added, so
+/// nothing has to be found for it in a palette that is fully spoken for.
+#[test]
+fn a_selection_inverts_its_own_cells_and_leaves_its_neighbours_alone() {
+    let (_projects, mut state) = selectable();
+    state.set_selection(Selection::new(0, (0, 0)).to((3, 0)));
+
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+    // The master's viewport starts at column 3, row 3: `$ pn` of `$ pnpm dev`.
+    let plain = buffer[(7u16, 3u16)].clone();
+    for column in 3u16..=6 {
+        let cell = &buffer[(column, 3u16)];
+        assert_eq!(cell.fg, plain.bg, "{column} takes the background as ink");
+        assert_eq!(cell.bg, plain.fg, "{column} takes the ink as background");
+    }
+    assert_eq!(plain.fg, super::MASTER_FG, "the cell after it is untouched");
+    assert_eq!(plain.bg, super::CANVAS);
+    // Neither the row below nor the pane's chrome knows anything about it.
+    assert_eq!(buffer[(3u16, 4u16)].fg, super::MASTER_FG);
+    assert_eq!(buffer[(0u16, 2u16)].fg, ACCENT);
+}
+
+/// A cell the child had already inverted must not re-invert and read as the
+/// one unselected cell in the range.
+#[test]
+fn a_child_inverted_cell_still_reads_as_selected() {
+    let mut engine = fixture::frontend_active();
+    let frontend = TerminalId::new("frontend");
+    let mut frame = TerminalEngine::frame(&engine, &frontend).unwrap().clone();
+    let index = frame.cell_index(1, 0).unwrap();
+    frame.cells[index].style.inverse = true;
+    engine.set_frame(frame);
+    let (_projects, mut state) = selectable();
+    state.set_selection(Selection::new(0, (0, 0)).to((1, 0)));
+
+    let (buffer, _) = render(&engine, &state, (144, 42));
+
+    let inverted = &buffer[(4u16, 3u16)];
+    assert!(
+        !inverted
+            .modifier
+            .contains(ratatui::style::Modifier::REVERSED),
+        "the child's own inversion is dropped, not compounded"
+    );
+    assert_eq!(inverted.fg, super::CANVAS);
+    assert_eq!(inverted.bg, super::MASTER_FG);
+}
+
+/// Every command that can move a pane, renumber it or resize it drops the
+/// selection, including the ones `termctl` reaches without a key press.
+#[test]
+fn any_deck_command_drops_a_standing_selection() {
+    let projects = fixture::projects();
+    let selection = Selection::new(0, (0, 0)).to((3, 0));
+    let mut applied = expanded(4);
+    applied.set_selection(selection);
+    applied.apply(&ActionCommand::SelectPosition(1), &projects, fixture::NOW);
+    assert_eq!(applied.selection(), None, "a promotion, however it arrived");
+
+    let mut folded = expanded(4);
+    folded.set_selection(selection);
+    folded.toggle_collapse(1);
+    assert_eq!(folded.selection(), None, "a fold");
+
+    let mut split = expanded(4);
+    split.set_selection(selection);
+    split.set_master_ratio(0.5);
+    assert_eq!(split.selection(), None, "a resize of the split");
+
+    let mut closed = expanded(4);
+    closed.set_selection(selection);
+    closed.close(1);
+    assert_eq!(closed.selection(), None, "a close, which renumbers");
 }

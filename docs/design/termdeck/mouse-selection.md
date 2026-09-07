@@ -367,6 +367,8 @@ wall clock, no host clipboard:
   never selects; the release copies once;
 - the OSC 52 bytes are asserted against a `Write`, including the base64
   padding cases;
-- `^g v` with an empty buffer sends nothing, and with a copy sends the
-  bracketed form to a child that holds DEC 2004 and raw bytes to one that does
-  not.
+- `^g v` reaches the session as its own reaction, and the paste it hands to
+  `encode_paste` comes out bracketed for a child that holds DEC 2004 and raw
+  for one that does not;
+- every deck command drops a standing selection — promotion, fold, split and
+  close, which is the path `termctl` arrives by.
