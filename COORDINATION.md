@@ -1400,6 +1400,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   precedent; Working verified — reading the failing test). Both on
   post-EOD origin/main, zero overlap. On merge of both → first CI-green since
   `8ae14fc`, then close #136/#137/#138, then #143 (codex) + #140 (claude).
+- 2026-09-07: #137 MERGED + CLOSED — claude `5c172e5` via no-ff merge on main
+  (`git merge --no-ff coord/137-test-env`; auto-close keyword; gate 408 lib + 5
+  termctl + 1 main with TERMDECK_SOCK unset, pushed). Critic PASS (2-line
+  test-only fix; env sweep clean; the remaining `env::var` reads are production
+  or the deliberate TERMDECK_BLESS pattern). ONE NB queued to the backlog:
+  socket_from_environment fallback now uncovered — optional deliberate serial
+  env test. Worktree + branch removed. #136 still in flight on the codex lane
+  (no marker yet). CI will STAY red until #136 lands (zsh test is the blocker);
+  step-0 green = both merged.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
