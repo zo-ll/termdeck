@@ -281,12 +281,12 @@ enum InputState {
     #[default]
     Ground,
     Escape,
+    EscapeIntermediate,
     Csi,
     String {
         kind: ControlString,
         retained: usize,
     },
-    StringEscape,
     DiscardingString {
         kind: ControlString,
     },
@@ -307,11 +307,11 @@ impl VtInputGuard {
         match self.state {
             InputState::Ground => self.advance_ground(byte, accepted),
             InputState::Escape => self.advance_escape(byte, accepted),
+            InputState::EscapeIntermediate => self.advance_escape_intermediate(byte, accepted),
             InputState::Csi => self.advance_csi(byte, accepted),
             InputState::String { kind, retained } => {
                 self.advance_string(byte, kind, retained, accepted)
             }
-            InputState::StringEscape => self.advance_string_escape(byte, accepted),
             InputState::DiscardingString { kind } => self.advance_discarding_string(byte, kind),
             InputState::DiscardingStringEscape => self.advance_discarding_escape(byte, accepted),
         }
@@ -331,6 +331,12 @@ impl VtInputGuard {
     fn advance_escape(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
         accepted.push(byte);
         self.state = match byte {
+            // `vte` executes C0 controls and ignores DEL/C1 controls without
+            // leaving Escape.  Keeping the arm is essential: any following
+            // `]`, `P`, `X`, `^`, or `_` still begins a control string.
+            0x00..=0x17 | 0x19 | 0x1c..=0x1f | 0x7f..=0xff => InputState::Escape,
+            0x18 | 0x1a => InputState::Ground,
+            0x20..=0x2f => InputState::EscapeIntermediate,
             b']' => InputState::String {
                 kind: ControlString::Osc,
                 retained: 0,
@@ -346,6 +352,19 @@ impl VtInputGuard {
             b'[' => InputState::Csi,
             0x1b => InputState::Escape,
             _ => InputState::Ground,
+        };
+        false
+    }
+
+    fn advance_escape_intermediate(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        accepted.push(byte);
+        self.state = match byte {
+            // These match `vte::Parser::advance_esc_intermediate`: controls
+            // execute or are ignored in place, while a final ends the escape.
+            0x00..=0x17 | 0x19 | 0x1c..=0x2f | 0x7f..=0xff => InputState::EscapeIntermediate,
+            0x18 | 0x1a => InputState::Ground,
+            0x1b => InputState::Escape,
+            0x30..=0x7e => InputState::Ground,
         };
         false
     }
@@ -375,7 +394,10 @@ impl VtInputGuard {
             }
             0x1b => {
                 accepted.push(byte);
-                self.state = InputState::StringEscape;
+                // `vte` dispatches the accumulated OSC/DCS data immediately
+                // and then arms a fresh Escape state; it does not wait for a
+                // possible ST byte in a separate string-escape state.
+                self.state = InputState::Escape;
                 false
             }
             0x07 if matches!(kind, ControlString::Osc) => {
@@ -401,28 +423,6 @@ impl VtInputGuard {
                 false
             }
         }
-    }
-
-    fn advance_string_escape(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
-        accepted.push(byte);
-        self.state = match byte {
-            b']' => InputState::String {
-                kind: ControlString::Osc,
-                retained: 0,
-            },
-            b'P' => InputState::String {
-                kind: ControlString::Dcs,
-                retained: 0,
-            },
-            b'X' | b'^' | b'_' => InputState::String {
-                kind: ControlString::SosPmApc,
-                retained: 0,
-            },
-            b'[' => InputState::Csi,
-            0x1b => InputState::Escape,
-            _ => InputState::Ground,
-        };
-        false
     }
 
     fn advance_discarding_string(&mut self, byte: u8, kind: ControlString) -> bool {
@@ -741,44 +741,67 @@ mod tests {
         ));
     }
 
-    /// #142: `vte` retains an unfinished OSC in a `Vec`. Once the guard has
-    /// discarded one overlong sequence, further payload must not make that
-    /// retention grow again, and a later terminator must restore normal output.
-    #[test]
-    fn unfinished_control_strings_recover_with_flat_retention() {
+    fn assert_unfinished_control_string_recovers(prefix: &[u8], case: &str) {
         const CHUNK: usize = 4096;
         let mut terminal = adapter(ScreenSize::new(16, 1));
-        terminal.feed(b"\x1b]0;");
+        terminal.feed(prefix);
 
         let payload = vec![b'x'; CHUNK];
-        let mut recovered = false;
-        for _ in 0..=(MAX_CONTROL_STRING_BYTES / CHUNK) {
+        terminal.feed(&payload);
+        assert!(
+            terminal.retained_control_bytes() >= CHUNK,
+            "{case}: vte entered a control string that the guard did not arm"
+        );
+
+        for _ in 1..=(MAX_CONTROL_STRING_BYTES / CHUNK) {
             terminal.feed(&payload);
-            if terminal.retained_control_bytes() == 0 {
-                recovered = true;
-                break;
-            }
             assert!(
                 terminal.retained_control_bytes() <= MAX_CONTROL_STRING_BYTES,
-                "unfinished control string exceeded its retention cap"
+                "{case}: unfinished control string exceeded its retention cap"
             );
         }
-        assert!(recovered, "overlong control string did not recover");
+        assert_eq!(
+            terminal.retained_control_bytes(),
+            0,
+            "{case}: overlong control string did not recover"
+        );
 
         for _ in 0..32 {
             terminal.feed(&payload);
             assert_eq!(
                 terminal.retained_control_bytes(),
                 0,
-                "recovered parser retained more unfinished control data"
+                "{case}: recovered parser retained more unfinished control data"
             );
         }
 
         let frame = terminal.feed(b"\x07recovered");
         assert!(
             frame_text(&frame).contains("recovered"),
-            "ordinary output after the discarded string was not parsed"
+            "{case}: ordinary output after the discarded string was not parsed"
         );
+    }
+
+    /// #142: `vte` retains an unfinished OSC in a `Vec`. Once the guard has
+    /// discarded one overlong sequence, further payload must not make that
+    /// retention grow again, and a later terminator must restore normal output.
+    #[test]
+    fn unfinished_control_strings_recover_with_flat_retention() {
+        assert_unfinished_control_string_recovers(b"\x1b]0;", "ordinary OSC");
+    }
+
+    /// `vte` ignores DEL while it is armed by ESC. The following `]` must
+    /// still start OSC in the guard, otherwise vte alone retains its payload.
+    #[test]
+    fn escape_del_cannot_desynchronize_the_control_string_guard() {
+        assert_unfinished_control_string_recovers(b"\x1b\x7f]0;", "ESC DEL OSC");
+    }
+
+    /// C1 bytes are also ignored while `vte` is in Escape. They must not
+    /// disarm the guard before the following control-string introducer.
+    #[test]
+    fn c1_control_cannot_desynchronize_the_control_string_guard() {
+        assert_unfinished_control_string_recovers(b"\x1b\x9d]0;", "ESC C1 OSC");
     }
 
     /// Repeated zero-width scalars used to grow Alacritty's `CellExtra` Vec
