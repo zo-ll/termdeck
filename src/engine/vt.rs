@@ -10,6 +10,7 @@ use alacritty_terminal::{
     term::{Config, Term, TermMode, cell::Flags, color::Colors},
     vte::ansi::{Color, NamedColor, Processor},
 };
+use unicode_width::UnicodeWidthChar;
 
 use crate::contracts::{
     CellContent, CellStyle, CellWidth, Cursor, MouseProtocol, Rgb, ScreenCell, ScreenSize,
@@ -21,6 +22,7 @@ pub struct VtFrameAdapter {
     terminal: TerminalId,
     term: Term<PtyReplyListener>,
     parser: Processor,
+    input_guard: VtInputGuard,
     replies: Rc<RefCell<Vec<u8>>>,
     bells: Rc<Cell<u32>>,
     revision: u64,
@@ -71,6 +73,7 @@ impl VtFrameAdapter {
                 },
             ),
             parser: Processor::new(),
+            input_guard: VtInputGuard::default(),
             replies,
             bells,
             revision: 0,
@@ -79,9 +82,29 @@ impl VtFrameAdapter {
 
     /// Advances the parser on this thread and returns the resulting owned frame.
     pub fn feed(&mut self, bytes: &[u8]) -> TerminalFrame {
-        self.parser.advance(&mut self.term, bytes);
+        let mut accepted = Vec::with_capacity(bytes.len().min(MAX_CONTROL_STRING_BYTES));
+        for &byte in bytes {
+            let reset_parser = self.input_guard.advance(byte, &mut accepted);
+            if reset_parser || accepted.len() >= MAX_CONTROL_STRING_BYTES {
+                self.parser.advance(&mut self.term, &accepted);
+                accepted.clear();
+            }
+            if reset_parser {
+                // `vte` keeps an OSC string in a Vec while it is unfinished.
+                // Starting over here discards that incomplete sequence and its
+                // allocation; the guard then ignores its remainder through the
+                // control-string terminator before normal parsing resumes.
+                self.parser = Processor::new();
+            }
+        }
+        self.parser.advance(&mut self.term, &accepted);
         self.revision = self.revision.saturating_add(1);
         self.frame()
+    }
+
+    #[cfg(test)]
+    fn retained_control_bytes(&self) -> usize {
+        self.input_guard.retained_control_bytes()
     }
 
     /// Takes bytes the terminal emulator generated in response to child
@@ -226,6 +249,260 @@ impl VtFrameAdapter {
                 text.trim_end().to_owned()
             })
             .collect()
+    }
+}
+
+/// Maximum payload kept by `vte` while it waits for a control-string terminator.
+///
+/// This comfortably covers ordinary titles, hyperlinks, clipboard requests, and
+/// image protocol headers, while making a child that dies mid-sequence bounded.
+const MAX_CONTROL_STRING_BYTES: usize = 64 * 1024;
+
+/// A normal grapheme cluster is much shorter than this (including emoji ZWJ
+/// clusters). Keeping the cap generous preserves ordinary Unicode while
+/// preventing one grid cell from retaining an unbounded `Vec<char>`.
+const MAX_COMBINING_MARKS_PER_CELL: usize = 64;
+
+/// A deliberately small mirror of the parser states relevant to data that can
+/// be retained by the emulator. It is not a second VT parser: `vte` remains
+/// authoritative for terminal semantics. The guard merely identifies strings
+/// whose unfinished payload must be discarded before `vte` can grow its OSC
+/// buffer without bound, and filters excess zero-width scalars before the
+/// terminal grid stores them in a cell.
+#[derive(Default)]
+struct VtInputGuard {
+    state: InputState,
+    pending_utf8: Vec<u8>,
+    combining_marks: usize,
+}
+
+#[derive(Default)]
+enum InputState {
+    #[default]
+    Ground,
+    Escape,
+    Csi,
+    String {
+        kind: ControlString,
+        retained: usize,
+    },
+    StringEscape,
+    DiscardingString {
+        kind: ControlString,
+    },
+    DiscardingStringEscape,
+}
+
+#[derive(Clone, Copy)]
+enum ControlString {
+    Osc,
+    Dcs,
+    SosPmApc,
+}
+
+impl VtInputGuard {
+    /// Appends a safe byte to `accepted`. Returns true exactly when the caller
+    /// must reset the real parser to drop an overlong unfinished string.
+    fn advance(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        match self.state {
+            InputState::Ground => self.advance_ground(byte, accepted),
+            InputState::Escape => self.advance_escape(byte, accepted),
+            InputState::Csi => self.advance_csi(byte, accepted),
+            InputState::String { kind, retained } => {
+                self.advance_string(byte, kind, retained, accepted)
+            }
+            InputState::StringEscape => self.advance_string_escape(byte, accepted),
+            InputState::DiscardingString { kind } => self.advance_discarding_string(byte, kind),
+            InputState::DiscardingStringEscape => self.advance_discarding_escape(byte, accepted),
+        }
+    }
+
+    fn advance_ground(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        if byte == 0x1b {
+            self.flush_pending_utf8(accepted);
+            accepted.push(byte);
+            self.state = InputState::Escape;
+        } else {
+            self.advance_text_byte(byte, accepted);
+        }
+        false
+    }
+
+    fn advance_escape(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        accepted.push(byte);
+        self.state = match byte {
+            b']' => InputState::String {
+                kind: ControlString::Osc,
+                retained: 0,
+            },
+            b'P' => InputState::String {
+                kind: ControlString::Dcs,
+                retained: 0,
+            },
+            b'X' | b'^' | b'_' => InputState::String {
+                kind: ControlString::SosPmApc,
+                retained: 0,
+            },
+            b'[' => InputState::Csi,
+            0x1b => InputState::Escape,
+            _ => InputState::Ground,
+        };
+        false
+    }
+
+    fn advance_csi(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        accepted.push(byte);
+        self.state = match byte {
+            0x1b => InputState::Escape,
+            0x40..=0x7e => InputState::Ground,
+            _ => InputState::Csi,
+        };
+        false
+    }
+
+    fn advance_string(
+        &mut self,
+        byte: u8,
+        kind: ControlString,
+        retained: usize,
+        accepted: &mut Vec<u8>,
+    ) -> bool {
+        match byte {
+            0x18 | 0x1a => {
+                accepted.push(byte);
+                self.state = InputState::Ground;
+                false
+            }
+            0x1b => {
+                accepted.push(byte);
+                self.state = InputState::StringEscape;
+                false
+            }
+            0x07 if matches!(kind, ControlString::Osc) => {
+                accepted.push(byte);
+                self.state = InputState::Ground;
+                false
+            }
+            0x9c if matches!(kind, ControlString::Dcs) => {
+                accepted.push(byte);
+                self.state = InputState::Ground;
+                false
+            }
+            _ if retained == MAX_CONTROL_STRING_BYTES => {
+                self.state = InputState::DiscardingString { kind };
+                true
+            }
+            _ => {
+                accepted.push(byte);
+                self.state = InputState::String {
+                    kind,
+                    retained: retained + 1,
+                };
+                false
+            }
+        }
+    }
+
+    fn advance_string_escape(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        accepted.push(byte);
+        self.state = match byte {
+            b']' => InputState::String {
+                kind: ControlString::Osc,
+                retained: 0,
+            },
+            b'P' => InputState::String {
+                kind: ControlString::Dcs,
+                retained: 0,
+            },
+            b'X' | b'^' | b'_' => InputState::String {
+                kind: ControlString::SosPmApc,
+                retained: 0,
+            },
+            b'[' => InputState::Csi,
+            0x1b => InputState::Escape,
+            _ => InputState::Ground,
+        };
+        false
+    }
+
+    fn advance_discarding_string(&mut self, byte: u8, kind: ControlString) -> bool {
+        self.state = match byte {
+            0x18 | 0x1a => InputState::Ground,
+            0x07 if matches!(kind, ControlString::Osc) => InputState::Ground,
+            0x9c if matches!(kind, ControlString::Dcs) => InputState::Ground,
+            0x1b => InputState::DiscardingStringEscape,
+            _ => InputState::DiscardingString { kind },
+        };
+        false
+    }
+
+    fn advance_discarding_escape(&mut self, byte: u8, accepted: &mut Vec<u8>) -> bool {
+        if byte == b'\\' {
+            self.state = InputState::Ground;
+            return false;
+        }
+
+        // ESC ends a string even when it does not form ST. Preserve the new
+        // escape sequence by replaying both bytes from a fresh parser state.
+        self.state = InputState::Ground;
+        self.advance(0x1b, accepted) || self.advance(byte, accepted)
+    }
+
+    fn advance_text_byte(&mut self, byte: u8, accepted: &mut Vec<u8>) {
+        self.pending_utf8.push(byte);
+        loop {
+            match std::str::from_utf8(&self.pending_utf8) {
+                Ok(text) => {
+                    debug_assert_eq!(text.chars().count(), 1);
+                    let character = text.chars().next().expect("pending UTF-8 is nonempty");
+                    if self.accept_text_character(character) {
+                        accepted.extend_from_slice(&self.pending_utf8);
+                    }
+                    self.pending_utf8.clear();
+                    return;
+                }
+                Err(error) if error.error_len().is_none() && self.pending_utf8.len() < 4 => return,
+                Err(error) => {
+                    let valid = error.valid_up_to();
+                    let invalid_len = error.error_len().unwrap_or(self.pending_utf8.len() - valid);
+                    accepted.extend_from_slice(&self.pending_utf8[..valid + invalid_len]);
+                    self.pending_utf8.drain(..valid + invalid_len);
+                    if self.pending_utf8.is_empty() {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn flush_pending_utf8(&mut self, accepted: &mut Vec<u8>) {
+        accepted.append(&mut self.pending_utf8);
+    }
+
+    fn accept_text_character(&mut self, character: char) -> bool {
+        match character.width() {
+            Some(0) => {
+                if self.combining_marks == MAX_COMBINING_MARKS_PER_CELL {
+                    false
+                } else {
+                    self.combining_marks += 1;
+                    true
+                }
+            }
+            Some(_) => {
+                self.combining_marks = 0;
+                true
+            }
+            None => true,
+        }
+    }
+
+    #[cfg(test)]
+    fn retained_control_bytes(&self) -> usize {
+        match self.state {
+            InputState::String { retained, .. } => retained,
+            _ => 0,
+        }
     }
 }
 
@@ -381,7 +658,7 @@ mod tests {
         TerminalId,
     };
 
-    use super::VtFrameAdapter;
+    use super::{MAX_COMBINING_MARKS_PER_CELL, MAX_CONTROL_STRING_BYTES, VtFrameAdapter};
 
     fn adapter(size: ScreenSize) -> VtFrameAdapter {
         VtFrameAdapter::new(TerminalId::new("recording"), size, DEFAULT_SCROLLBACK)
@@ -451,6 +728,76 @@ mod tests {
             frame.cell(0, 0).map(|cell| &cell.content),
             Some(CellContent::Glyph { text, width: CellWidth::One }) if text == "e\u{301}"
         ));
+    }
+
+    #[test]
+    fn ordinary_multi_mark_graphemes_remain_intact() {
+        let grapheme = "a\u{301}\u{327}\u{20dd}";
+        let frame = adapter(ScreenSize::new(4, 1)).feed(grapheme.as_bytes());
+
+        assert!(matches!(
+            frame.cell(0, 0).map(|cell| &cell.content),
+            Some(CellContent::Glyph { text, width: CellWidth::One }) if text == grapheme
+        ));
+    }
+
+    /// #142: `vte` retains an unfinished OSC in a `Vec`. Once the guard has
+    /// discarded one overlong sequence, further payload must not make that
+    /// retention grow again, and a later terminator must restore normal output.
+    #[test]
+    fn unfinished_control_strings_recover_with_flat_retention() {
+        const CHUNK: usize = 4096;
+        let mut terminal = adapter(ScreenSize::new(16, 1));
+        terminal.feed(b"\x1b]0;");
+
+        let payload = vec![b'x'; CHUNK];
+        let mut recovered = false;
+        for _ in 0..=(MAX_CONTROL_STRING_BYTES / CHUNK) {
+            terminal.feed(&payload);
+            if terminal.retained_control_bytes() == 0 {
+                recovered = true;
+                break;
+            }
+            assert!(
+                terminal.retained_control_bytes() <= MAX_CONTROL_STRING_BYTES,
+                "unfinished control string exceeded its retention cap"
+            );
+        }
+        assert!(recovered, "overlong control string did not recover");
+
+        for _ in 0..32 {
+            terminal.feed(&payload);
+            assert_eq!(
+                terminal.retained_control_bytes(),
+                0,
+                "recovered parser retained more unfinished control data"
+            );
+        }
+
+        let frame = terminal.feed(b"\x07recovered");
+        assert!(
+            frame_text(&frame).contains("recovered"),
+            "ordinary output after the discarded string was not parsed"
+        );
+    }
+
+    /// Repeated zero-width scalars used to grow Alacritty's `CellExtra` Vec
+    /// indefinitely and then get copied into each owned frame.
+    #[test]
+    fn combining_marks_per_cell_are_bounded() {
+        let mut input = String::from("a");
+        input.push_str(&"\u{301}".repeat(MAX_COMBINING_MARKS_PER_CELL + 512));
+
+        let frame = adapter(ScreenSize::new(4, 1)).feed(input.as_bytes());
+        let Some(CellContent::Glyph { text, .. }) = frame.cell(0, 0).map(|cell| &cell.content)
+        else {
+            panic!("base cell disappeared");
+        };
+        assert_eq!(
+            text.chars().count(),
+            1 + MAX_COMBINING_MARKS_PER_CELL,
+            "a cell retained more combining scalars than the configured cap"
+        );
     }
 
     #[test]
