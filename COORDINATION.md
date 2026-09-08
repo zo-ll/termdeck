@@ -54,6 +54,19 @@ events in order; only the top dashboard describes current status.
   re-review). Tests: test_relay.py (extended), test-check-aborted.py,
   fmt/clippy/499. Relay PID 265383 (single). Live detector: critic idle-ok,
   claude idle-ok, codex working, researcher retry-wait (heuristic).
+- 2026-09-08: COMPLEMENT research done (researcher; untouched by coordinator
+  dispatch — arrived via relay). Termdeck as complementary pane watch/control
+  layer over external multiplexer sessions (tmux/Zellij/Herdr). Recommend one
+  local tmux READ-ONLY text-watch connector first (tmux 3.7b present, locally
+  testable; ~7-15 person-days MVP; watcher exits close only watcher resources,
+  foreign panes/processes survive; input/creation/destructive ops disabled for
+  external panes). CORRECTION: Herdr is a separate terminal server with its own
+  socket API — herd-lite is PHP/Laravel tooling, no local Herdr executable;
+  assess via Herdr's own API, never assume tmux exposes Herdr panes. GATE: this
+  is PRODUCT tmux integration — AGENTS.md:15 (no tmux/daemon) needs a USER
+  DECISION + minimal candidate revision before any implementation (connectors
+  may observe/control user-managed sessions; Termdeck never starts their
+  servers or destroys panes; no daemon/background service). OPEN FOR USER:
 - 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
   multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
   not compete by building a pane server / live-resume. User endorsed the
