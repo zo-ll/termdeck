@@ -1,6 +1,6 @@
 # Coordination — Termdeck
 
-Status: REVIEW READY — workflow-fixes implemented on `coord/relay-fix`; product delivery through #155 is complete at baseline `dc6cfcf` (2026-09-08).
+Status: MERGED — workflow-fixes (relay round/singleton/atomic + protocol docs + COORDINATION rotation) merged 99f2cb1; product delivery through #155 complete at baseline dc6cfcf (2026-09-08).
 - Closed delivery queue: audit findings and #134/#152, sessions (#112/#156), #153/#154/#157, and #155; latest recorded product merge `a55c421`.
 - Parked decisions: #94 (MCP), #114 (discovery), #33 (animations) have no explicit closure in this checkout's journal. The last handoff's “Open: none” is not a refreshed tracker census; verify these decisions before dispatch.
 - Gate evidence: last recorded CI run `34144976340` was green; CI has not been refreshed for this dashboard edit. Latest recorded #155 local gate: 488 library + 10 termctl + 1 main tests.
