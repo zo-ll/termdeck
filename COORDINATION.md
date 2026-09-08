@@ -54,6 +54,20 @@ events in order; only the top dashboard describes current status.
   re-review). Tests: test_relay.py (extended), test-check-aborted.py,
   fmt/clippy/499. Relay PID 265383 (single). Live detector: critic idle-ok,
   claude idle-ok, codex working, researcher retry-wait (heuristic).
+- 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
+  multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
+  not compete by building a pane server / live-resume. User endorsed the
+  PANE-SOURCE ABSTRACTION hypothesis (consume panes from any backend; peek/
+  notify/master-preview/ctl consume that abstraction). Researcher study
+  dispatched — pi CANNOT serve gpt-6-astra (opencode-go 401), so the research
+  runs as CODEX (gpt-6-astra/low; user: “use codex not pi”), researcher role,
+  read-only. Worktree coord/complement-research; brief
+  .scratch/tasks/complement-research.brief.md (validate position per target,
+  ground tmux control-mode/zellij/HERDR specifically, sketch the pane-source
+  seam, MVP external-session-watch slice, consume-vs-expose, governance flag,
+  fidelity). Deliverable
+  /tmp/shipwright/termdeck/complement/termdeck-complement-research.md.
+  Codex Working (loaded .codex/skills/researcher).
 - 2026-09-08: USER SCOPE DECISION — add BOTH termctl verbs, FULL
   functionality (not the cut MVP). Surface: `termdeck attach <ws>`/
   `sessions` = launch-time resume; `termctl save [name]` = runtime checkpoint
