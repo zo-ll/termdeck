@@ -649,17 +649,52 @@ pub fn unique_name(taken: &[&str], base: &str) -> String {
 }
 
 /// Case-insensitive substring match, which is what the filter promises.
+///
+/// The fold is per character rather than `str::to_lowercase` so that it is
+/// the same fold `match_at` maps positions through: the two must never
+/// disagree about whether a name matches.
 pub fn matches(name: &str, query: &str) -> bool {
-    query.is_empty() || name.to_lowercase().contains(&query.to_lowercase())
+    query.is_empty() || lowercased(name).contains(&lowercased(query))
 }
 
 /// Where a query matches a name, for the accent the export draws on it.
+///
+/// The offsets are boundaries in `name` itself, not in its folded form.
+/// Case mapping is not length-preserving — `İ` is two bytes and lowercases
+/// to three — so a position found in the folded string means nothing
+/// against the original until it is mapped back through `origins`.
 pub fn match_at(name: &str, query: &str) -> Option<(usize, usize)> {
     if query.is_empty() {
         return None;
     }
-    let start = name.to_lowercase().find(&query.to_lowercase())?;
-    Some((start, start + query.len()))
+    let query = lowercased(query);
+    let (lowered, origins) = lowercased_with_origins(name);
+    let found = lowered.find(&query)?;
+    let start = origins[found];
+    // A match can begin or end inside one character's expansion — `i` finds
+    // the dotless half of a lowercased `İ`. The accent covers whole
+    // characters, so the tail runs to the end of the last one it touched.
+    let last = origins[found + query.len() - 1];
+    let end = last + name[last..].chars().next().map_or(0, char::len_utf8);
+    Some((start, end))
+}
+
+/// The lowercased form of `text`, folded one character at a time.
+fn lowercased(text: &str) -> String {
+    text.chars().flat_map(char::to_lowercase).collect()
+}
+
+/// [`lowercased`], alongside the offset in `name` that every folded byte
+/// came from — one entry per byte, plus `name.len()` as the tail sentinel.
+fn lowercased_with_origins(name: &str) -> (String, Vec<usize>) {
+    let mut lowered = String::with_capacity(name.len());
+    let mut origins = Vec::with_capacity(name.len() + 1);
+    for (offset, character) in name.char_indices() {
+        lowered.extend(character.to_lowercase());
+        origins.resize(lowered.len(), offset);
+    }
+    origins.push(name.len());
+    (lowered, origins)
 }
 
 fn folder_name(path: &Path) -> String {

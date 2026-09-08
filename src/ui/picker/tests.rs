@@ -2155,3 +2155,145 @@ fn the_picker_renders_and_answers_at_every_canvas_size() {
         }
     }
 }
+
+/// Names whose case mapping is not length-preserving. `İ` (U+0130) is two
+/// bytes and lowercases to three; a repository called one of these used to
+/// take the picker down as soon as the filter matched past it (#153).
+struct Unicode;
+
+impl Browse for Unicode {
+    fn list(&self, path: &Path) -> Listing {
+        Listing::of(vec![
+            Entry::parent("/home/dev"),
+            Entry::repository("İx", path.join("İx")).git("main", None, "2h ago"),
+            Entry::repository("straße", path.join("straße")).git("main", None, "1d ago"),
+            Entry::repository("Iıİi", path.join("Iıİi")).git("main", None, "3d ago"),
+            Entry::repository("höhle", path.join("höhle")).git("main", None, "1w ago"),
+        ])
+    }
+
+    fn search(&self, path: &Path) -> Vec<Entry> {
+        self.list(path)
+            .entries
+            .into_iter()
+            .filter(Entry::selectable)
+            .collect()
+    }
+
+    fn roots(&self) -> Vec<Entry> {
+        vec![Entry::folder("~/code", code()).holding(4, 4)]
+    }
+}
+
+fn filtered(query: &str) -> PickerState {
+    let mut state = browsing();
+    state.begin_filter();
+    for character in query.chars() {
+        state.push_filter(character);
+    }
+    state
+}
+
+fn draw(browser: &dyn Browse, state: &PickerState) -> Buffer {
+    let listing = state.listing(browser);
+    let roots = browser.roots();
+    let view = Picker {
+        state,
+        listing: &listing,
+        roots: &roots,
+        home: Some(Path::new("/home/dev")),
+    };
+    let mut terminal = Terminal::new(TestBackend::new(144, 42)).unwrap();
+    terminal.draw(|frame| view.render(frame)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// The offsets `match_at` hands back are boundaries in the name itself, not
+/// in its folded form: slicing the name with them is the whole point.
+#[test]
+fn match_offsets_are_boundaries_of_the_original_name() {
+    // The report's own case: `İx` lowercases to four bytes, so the old
+    // `start + query.len()` addressed byte 4 of a three-byte name.
+    assert_eq!(match_at("İx", "x"), Some((2, 3)));
+    assert_eq!(&"İx"[2..3], "x");
+    assert_eq!(match_at("straße", "ße"), Some((4, 7)));
+    assert_eq!(&"straße"[4..7], "ße");
+    // A multibyte query, uppercase, against a multibyte name.
+    assert_eq!(match_at("höhle", "Öh"), Some((1, 4)));
+    assert_eq!(&"höhle"[1..4], "öh");
+    // Turkish dotted and dotless I, which fold in opposite directions.
+    assert_eq!(match_at("Iı", "i"), Some((0, 1)));
+    assert_eq!(&"Iı"[0..1], "I");
+    assert_eq!(match_at("Iı", "ı"), Some((1, 3)));
+    assert_eq!(&"Iı"[1..3], "ı");
+    assert_eq!(match_at("İx", ""), None, "an empty query accents nothing");
+    assert_eq!(match_at("İx", "q"), None);
+}
+
+/// A match can land inside one character's expansion — `i` is only the first
+/// half of a lowercased `İ`. The accent covers the whole character it
+/// touched rather than half of one, which is not a boundary at all.
+#[test]
+fn a_match_inside_an_expansion_accents_the_whole_character() {
+    assert_eq!(match_at("İx", "i"), Some((0, 2)));
+    assert_eq!(&"İx"[0..2], "İ");
+    let (start, end) = match_at("Iıİi", "i").expect("the leading I folds to i");
+    assert!("Iıİi".is_char_boundary(start) && "Iıİi".is_char_boundary(end));
+    assert_eq!(&"Iıİi"[start..end], "I");
+}
+
+/// `matches` and `match_at` fold the same way, so the filter never keeps a
+/// row the accent cannot then place.
+#[test]
+fn every_kept_row_can_be_accented() {
+    for name in ["İx", "straße", "Iıİi", "höhle", "termdeck"] {
+        for query in ["i", "x", "ß", "ı", "İ", "Ö", "E", "ss"] {
+            assert_eq!(
+                matches(name, query),
+                match_at(name, query).is_some(),
+                "{name} against {query}"
+            );
+            if let Some((start, end)) = match_at(name, query) {
+                assert!(
+                    name.is_char_boundary(start) && name.is_char_boundary(end) && start < end,
+                    "{name} against {query} gave {start}..{end}"
+                );
+            }
+        }
+    }
+}
+
+/// Every cell the accent colour is on, in draw order — what the filter
+/// actually lit up on screen.
+fn accented(buffer: &Buffer) -> String {
+    let area = buffer.area();
+    (0..area.height)
+        .flat_map(|row| (0..area.width).map(move |column| (column, row)))
+        .filter(|cell| buffer[*cell].fg == super::super::palette::ACCENT)
+        .map(|cell| buffer[cell].symbol())
+        .collect()
+}
+
+/// The end of it: the picker draws these names, and accents the character
+/// the filter actually matched, without slicing a name apart.
+#[test]
+fn unicode_names_render_with_their_accent() {
+    for (query, expected) in [("x", "x"), ("İ", "İ"), ("ß", "ß"), ("öh", "öh")] {
+        let state = filtered(query);
+        let buffer = draw(&Unicode, &state);
+        let rendered = text(&buffer);
+        assert!(rendered.contains(query), "{query} is drawn: {rendered}");
+        assert!(
+            accented(&buffer).contains(expected),
+            "{query} accents {expected}, not {:?}",
+            accented(&buffer)
+        );
+    }
+    // The dotless halves: `i` matches the leading `İ` of `İx` and the `I`
+    // of `Iıİi`, and neither accent may land mid-character.
+    for query in ["i", "ı"] {
+        let state = filtered(query);
+        let buffer = draw(&Unicode, &state);
+        assert!(!accented(&buffer).is_empty(), "{query} accents something");
+    }
+}
