@@ -1707,6 +1707,22 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: codex → #139; claude → #153; critic idle (next verdict when a
   slice lands). AUDIT status: #143 ✓ #134 ✓; remaining P1 #139 #142 #141;
   P2s #153 #154 #145 #146 #147.
+- 2026-09-08: #139 DONE (codex 4754357 "fix: refuse paste payload terminators";
+  marker RESULT=pass "Rejected embedded bracketed-paste closers atomically; real
+  socket-to-bash regression and full gate pass"; 3 files session.rs +32 /
+  input.rs +26 / tests.rs +254; not pushed). ROUTED to CRITIC (assignment
+  .scratch/review/139-paste-exec.critic.md; critic Working).
+- 2026-09-08: #142 (unbounded parser memory, P1) DISPATCHED to the codex lane —
+  worktree ~/.worktrees/termdeck/142-parser-memory (coord/142-parser-memory off
+  origin/main 653f7e2); brief .scratch/tasks/142-parser-memory.brief.md (bound
+  unfinished control-string retention with parser recovery, bound per-cell
+  combining marks preserving normal graphemes, flat-retention regression test;
+  investigate where the parser dependency comes from; out of scope #139/#141/
+  #144-#147). Fresh codex session relaunched at the worktree; one lost-Enter
+  retry; verified Working (searching vt.rs/Cargo.toml).
+  IN FLIGHT: critic → #139 review; codex → #142; claude → #153.
+  AUDIT status: #143 ✓ #134 ✓; #139 at critic; remaining P1 #142 #141;
+  P2s #153 #154 #145 #146 #147.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
