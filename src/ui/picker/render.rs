@@ -557,17 +557,27 @@ impl Picker<'_> {
         };
         let name = clip(&name, NAME_COLUMNS);
         let plain = Style::new().fg(colour).bg(background);
-        let Some((start, end)) = self.state.filter().and_then(|query| match_at(&name, query))
-        else {
+        // The slice is asked for rather than taken: an accent is decoration,
+        // so an offset that is not a boundary of this name costs the row its
+        // highlight, never the frame.
+        let accent = self
+            .state
+            .filter()
+            .and_then(|query| match_at(&name, query))
+            .and_then(|(start, end)| {
+                Some((
+                    name.get(..start)?.to_owned(),
+                    name.get(start..end)?.to_owned(),
+                    name.get(end..)?.to_owned(),
+                ))
+            });
+        let Some((before, matched, after)) = accent else {
             return vec![Span::styled(name, plain)];
         };
         vec![
-            Span::styled(name[..start].to_owned(), plain),
-            Span::styled(
-                name[start..end].to_owned(),
-                Style::new().fg(ACCENT).bg(background),
-            ),
-            Span::styled(name[end..].to_owned(), plain),
+            Span::styled(before, plain),
+            Span::styled(matched, Style::new().fg(ACCENT).bg(background)),
+            Span::styled(after, plain),
         ]
     }
 
