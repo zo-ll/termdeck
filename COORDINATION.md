@@ -1651,6 +1651,24 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   tests). In flight: codex → #143; critic idle; claude idle. Next: critic
   review → merge (standing approval: nit-free PASS) → #139 on the codex
   lane.
+- 2026-09-08: #143 DONE (codex 73e14e3 "fix: avoid panic hook restore while
+  unwinding"; marker RESULT=pass "PanicGuard skips panic-hook restoration while
+  unwinding; subprocess regression and full gate pass"; 2 files:
+  src/session/outer.rs +3, src/session/tests.rs +28; protocol clean — not
+  pushed, no remote branch). Branch shows behind-1 vs origin/main but that is
+  only the coordinator's COORDINATION.md docs commit cf7b985 (no code) — no
+  rebase needed. ROUTED to CRITIC (assignment
+  .scratch/review/143-panic-guard.critic.md; critic pane Working).
+- 2026-09-08: #134 (CI: scheduled advisories issue-opener) DISPATCHED to the
+  CLAUDE lane in parallel (zero overlap with #143) — worktree
+  ~/.worktrees/termdeck/134-ci-advisories (coord/134-ci-advisories off
+  origin/main); brief .scratch/tasks/134-ci-advisories.brief.md (weekly
+  scheduled cargo audit → dedupe-opened GitHub issue; push-time
+  continue-on-error advisories job byte-identical; minimal permissions;
+  CI-only, no code). Fresh claude session (window relaunched at the worktree,
+  opus 5 high); dispatch verified Working (reading ci.yml).
+  In flight: critic → #143 review; claude → #134; codex idle (next #139 after
+  #143 merges).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
