@@ -249,6 +249,9 @@ fn help_for(arguments: &[String]) -> Result<Option<&'static str>, String> {
             command = Some(argument.as_str());
         }
     }
+    if takes_value {
+        return Ok(None);
+    }
     let Some(topic) = command else {
         return Ok(Some(help()));
     };
@@ -258,7 +261,7 @@ fn help_for(arguments: &[String]) -> Result<Option<&'static str>, String> {
 }
 
 const fn help() -> &'static str {
-    "TERMCTL\n\nUSAGE\n  termctl [OPTIONS] COMMAND [COMMAND OPTIONS]\n  termctl -- COMMAND [ARGUMENTS]\n\nA one-call ctl.v1 client for a running Termdeck session.\n\nCOMMANDS\n  status                 Show session status.\n  list                   List terminals.\n  peek ID [--lines N|N]  Read a terminal screen or history.\n  notify MESSAGE         Send an explicit notification.\n  open PATH              Open a directory as a terminal.\n  close ID [--force]     Close a terminal.\n  promote ID             Promote a terminal to master.\n  zoom [--on|--off]      Read or set zoom mode.\n  input ID KIND VALUE    Send --text, --paste, or --keys input.\n  version                Show the ctl.v1 schema version.\n  help [COMMAND]         Show general or command-specific help.\n\nGLOBAL OPTIONS\n  --json         Print the ctl.v1 response as JSON.\n  --socket PATH  Connect to PATH instead of TERMDECK_SOCK.\n  --             End option parsing; remaining arguments are positional.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  TERMDECK_SOCK               Socket path for the running Termdeck session.\n  TERMDECK_PANE               Current pane identity for notifications.\n  TERMDECK_NOTIFY             Enables automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permits termctl input requests from this pane.\n\nEXAMPLES\n  termctl status\n  termctl list --json\n  termctl peek backend --lines 40\n  termctl notify 'build completed'\n  termctl input backend --paste 'git status'\n  termctl help input"
+    "TERMCTL\n\nUSAGE\n  termctl [OPTIONS] COMMAND [COMMAND OPTIONS]\n  termctl -- COMMAND [ARGUMENTS]\n\nA one-call ctl.v1 client for a running Termdeck session.\n\nCOMMANDS\n  status                 Show session status.\n  list                   List terminals.\n  peek ID [--lines N|N]  Read a terminal screen or history.\n  notify MESSAGE         Send an explicit notification.\n  open PATH              Open a directory as a terminal.\n  close ID [--force]     Close a terminal.\n  promote ID             Promote a terminal to master.\n  zoom [--on|--off]      Toggle or set zoom mode; status reads it.\n  input ID KIND VALUE    Send --text, --paste, or --keys input.\n  version                Show the ctl.v1 schema version.\n  help [COMMAND]         Show general or command-specific help.\n\nGLOBAL OPTIONS\n  --json         Print the ctl.v1 response as JSON.\n  --socket PATH  Connect to PATH instead of TERMDECK_SOCK.\n  --             End option parsing; remaining arguments are positional.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  TERMDECK_SOCK               Socket path for the running Termdeck session.\n  TERMDECK_PANE               Current pane identity for notifications.\n  TERMDECK_NOTIFY             Enables automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permits termctl input requests from this pane.\n\nEXAMPLES\n  termctl status\n  termctl list --json\n  termctl peek backend --lines 40\n  termctl notify 'build completed'\n  termctl input backend --paste 'git status'\n  termctl help input"
 }
 
 fn command_help(command: &str) -> Option<&'static str> {
@@ -283,7 +286,7 @@ fn command_help(command: &str) -> Option<&'static str> {
             "TERMCTL-PROMOTE\n\nUSAGE\n  termctl [OPTIONS] promote ID\n\nPromotes terminal ID to the master pane.",
         ),
         "zoom" => Some(
-            "TERMCTL-ZOOM\n\nUSAGE\n  termctl [OPTIONS] zoom [--on|--off]\n\nReads zoom state without an option, or explicitly sets it.",
+            "TERMCTL-ZOOM\n\nUSAGE\n  termctl [OPTIONS] zoom [--on|--off]\n\nToggles zoom without an option. Use status to read zoom state; --on and --off explicitly set it.",
         ),
         "input" => Some(
             "TERMCTL-INPUT\n\nUSAGE\n  termctl [OPTIONS] input ID (--text|--paste|--keys) VALUE [--force]\n\nSends text, bracketed paste, or encoded keys to terminal ID.",
@@ -301,7 +304,7 @@ mod tests {
 
     use termdeck::ctl::{Response, SCHEMA};
 
-    use super::{help, help_for, notify_help, parse, print_response, run};
+    use super::{command_help, help, help_for, notify_help, parse, print_response, run};
 
     #[test]
     fn notify_help_cross_references_automatic_shell_notifications() {
@@ -348,6 +351,7 @@ mod tests {
     #[test]
     fn general_and_every_command_help_return_success() {
         assert!(help().contains("TERMDECK_ALLOW_INPUT"));
+        assert!(help().contains("Toggle or set zoom mode; status reads it."));
         assert!(
             help_for(&["--help".to_owned()])
                 .unwrap()
@@ -379,6 +383,28 @@ mod tests {
         );
         assert_eq!(run(vec!["unknown".to_owned()]), 2);
         assert_eq!(run(vec!["--unknown".to_owned()]), 2);
+    }
+
+    #[test]
+    fn help_prepass_keeps_help_literals_as_input_values() {
+        for input_kind in ["--text", "--paste", "--keys"] {
+            for literal_help in ["--help", "-h"] {
+                let arguments = [
+                    "input".to_owned(),
+                    "one".to_owned(),
+                    input_kind.to_owned(),
+                    literal_help.to_owned(),
+                ];
+                assert_eq!(help_for(&arguments).unwrap(), None);
+            }
+        }
+    }
+
+    #[test]
+    fn zoom_help_describes_toggle_and_status_read() {
+        let zoom_help = command_help("zoom").unwrap();
+        assert!(zoom_help.contains("Toggles zoom without an option."));
+        assert!(zoom_help.contains("Use status to read zoom state"));
     }
 
     #[test]
