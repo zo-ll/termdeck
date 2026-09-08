@@ -22,7 +22,7 @@ const READ_BUFFER_SIZE: usize = 4096;
 /// Upper bound for confirming a force SIGKILL landed before reaping helper
 /// threads (#119). SIGKILL death is prompt; this only absorbs scheduling
 /// and reaping latency so the common path joins instead of detaching.
-const FORCE_SETTLE: Duration = Duration::from_millis(500);
+pub(crate) const FORCE_SETTLE: Duration = Duration::from_millis(500);
 /// Upper bound for reaping one transport's helper threads in total (#119).
 /// After the SIGKILL above, the reader sees EOF and the waiter reaps, so
 /// both finish promptly; what cannot finish is detached, never waited out.
@@ -397,20 +397,22 @@ impl PtyTransport {
         while self.is_process_group_alive() && std::time::Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));
         }
-        let kill_result = (self.is_process_group_alive() || self.is_session_alive())
+        let kill_result = self
+            .needs_force_shutdown()
             .then(|| self.force_shutdown())
             .transpose();
         // Let the SIGKILL land: transient zombies (an init that has not
         // reaped yet) read "alive" to kill(2), and the helper threads
         // need the EOF/reap that follows the last death.
         let settle = std::time::Instant::now() + FORCE_SETTLE;
-        while (self.is_process_group_alive() || self.is_session_alive())
-            && std::time::Instant::now() < settle
-        {
+        while self.needs_force_shutdown() && std::time::Instant::now() < settle {
             thread::sleep(Duration::from_millis(20));
         }
+        let completion = (!self.has_snapshot_survivors())
+            .then_some(())
+            .ok_or_else(|| "snapshotted descendant survived shutdown".to_owned());
         self.join();
-        result.and(kill_result.map(|_| ()))
+        result.and(kill_result.map(|_| ())).and(completion)
     }
 
     /// Starts shutdown without waiting. This permits a multi-terminal owner to
@@ -471,6 +473,30 @@ impl PtyTransport {
         }
 
         false
+    }
+
+    /// Whether a descendant captured at shutdown start is still the same
+    /// live process. This covers descendants that escaped the shell session
+    /// with `setsid`; each identity is revalidated so PID reuse stays out of
+    /// the ownership boundary, and zombies do not delay completion.
+    pub(crate) fn has_snapshot_survivors(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            self.descendants.iter().any(|(pid, starttime)| {
+                proc_stat(*pid)
+                    .is_some_and(|info| info.starttime == *starttime && info.state != 'Z')
+            })
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        false
+    }
+
+    /// Force must cover every still-live ownership boundary: the original
+    /// process group, its Linux session, and descendants that escaped both
+    /// after being captured while still parented to the shell.
+    pub(crate) fn needs_force_shutdown(&self) -> bool {
+        self.is_process_group_alive() || self.is_session_alive() || self.has_snapshot_survivors()
     }
 
     /// Kills what the grace period did not take (#119): the shell's group
