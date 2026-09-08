@@ -85,6 +85,9 @@ impl PanicGuard {
 
 impl Drop for PanicGuard {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
         let _ = panic::take_hook();
         if let Some(previous) = saved_panic_hook()
             .lock()

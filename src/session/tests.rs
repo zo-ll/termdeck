@@ -22,6 +22,34 @@ use ratatui::layout::Position;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+/// #143: restoring the process panic hook is forbidden while unwinding. Run
+/// this in a child so an accidental second panic is observable as SIGABRT.
+#[test]
+fn panic_guard_unwinds_without_aborting() {
+    const CHILD: &str = "TERMDECK_PANIC_GUARD_UNWIND_CHILD";
+
+    if std::env::var_os(CHILD).is_some() {
+        let _guard = super::outer::PanicGuard::install();
+        panic!("panic through PanicGuard");
+    }
+
+    let status = std::process::Command::new(std::env::current_exe().expect("test binary path"))
+        .args([
+            "--exact",
+            "session::tests::panic_guard_unwinds_without_aborting",
+            "--nocapture",
+        ])
+        .env(CHILD, "1")
+        .status()
+        .expect("run panic guard child test");
+
+    assert_eq!(
+        status.code(),
+        Some(101),
+        "child must exit from one panic rather than aborting: {status:?}"
+    );
+}
+
 #[test]
 fn decoder_keeps_terminal_controls_and_mouse_out_of_the_shell_input_path() {
     let mut reader = reader_of(
