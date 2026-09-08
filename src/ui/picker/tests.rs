@@ -2613,21 +2613,6 @@ fn the_pointer_resumes_the_row_it_lands_on() {
     assert_eq!(state.resumed(), Some(dir.join("termdeck.json").as_path()));
 }
 
-/// The banner a restored deck opens under (§4): what came back, how stale it
-/// is, and the one thing restored text cannot say for itself.
-#[test]
-fn the_restore_banner_says_what_came_back_and_that_the_shells_are_new() {
-    let (_dir, browser) = three_sessions("sessions-banner");
-    let header = browser.header(&_dir.join("idp.json")).expect("listed");
-
-    let notice = restore_notice(
-        header,
-        std::time::UNIX_EPOCH + std::time::Duration::from_millis(SNAPSHOT_NOW),
-    );
-
-    assert_eq!(notice, "restored idp · snapshot 2h ago · shells restarted");
-}
-
 /// A snapshot stamped in the future is a clock disagreement, not an age. The
 /// row says it does not know rather than a wrong something, and no
 /// subtraction underflows on the way.

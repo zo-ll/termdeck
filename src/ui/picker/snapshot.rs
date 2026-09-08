@@ -30,14 +30,11 @@ use std::{
 
 use serde::Deserialize;
 
+use crate::session::snapshot::SCHEMA;
+
 use super::fs::phrase_age;
 use super::render::display_path;
 use super::{Browse, Entry, Listing};
-
-/// The schema this reader understands. The engine lane owns the writer and
-/// the format; anything else is a file the picker skips rather than guesses
-/// at.
-pub const SCHEMA: &str = "session.v1";
 
 /// What the "Open a folder…" row says. The escape hatch out of the session
 /// list and into the file explorer.

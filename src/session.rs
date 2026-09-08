@@ -670,6 +670,44 @@ pub fn resume(header: &SnapshotHeader) -> Result<(), Box<dyn Error>> {
     run_restored(snapshot::load_file(&header.file)?)
 }
 
+/// Puts a restore plan onto shells that have just been opened for it: every
+/// pane that came back is handed its saved transcript, and the deck is given
+/// the banner that says how old that text is, what did not come back with
+/// it, and that nothing behind it is still running.
+///
+/// A pane the plan skipped — its directory is gone — has no shell to replay
+/// into, so it is passed over here and named in the banner instead.
+fn apply_restore<E: TerminalEngine>(
+    plan: &snapshot::RestorePlan,
+    projects: &[Project],
+    engine: &mut E,
+    deck: &mut DeckState,
+) {
+    let age = snapshot::age(plan.snapshot.saved_at);
+    for pane in &plan.snapshot.panes {
+        if projects
+            .iter()
+            .any(|project| project.terminal.to_string() == pane.id)
+        {
+            engine.dispatch(EngineCommand::RestoreLines {
+                terminal: TerminalId::new(pane.id.clone()),
+                workspace: plan.workspace.name.clone(),
+                age: age.clone(),
+                lines: pane.lines.clone(),
+            });
+        }
+    }
+    let skipped = if plan.skipped.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", plan.skipped.join("; "))
+    };
+    deck.set_notice(format!(
+        "restored {} · snapshot {age} · shells restarted{skipped}",
+        plan.workspace.name,
+    ));
+}
+
 fn run_inner(
     mut workspace: Workspace,
     restored: Option<snapshot::RestorePlan>,
@@ -707,30 +745,7 @@ fn run_inner(
     let mut engine = spawn_terminals_with_scrollback(&projects, &deck, size, workspace.scrollback)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     if let Some(plan) = restored.as_ref() {
-        for pane in &plan.snapshot.panes {
-            if projects
-                .iter()
-                .any(|project| project.terminal.to_string() == pane.id)
-            {
-                engine.dispatch(EngineCommand::RestoreLines {
-                    terminal: TerminalId::new(pane.id.clone()),
-                    workspace: workspace.name.clone(),
-                    age: snapshot::age(plan.snapshot.saved_at),
-                    lines: pane.lines.clone(),
-                });
-            }
-        }
-        let skipped = if !plan.skipped.is_empty() {
-            format!(" · {}", plan.skipped.join("; "))
-        } else {
-            String::new()
-        };
-        deck.set_notice(format!(
-            "restored {} · snapshot {} · shells restarted{}",
-            workspace.name,
-            snapshot::age(plan.snapshot.saved_at),
-            skipped,
-        ));
+        apply_restore(plan, &projects, &mut engine, &mut deck);
     }
     // The engine begins with safe all-terminal timing visibility. Replace it
     // before the first drain with the panes this initial deck actually draws.

@@ -18,7 +18,8 @@ use crate::{
     ui::DeckState,
 };
 
-const SCHEMA: &str = "session.v1";
+/// The snapshot format this engine writes and the picker reads.
+pub const SCHEMA: &str = "session.v1";
 pub const MAX_PANE_LINES: usize = 2_000;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
