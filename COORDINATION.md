@@ -2153,6 +2153,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   containing whitespace is split by the tokenizer; surfaced to user).
   Worktree+branch pruned. All audit + sessions + #157 + #155 DONE. LANES all
   idle. Open: none.
+- 2026-09-08: RELAY DOUBLE-PING STILL OCCURRING (my content-md5 dedupe missed
+  the same-event-different-text case — the #155 critic verdict re-emitted with
+  fuller wording and both delivered). USER tasked a fresh codex worker (model
+  astra → auto-resolved gpt-6-astra, effort LOW) to (1) fix relay.sh to dedupe
+  by EVENT/task-slug not content, restart it, verify exactly one relay;
+  (2) after the fix, write a COMPREHENSIVE review of the coordinator workflow
+  to /home/az/Desktop/coordinator-workflow-review.md. Worktree
+  coord/relay-fix; brief .scratch/tasks/relay-fix.brief.md. Worker Working.
+  LANES: codex(astra/low) → relay-fix+review; critic/claude/researcher idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
