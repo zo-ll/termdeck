@@ -318,7 +318,7 @@ fn ctl_paste_with_an_embedded_closer_is_refused_atomically() {
         ],
         shell_hook: false,
     }];
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -344,7 +344,7 @@ fn ctl_paste_with_an_embedded_closer_is_refused_atomically() {
             ..Default::default()
         },
         None,
-        &workspace,
+        &mut workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1111,7 +1111,7 @@ fn closing_a_pane_that_is_not_the_last_asks_nothing() {
 fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(2);
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
@@ -1132,7 +1132,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
             dispatch_control(
                 $request,
                 $caller,
-                &workspace,
+                &mut workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -1153,7 +1153,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     let response = dispatch_control(
         sheet_open,
         None,
-        &workspace,
+        &mut workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1238,7 +1238,7 @@ fn ctl_input_to_an_exited_pane_is_refused_truthfully() {
         command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
         shell_hook: false,
     }];
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1278,7 +1278,7 @@ fn ctl_input_to_an_exited_pane_is_refused_truthfully() {
             ..Default::default()
         },
         None,
-        &workspace,
+        &mut workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1320,7 +1320,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
         ],
         shell_hook: false,
     }];
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1344,7 +1344,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
             ..Default::default()
         },
         None,
-        &workspace,
+        &mut workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1410,7 +1410,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
     let response = dispatch_control(
         request,
         None,
-        &workspace,
+        &mut workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1449,7 +1449,7 @@ fn a_reopened_directory_never_reuses_its_tombstoned_identity() {
 
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(1);
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1470,7 +1470,7 @@ fn a_reopened_directory_never_reuses_its_tombstoned_identity() {
             dispatch_control(
                 $request,
                 $caller,
-                &workspace,
+                &mut workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -1558,7 +1558,7 @@ fn identities_stay_unique_across_close_reopen_cycles() {
 
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(1);
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1574,7 +1574,7 @@ fn identities_stay_unique_across_close_reopen_cycles() {
             dispatch_control(
                 $request,
                 None,
-                &workspace,
+                &mut workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -2277,7 +2277,7 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
     let _lock = crate::ctl::LISTENER_TEST_LOCK.lock().unwrap();
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(2);
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -2301,7 +2301,7 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
             dispatch_control(
                 request,
                 caller,
-                &workspace,
+                &mut workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -2377,7 +2377,7 @@ fn a_socket_paste_cannot_escape_bracketed_paste_and_execute() {
         ],
         shell_hook: false,
     }];
-    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     engine.dispatch(EngineCommand::Input {
@@ -2429,7 +2429,7 @@ fn a_socket_paste_cannot_escape_bracketed_paste_and_execute() {
                 dispatch_control(
                     request,
                     caller,
-                    &workspace,
+                    &mut workspace,
                     &mut projects,
                     &mut deck,
                     &mut engine,

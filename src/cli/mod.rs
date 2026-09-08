@@ -32,6 +32,8 @@ pub enum CliCommand {
     Launch { workspace: Option<String> },
     Folder { root: PathBuf },
     Picker,
+    Attach { workspace: String },
+    Sessions,
     Check,
     List,
     Help(Option<CliHelp>),
@@ -167,6 +169,10 @@ pub fn parse_with_environment(
         }
         [command] if !literal && command == "check" => CliCommand::Check,
         [command] if !literal && command == "list" => CliCommand::List,
+        [command] if !literal && command == "sessions" => CliCommand::Sessions,
+        [command, workspace] if !literal && command == "attach" => CliCommand::Attach {
+            workspace: workspace.clone(),
+        },
         [workspace] if config_path.is_some() => CliCommand::Launch {
             workspace: Some(workspace.clone()),
         },
@@ -180,7 +186,11 @@ pub fn parse_with_environment(
                 None => default_config_path(&environment)?,
             })
         }
-        CliCommand::Folder { .. } | CliCommand::Picker | CliCommand::Help(_) => None,
+        CliCommand::Folder { .. }
+        | CliCommand::Picker
+        | CliCommand::Attach { .. }
+        | CliCommand::Sessions
+        | CliCommand::Help(_) => None,
     };
     Ok(CliIntent {
         config_path,
@@ -223,7 +233,7 @@ pub const fn help(topic: Option<CliHelp>) -> &'static str {
             "TERMDECK-LIST\n\nUSAGE\n  termdeck [--config PATH] list\n\nLists resolved terminals in the selected configuration.\n\nOPTIONS\n  --config PATH  Read this configuration file.\n  -h, --help     Show this help page.\n\nRun `termdeck --help` for environment variables and examples."
         }
         None => {
-            "TERMDECK\n\nUSAGE\n  termdeck [OPTIONS] [FOLDER|CONFIG_FILE|COMMAND]\n  termdeck --config PATH [WORKSPACE]\n  termdeck -- NAME\n\nOpen a terminal workspace. With no positional argument, opens the folder picker. A directory opens a discovered workspace; a configuration file opens its configured workspace.\n\nCOMMANDS\n  check          Validate configuration without opening a session.\n  list           List resolved configured terminals.\n  help [COMMAND] Show general or command-specific help.\n\nOPTIONS\n  --config PATH  Use PATH instead of the default configuration file.\n  -- NAME        End option and command parsing; treat NAME as a path or workspace.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  XDG_CONFIG_HOME, HOME       Locate the default configuration file.\n  TERMDECK_SOCK               Session socket provided to child panes.\n  TERMDECK_PANE               Current pane identity provided to child panes.\n  TERMDECK_NOTIFY             Enable automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permit termctl input requests from this pane.\n\nEXAMPLES\n  termdeck\n  termdeck ./project\n  termdeck ./termdeck.yaml\n  termdeck --config ./termdeck.yaml workspace\n  termdeck --config ./termdeck.yaml list\n  termdeck -- check\n  termdeck help check"
+            "TERMDECK\n\nUSAGE\n  termdeck [OPTIONS] [FOLDER|CONFIG_FILE|COMMAND]\n  termdeck --config PATH [WORKSPACE]\n  termdeck -- NAME\n\nOpen a terminal workspace. With no positional argument, opens the folder picker. A directory opens a discovered workspace; a configuration file opens its configured workspace.\n\nCOMMANDS\n  check          Validate configuration without opening a session.\n  list           List resolved configured terminals.\n  sessions       List saved session snapshots.\n  attach NAME    Restore a saved snapshot into fresh shells.\n  help [COMMAND] Show general or command-specific help.\n\nOPTIONS\n  --config PATH  Use PATH instead of the default configuration file.\n  -- NAME        End option and command parsing; treat NAME as a path or workspace.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  XDG_CONFIG_HOME, HOME       Locate the default configuration file.\n  TERMDECK_SOCK               Session socket provided to child panes.\n  TERMDECK_PANE               Current pane identity provided to child panes.\n  TERMDECK_NOTIFY             Enable automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permit termctl input requests from this pane.\n\nEXAMPLES\n  termdeck\n  termdeck ./project\n  termdeck ./termdeck.yaml\n  termdeck --config ./termdeck.yaml workspace\n  termdeck --config ./termdeck.yaml list\n  termdeck sessions\n  termdeck attach idp\n  termdeck -- check\n  termdeck help check"
         }
     }
 }
@@ -235,6 +245,21 @@ pub fn run(arguments: impl IntoIterator<Item = String>) -> Result<Option<String>
         // The binary owns the interactive picker, so this helper does not
         // attempt to open one.
         CliCommand::Picker => Ok(None),
+        CliCommand::Attach { .. } => Ok(None),
+        CliCommand::Sessions => Ok(Some(
+            crate::session::snapshot::list()?
+                .into_iter()
+                .map(|item| {
+                    format!(
+                        "{}\t{}\t{}",
+                        item.name,
+                        crate::session::snapshot::age(item.saved_at),
+                        item.panes
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )),
         CliCommand::Help(topic) => Ok(Some(help(*topic).to_owned())),
         CliCommand::Launch { .. } | CliCommand::Check | CliCommand::List => {
             let config_path = intent.required_config_path()?;
@@ -454,7 +479,11 @@ pub fn inspect(intent: &CliIntent, config: &Config) -> Result<Option<String>, Cl
                 .collect::<Vec<_>>()
                 .join("\n"),
         )),
-        CliCommand::Folder { .. } | CliCommand::Picker | CliCommand::Help(_) => Err(CliError::new(
+        CliCommand::Folder { .. }
+        | CliCommand::Picker
+        | CliCommand::Attach { .. }
+        | CliCommand::Sessions
+        | CliCommand::Help(_) => Err(CliError::new(
             "folder and picker commands do not inspect configuration",
         )),
     }
@@ -534,6 +563,20 @@ mod tests {
                 .unwrap()
                 .command,
             CliCommand::Check
+        );
+        assert_eq!(
+            parse_with_environment(["sessions".to_owned()], environment())
+                .unwrap()
+                .command,
+            CliCommand::Sessions
+        );
+        assert_eq!(
+            parse_with_environment(["attach".to_owned(), "saved".to_owned()], environment())
+                .unwrap()
+                .command,
+            CliCommand::Attach {
+                workspace: "saved".to_owned(),
+            }
         );
     }
 

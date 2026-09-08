@@ -501,6 +501,53 @@ impl DeckState {
         self
     }
 
+    /// Rehydrates only durable layout state. Modal, selection, scrollback and
+    /// animation state deliberately begin fresh with the new shells.
+    pub fn restored(
+        terminals: usize,
+        order: Vec<usize>,
+        zoomed: bool,
+        collapsed: Vec<bool>,
+        pinned: Option<usize>,
+        master_ratio: f64,
+    ) -> Result<Self, String> {
+        if order.len() != terminals
+            || collapsed.len() != terminals
+            || order.iter().any(|position| *position >= terminals)
+            || order
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != terminals
+            || pinned.is_some_and(|position| position >= terminals)
+        {
+            return Err("snapshot deck layout does not match its panes".to_owned());
+        }
+        let mut state = Self::new(terminals).with_master_ratio(master_ratio);
+        state.order = order;
+        state.collapsed = collapsed;
+        state.zoomed = zoomed;
+        state.pinned = pinned;
+        if let Some(master) = state.active()
+            && let Some(flag) = state.collapsed.get_mut(master)
+        {
+            *flag = false;
+        }
+        state.hold_pin();
+        Ok(state)
+    }
+
+    /// Durable deck fields in schema order.
+    pub fn saved_layout(&self) -> (Vec<usize>, bool, Vec<bool>, Option<usize>, f64) {
+        (
+            self.order.clone(),
+            self.zoomed,
+            self.collapsed.clone(),
+            self.pinned,
+            self.master_ratio,
+        )
+    }
+
     /// The share of the width the master pane takes.
     pub fn master_ratio(&self) -> f64 {
         self.master_ratio

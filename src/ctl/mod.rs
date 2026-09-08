@@ -74,6 +74,12 @@ pub struct Request {
 /// lifecycle/input paths; parsing lives here so socket and CLI requests agree.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Control {
+    Save {
+        name: Option<String>,
+    },
+    Restore {
+        name: String,
+    },
     Open {
         path: String,
     },
@@ -107,6 +113,12 @@ impl Request {
             })
         };
         match self.verb.as_str() {
+            "save" => Ok(Some(Control::Save {
+                name: self.id.clone(),
+            })),
+            "restore" => Ok(Some(Control::Restore {
+                name: required("restore", &self.id)?,
+            })),
             "open" => Ok(Some(Control::Open {
                 path: required("open", &self.path)?,
             })),
@@ -1129,6 +1141,26 @@ mod tests {
         .control()
         .unwrap_err();
         assert_eq!(missing.error.unwrap().code, 2);
+
+        assert!(matches!(
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "save".to_owned(),
+                ..Default::default()
+            }
+            .control(),
+            Ok(Some(Control::Save { name: None }))
+        ));
+        assert!(matches!(
+            Request {
+                schema: SCHEMA.to_owned(),
+                verb: "restore".to_owned(),
+                id: Some("checkpoint".to_owned()),
+                ..Default::default()
+            }
+            .control(),
+            Ok(Some(Control::Restore { name })) if name == "checkpoint"
+        ));
 
         for request in [
             Request {

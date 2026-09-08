@@ -44,6 +44,25 @@ fn run_with_arguments(
                 None => Ok(Some("picker cancelled".to_owned())),
             }
         }
+        termdeck::cli::CliCommand::Attach { workspace } => {
+            let snapshot = termdeck::session::snapshot::load(workspace).map_err(|error| {
+                let names = termdeck::session::snapshot::list()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|item| item.name)
+                    .collect::<Vec<_>>();
+                if names.is_empty() {
+                    error
+                } else {
+                    format!("{error}; available snapshots: {}", names.join(", "))
+                }
+            })?;
+            termdeck::session::run_restored(snapshot)?;
+            Ok(None)
+        }
+        termdeck::cli::CliCommand::Sessions => {
+            termdeck::cli::run(std::iter::once("sessions".to_owned()))
+        }
         termdeck::cli::CliCommand::Help(topic) => Ok(Some(termdeck::cli::help(*topic).to_owned())),
         termdeck::cli::CliCommand::Launch { workspace } => {
             let config_path = intent.required_config_path()?;
