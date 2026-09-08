@@ -1880,6 +1880,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #154 (then #145 queued); claude → #146; codex idle.
   AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153; at/queued critic #154
   #145; in flight #146 (claude). Remaining open: 3 (#145 #146 #154).
+- 2026-09-08: #154 MERGED + CLOSED (no-ff 4657289; critic PASS no nits: single
+  allocator over both passes mirroring picker suffixes, deterministic order,
+  end-to-end test fails pre-fix with exact duplicates; gate 449+5+1). Split
+  from #144 (finding 11, P2) — closed. Worktree+branch pruned.
+  #145 moved into the critic slot (critic Working, transient 429 auto-retry).
+  IN FLIGHT: critic → #145; claude → #146; codex idle.
+  AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153 #154; at critic #145;
+  in flight #146 (claude). Remaining open: 2 (#145 #146).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
