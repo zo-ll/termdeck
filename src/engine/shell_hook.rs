@@ -22,7 +22,20 @@ if [ -n "${HOME-}" ]; then
 fi
 "#;
 
-/// Why HOME is scoped and restored here, and what that cannot reach.
+/// This is sourced by bash-completion while the login shell still has the
+/// generated HOME.  The user file must run with its normal HOME: completion
+/// snippets commonly resolve more files from there themselves.  Restore the
+/// generated HOME after it so Bash can still find our `.bash_profile`.
+const BASH_LOGIN_COMPLETION: &str = r#"if [ -n "${TERMDECK_HOOK_ORIGINAL_HOME-}" ] && [ -r "${TERMDECK_HOOK_ORIGINAL_HOME}/.bash_completion" ]; then
+  __td_completion_home=$HOME
+  HOME=$TERMDECK_HOOK_ORIGINAL_HOME
+  . "$HOME/.bash_completion"
+  HOME=$__td_completion_home
+  unset __td_completion_home
+fi
+"#;
+
+/// Why HOME is scoped and restored here.
 ///
 /// Login bash has no startup-file override (no `--rcfile` for `-l`, and no
 /// ZDOTDIR equivalent), so the only way to source a hook before the first
@@ -31,15 +44,16 @@ fi
 /// rule), then installs the hook — before bash paints its first prompt. That
 /// is the #151 fix: one prompt, no fed command.
 ///
-/// KNOWN RESIDUAL (accepted, see issue #152): bash sources `/etc/profile`
-/// and `/etc/bash.bashrc` BEFORE `~/.bash_profile`, at a point where HOME is
-/// still the generated (scoped) dir. So a login pane may repeat the sudo
-/// hint (Ubuntu's `/etc/profile` prints it unless `~/.hushlogin` exists),
-/// ignore `~/.hushlogin`, and miss the user's `bash_completion` — all
-/// because those system files resolve `~` against the scoped HOME. There is
-/// no mechanism that runs our profile earlier (bash has no ZDOTDIR
-/// equivalent), and the previous fed-command approach was strictly worse.
-/// Revisit if Ubuntu's `/etc/profile` gains a documented extension point.
+/// Bash reads `/etc/profile` before that user profile.  For login panes we
+/// therefore mirror only the two early files that Ubuntu's global setup needs:
+/// an empty scoped `.hushlogin` when the real one exists, and a scoped
+/// `.bash_completion` shim when the real one is a file.  The former makes the
+/// system hint take the same branch as a normal login; the latter restores the
+/// real HOME just while sourcing the user's completion file.  Both preserve
+/// Bash's global-before-user-profile order, require no command fed through the
+/// PTY, and leave non-login bash plus zsh/fish untouched.  See
+/// `docs/design/termdeck/login-bash-shim.md` for the verified behavior and
+/// rationale.
 const BASH_HOOK: &str = r#"case $- in *i*) ;; *) return;; esac
 if [ -n "${TERMDECK_SHELL_HOOK-}" ] || [ -z "${TERMDECK_SOCK-}" ] || [ -z "${TERMDECK_PANE-}" ]; then return; fi
 export TERMDECK_SHELL_HOOK=1
@@ -173,10 +187,11 @@ impl ShellHook {
                     .map_err(|error| error.to_string())?;
                 if let Some(home) = command
                     .get_env("HOME")
-                    .map(ToOwned::to_owned)
-                    .or_else(|| env::var_os("HOME"))
+                    .map(PathBuf::from)
+                    .or_else(|| env::var_os("HOME").map(PathBuf::from))
                 {
-                    command.env("TERMDECK_HOOK_ORIGINAL_HOME", home);
+                    install_login_bash_early_shims(&dir, &home)?;
+                    command.env("TERMDECK_HOOK_ORIGINAL_HOME", home.as_os_str());
                 } else {
                     command.env_remove("TERMDECK_HOOK_ORIGINAL_HOME");
                 }
@@ -248,6 +263,22 @@ fn bash_login_profile() -> String {
     format!("{BASH_LOGIN_PROFILE}{BASH_HOOK}")
 }
 
+/// Files Bash's global login setup resolves before our generated profile.
+///
+/// Keep these deliberately narrow: the hush-login sentinel follows the
+/// existence check used by Ubuntu's hint, while completion follows its `-f`
+/// check.
+fn install_login_bash_early_shims(dir: &Path, home: &Path) -> Result<(), String> {
+    if home.join(".hushlogin").exists() {
+        fs::write(dir.join(".hushlogin"), "").map_err(|error| error.to_string())?;
+    }
+    if home.join(".bash_completion").is_file() {
+        fs::write(dir.join(".bash_completion"), BASH_LOGIN_COMPLETION)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 impl Drop for ShellHook {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.dir);
@@ -275,7 +306,10 @@ mod tests {
 
     use portable_pty::CommandBuilder;
 
-    use super::{FISH_RC, ShellHook, ZSH_ENV, ZSH_RC, bash_is_login, bash_rc, unique_dir};
+    use super::{
+        BASH_LOGIN_COMPLETION, FISH_RC, ShellHook, ZSH_ENV, ZSH_RC, bash_is_login, bash_rc,
+        unique_dir,
+    };
 
     fn run_login_bash(home: &Path, input: &[u8]) -> String {
         let mut command = CommandBuilder::new("bash");
@@ -558,6 +592,139 @@ mod tests {
         fs::remove_file(home.join(".bash_login")).unwrap();
         let stdout = run_login_bash(&home, b"exit\n");
         assert_eq!(stdout.matches("TD-DOT-PROFILE").count(), 1, "{stdout:?}");
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    /// #152: a login shell runs the global profile before its first readable
+    /// user profile. This drives a real Bash through that exact order with a
+    /// deterministic Ubuntu-shaped global fragment. Before the early scoped
+    /// files existed it printed the hint and skipped the user completion;
+    /// the existing PTY regression in `native.rs` additionally proves this
+    /// same production path paints exactly one first prompt.
+    #[test]
+    fn bash_login_early_shims_honor_hushlogin_and_user_completion() {
+        let home = unique_dir().unwrap();
+        fs::write(home.join(".hushlogin"), "").unwrap();
+        fs::write(
+            home.join(".bash_completion"),
+            "printf 'USER-COMPLETION HOME=%s\\n' \"$HOME\"\n",
+        )
+        .unwrap();
+        fs::write(
+            home.join(".bash_profile"),
+            "printf 'USER-PROFILE HOME=%s\\n' \"$HOME\"\n",
+        )
+        .unwrap();
+
+        let mut command = CommandBuilder::new("bash");
+        command.env("HOME", &home);
+        let hook = ShellHook::install("bash", &["-l".to_owned()], &mut command)
+            .unwrap()
+            .unwrap();
+        assert!(hook.dir.join(".hushlogin").is_file());
+        assert!(hook.dir.join(".bash_completion").is_file());
+        assert!(BASH_LOGIN_COMPLETION.contains("TERMDECK_HOOK_ORIGINAL_HOME"));
+
+        let global = hook.dir.join("ubuntu-profile-fixture");
+        fs::write(
+            &global,
+            "if [ ! -f \"$HOME/.hushlogin\" ]; then printf 'SUDO-HINT\\n'; fi\nif [ -r \"$HOME/.bash_completion\" ]; then . \"$HOME/.bash_completion\"; fi\n",
+        )
+        .unwrap();
+        let output = Command::new("bash")
+            .args([
+                "--noprofile",
+                "-ilc",
+                ". \"$1\"; . \"$2\"; printf 'HOOK=%s HOME=%s LOGIN=%s\\n' \"$TERMDECK_SHELL_HOOK\" \"$HOME\" \"$(shopt -q login_shell && echo yes)\"",
+                "bash",
+                global.to_str().unwrap(),
+                hook.dir.join(".bash_profile").to_str().unwrap(),
+            ])
+            .env("HOME", &hook.dir)
+            .env("TERMDECK_HOOK_ORIGINAL_HOME", &home)
+            .env("TERMDECK_SOCK", "test")
+            .env("TERMDECK_PANE", "test")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(!stdout.contains("SUDO-HINT"), "{stdout:?}");
+        assert!(
+            stdout.contains(&format!("USER-COMPLETION HOME={}", home.display())),
+            "{stdout:?}"
+        );
+        assert!(
+            stdout.contains(&format!("USER-PROFILE HOME={}", home.display())),
+            "{stdout:?}"
+        );
+        assert!(
+            stdout.contains(&format!("HOOK=1 HOME={} LOGIN=yes", home.display())),
+            "{stdout:?}"
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    /// Run the same fixture against Ubuntu's actual global profile when that
+    /// profile is present. Fedora's profile layout differs, so the portable
+    /// fixture above remains the deterministic assertion on every host.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ubuntu_login_bash_honors_early_shims_when_available() {
+        let global_bashrc = Path::new("/etc/bash.bashrc");
+        let Ok(global_bashrc) = fs::read_to_string(global_bashrc) else {
+            return;
+        };
+        if !global_bashrc.contains(".hushlogin") {
+            return;
+        }
+
+        let home = unique_dir().unwrap();
+        fs::write(home.join(".hushlogin"), "").unwrap();
+        fs::write(
+            home.join(".bash_completion"),
+            "printf 'USER-COMPLETION HOME=%s\\n' \"$HOME\"\n",
+        )
+        .unwrap();
+        fs::write(
+            home.join(".bash_profile"),
+            "printf 'USER-PROFILE HOME=%s\\n' \"$HOME\"\n",
+        )
+        .unwrap();
+
+        let mut command = CommandBuilder::new("bash");
+        command.env("HOME", &home);
+        let hook = ShellHook::install("bash", &["-l".to_owned()], &mut command)
+            .unwrap()
+            .unwrap();
+        let output = Command::new("bash")
+            .args([
+                "-ilc",
+                "printf 'HOOK=%s HOME=%s LOGIN=%s\\n' \"$TERMDECK_SHELL_HOOK\" \"$HOME\" \"$(shopt -q login_shell && echo yes)\"",
+            ])
+            .env("HOME", &hook.dir)
+            .env("TERMDECK_HOOK_ORIGINAL_HOME", &home)
+            .env("TERMDECK_SOCK", "test")
+            .env("TERMDECK_PANE", "test")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            !stdout.contains("To run a command as administrator"),
+            "{stdout:?}"
+        );
+        assert!(
+            stdout.contains(&format!("USER-COMPLETION HOME={}", home.display())),
+            "{stdout:?}"
+        );
+        assert!(
+            stdout.contains(&format!("USER-PROFILE HOME={}", home.display())),
+            "{stdout:?}"
+        );
+        assert!(
+            stdout.contains(&format!("HOOK=1 HOME={} LOGIN=yes", home.display())),
+            "{stdout:?}"
+        );
         fs::remove_dir_all(home).unwrap();
     }
 }
