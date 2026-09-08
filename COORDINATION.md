@@ -2005,6 +2005,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   #112 gate narrowing, and the codex/claude lane split. Deliverable
   /tmp/shipwright/termdeck/sessions/sessions-research-2.md. Researcher Working.
   LANES: researcher → sessions2; critic/codex/claude idle.
+- 2026-09-08: sessions round-2 brief returned TRUNCATED (file ended mid-
+  sentence at section 3 / data model; sections 1-2 complete + adopted: replay
+  via adapter.feed hardened — drop replies/bells, skip notify scan, sanitize
+  C0, never touches shutdown model; picker reuse via Browse seam +
+  SnapshotBrowse, empty-state fall-through, no auto-attach). Missing 3-7
+  (data model, lifecycle, CLI/ctl, #112 gate, lane split, MVP slice).
+  RE-DISPATCHED completion to researcher (study2b → sessions-research-2b.md,
+  keep <10KB to avoid re-truncation; sections 3-7 only). Researcher Working.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
