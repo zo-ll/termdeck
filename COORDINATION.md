@@ -1785,6 +1785,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #141 review; codex → #142 rework round 2.
   AUDIT status: ✓ #143 #134 #139 #153; #141 at critic; #142 in rework;
   P1 remaining #141 #142; P2s #154 #145 #146 #147.
+- 2026-09-08: #141 MERGED + CLOSED (no-ff f107219; critic PASS no nits:
+  snapshot survivors join the force gate with reuse-guarded sweep, awaited
+  completion, setsid regression proven to fail pre-fix; gate 448+5+1).
+  Worktree+branch pruned. AUDIT P1 closed.
+  IN FLIGHT: codex → #142 rework round 2 (Working: writing
+  c1_control/escape_del desync regression tests); critic idle (next #142 round
+  2 verdict).
+  AUDIT status: ✓ #143 #134 #139 #141 #153; #142 in rework; P2s #154 #145
+  #146 #147 queued (codex lane).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
