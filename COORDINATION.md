@@ -1691,6 +1691,22 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   .scratch/review/134-ci-advisories.critic.md; critic Working, one transient
   provider retry). IN FLIGHT: critic → #134; codex → #139 (Working).
   AUDIT status: #143 ✓; remaining P1 #139 #142 #141; P2s #144 #145 #146 #147.
+- 2026-09-08: #134 MERGED + CLOSED (no-ff c3c1145; critic PASS no nits: weekly
+  audit workflow opens/refreshes/closes a marker-deduped issue, minimal
+  permissions, push-time job untouched, YAML/shell/jq verified locally).
+  Worktree+branch pruned. #144 SPLIT into #153 (picker Unicode case-mapping
+  panic, UI lane) + #154 (discovery identity collision, CLI lane) to respect
+  lane ownership; #144 CLOSED as split.
+- 2026-09-08: #153 (picker Unicode filter panic) DISPATCHED to the CLAUDE lane
+  — worktree ~/.worktrees/termdeck/153-picker-unicode (coord/153-picker-unicode
+  off origin/main c3c1145); brief .scratch/tasks/153-picker-unicode.brief.md
+  (match_at maps normalized offsets back to valid boundaries in the original
+  string; guard renderer slice; tests for İ/ß/Turkish-I + multibyte queries;
+  UI-only, #154 is the engine lane). Fresh claude session relaunched at the
+  worktree (opus 5 high); verified Working (reading state.rs + render.rs).
+  IN FLIGHT: codex → #139; claude → #153; critic idle (next verdict when a
+  slice lands). AUDIT status: #143 ✓ #134 ✓; remaining P1 #139 #142 #141;
+  P2s #153 #154 #145 #146 #147.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
