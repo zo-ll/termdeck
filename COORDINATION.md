@@ -1823,6 +1823,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #142 round 2; codex → #154; claude → #147.
   AUDIT status: ✓ #143 #134 #139 #141 #153; #142 round 2 at critic;
   P2 in flight #154 (codex) + #147 (claude); queued #145 #146 (codex).
+- 2026-09-08: #142 MERGED + CLOSED (no-ff 2221544; critic PASS round 2, no
+  nits: guard mirrors vte on DEL/C1/intermediates; 6-shape RSS battery flat
+  with recovery; new tests proven to fail on round-1 code; gate 445+5+1).
+  Worktree+branch pruned. AUDIT P1s ALL CLOSED (#143 #134 #139 #141 #142).
+  IN FLIGHT: codex → #154; claude → #147; critic idle (next verdict #154 or
+  #147). AUDIT status: ✓ P1s (#143 #134 #139 #141 #142) + #153;
+  P2 in flight #154 (codex) + #147 (claude); queued #145 #146 (codex).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
