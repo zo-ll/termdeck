@@ -1895,6 +1895,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: claude → #146 (last audit issue); critic idle (next #146); codex
   idle. AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153 #154 #145;
   remaining open: 1 (#146).
+- 2026-09-08: #146 DONE (claude e82d585 + fde3f4a; marker RESULT=pass:
+  every signal+ownership expansion identity-validated, reaped shells retire
+  their pid, engine drop no longer re-enters shutdown, ctl client one absolute
+  deadline over connect+write+read; gate lib 457 / termctl 5 / main 1; files
+  pty.rs +407 / ctl/mod.rs +192 / native.rs +70; not pushed). ROUTED to CRITIC
+  (assignment .scratch/review/146-lifecycle.critic.md — flagged the #141
+  non-regression and every-signal-site checks; critic Working). LAST AUDIT
+  ISSUE. IN FLIGHT: critic → #146; codex + claude idle.
+  AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153 #154 #145; #146 at
+  critic. Remaining open: 1 (#146).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
