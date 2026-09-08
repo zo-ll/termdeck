@@ -1917,6 +1917,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   keep design-first/deferred? (2) ~62 stale origin/coord/* remote branches —
   clean up? (3) rebuild/refresh installed ~/.local/bin/termdeck binary
   (deferred during batch).
+- 2026-09-08: REBUILD done — `cargo install --path . --root ~/.local --locked
+  --force`: termdeck (1.8MB) + termctl (513KB) reinstalled at ~/.local/bin
+  (Sep 8 12:55) from merged main ffb79ef.
+- 2026-09-08: #152 (login-pane /etc/profile-before-shim residual, design-first)
+  — RESEARCH dispatched to the researcher lane (new window personal:4
+  researcher, muse-spark via pi; durable boot at
+  coordinator/scripts/researcher-boot). Study at
+  /tmp/shipwright/termdeck/152-login-bash-shim/study.md; deliverable
+  /tmp/shipwright/termdeck/152-login-bash-shim/research.md (open questions:
+  mechanisms for sudo-hint/hushlogin/bash_completion under scoped-HOME login
+  bash, real Ubuntu /etc/profile/bash behavior, #151 non-regression,
+  do-nothing option quantified). Researcher Working; result routes to user for
+  a decision (no branch yet — research never commits).
+  LANES: researcher → #152 study; critic/codex/claude idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
