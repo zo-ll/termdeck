@@ -1830,6 +1830,39 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: codex → #154; claude → #147; critic idle (next verdict #154 or
   #147). AUDIT status: ✓ P1s (#143 #134 #139 #141 #142) + #153;
   P2 in flight #154 (codex) + #147 (claude); queued #145 #146 (codex).
+- 2026-09-08: #147 DONE (claude 032fd9a "fix: preserve $? across every return
+  path of the prompt hook"; marker RESULT=pass: __td_prompt/__td_prompt_end
+  (+zsh __td_precmd, fish __td_postexec) return captured $? on every path;
+  real-bash regression covers scalar+array PROMPT_COMMAND and
+  TERMDECK_NOTIFY none/error/all; gate 449/5/1; files shell_hook.rs +92/-11;
+  not pushed). ROUTED to CRITIC (assignment
+  .scratch/review/147-bash-hook.critic.md; critic Working, transient 429
+  auto-retry).
+- 2026-09-08: #154 DONE (codex fe1f841 "fix: disambiguate discovered terminal
+  identities"; marker RESULT=pass: stable unique discovery identities, full
+  gate; files cli/mod.rs +88; not pushed; duplicate pings ignored). QUEUED
+  for critic (assignment .scratch/review/154-discovery-collision.critic.md,
+  reviewed after #147 verdict).
+- 2026-09-08: #145 (termctl literal-help swallow + zoom contract, P2)
+  DISPATCHED to the codex lane — worktree ~/.worktrees/termdeck/145-termctl-help
+  (coord/145-termctl-help off origin/main 0d3edad); brief
+  .scratch/tasks/145-termctl-help.brief.md (help_for option-value aware so
+  literal --help/-h values of --text/--paste/--keys stay values, tests vs the
+  binary prepass fail pre-fix; zoom RESOLUTION chosen = KEEP toggle, fix help
+  text to say bare form toggles + point at status; dispatch unchanged). One
+  lost-Enter retry; verified Working.
+- 2026-09-08: #146 (PID-reuse first signals + ctl connect timeout, P2)
+  DISPATCHED to the CLAUDE lane (engine slice per user ruling) — worktree
+  ~/.worktrees/termdeck/146-lifecycle (coord/146-lifecycle off origin/main
+  0d3edad); brief .scratch/tasks/146-lifecycle.brief.md (validate identity
+  before EVERY signal/ownership expansion incl. pre-kill_session SIGKILL;
+  retire transport ownership on shell reap; no drop re-entry after explicit
+  shutdown; read the just-merged #141 f107219 first; plus one absolute
+  deadline spanning connect+write+read and a saturated-backlog timeout test
+  that fails pre-fix). Fresh claude session; verified Working.
+  IN FLIGHT: critic → #147 (then #154 queued); codex → #145; claude → #146.
+  AUDIT status: ✓ #143 #134 #139 #141 #142 #153; at/queued critic #147 #154;
+  in flight #145 (codex) #146 (claude). Remaining open: 4 (#145 #146 #147 #154).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
