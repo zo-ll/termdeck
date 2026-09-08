@@ -5,7 +5,7 @@ Gate: **GREEN.** CI passes on `main` (latest runs 34132349287+, verified). Per #
 Open — remaining audit residue: #152 (accepted residual from #151: /etc/profile runs before the login-bash profile shim — sudo hint repeats, hushlogin ignored, bash_completion missed; documented in-code; design-first when picked up), #139 (paste payload can execute, P1), #141 (escaped descendants survive shutdown, P1), #142 (unbounded parser memory, P1), #143 (panic guard aborts, P1-amplifier), #144 (picker Unicode panic + discovery collision), #145 (termctl help swallow + zoom contract), #146 (PID reuse + connect timeout), #147 (bash hook clobbers $?).
 Open — process: #134 (CI scheduled advisories).
 Open (user-gated): #94 (MCP HELD), #112 (persistent+agent-aware deck DECISION GATE), #114 (agent discovery), #33 (animations parked).
-Freshness: 2026-09-07 — main `30eaa4e`; CI GREEN. NB backlog ~65 (incl. #148/#150/#151 critic nits + the audit's dependency triage: lru/paste/serde_yaml, socket_dir symlink hardening).
+Freshness: 2026-09-08 — main `3d2280e`; CI GREEN (last run 34144976340). NB backlog ~65 (incl. #148/#150/#151 critic nits + the audit's dependency triage: lru/paste/serde_yaml, socket_dir symlink hardening).
 
 ## Goal
 
@@ -1617,6 +1617,26 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   tmux personal 0 coordinator / 1 critic (muse) / 2 claude / 3 codex / 4
   muse-worker; relay dead — restart via coordinator skill scripts/relay.sh at
   next session. Resume: read COORDINATION.md + docs/RESUME.md.
+
+- 2026-09-08 TAKEOVER (pi, fresh session): env restored — tmux `personal` rebuilt
+  from scratch (only the coordinator pane existed): session renamed
+  `default`→`personal`, window 0 → `coordinator`. Relay restarted detached
+  (pid 12006, relay.log), inbox empty. Windows recreated per canonical env:
+  1 critic (pi muse-spark-1.3-contributor, critic-skill only; one transient
+  boot 429 from Console Go, recovered, idle at prompt), 2 claude (opus 5
+  high, bypass-permissions), 3 codex (gpt-5.6-terra high, YOLO, weekly 100%)
+  — all IDLE, nothing dispatched. 26 stale merged worktree/branches removed
+  (coord/111-#135 + nb-*; all verified clean + merged into origin/main +
+  closed issues — hygiene owed from the #111-#135 wave). Main `3d2280e`
+  clean, synced with origin; CI GREEN (last run 34144976340). gh open set =
+  14, unchanged from EOD: audit P1s #143 #139 #142 #141; P2s #144 #145 #146
+  #147; process #134; user gates #94 (MCP held) #112 #114 #33 (parked);
+  residual #152. NEXT per locked order: #143 (panic guard, amplifies #140)
+  first → P1s → P2s → #134, or user direction; #148/#149/#150/#151-era
+  critic NBs still in the backlog. NOTE: COORDINATION.md full rotation still
+  owed (handoff bullets span 09-04→09-07 across sections incl. a misplaced
+  pre-close snapshot below) — archive the >15 oldest to the journal when next
+  editing.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
