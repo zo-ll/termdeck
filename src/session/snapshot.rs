@@ -18,7 +18,8 @@ use crate::{
     ui::DeckState,
 };
 
-const SCHEMA: &str = "session.v1";
+/// The snapshot format this engine writes and the picker reads.
+pub const SCHEMA: &str = "session.v1";
 pub const MAX_PANE_LINES: usize = 2_000;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -180,11 +181,17 @@ pub fn save<E: TerminalEngine>(
 
 pub fn load(name: &str) -> Result<Snapshot, String> {
     validate_name(name)?;
-    let path = sessions_dir()?.join(format!("{name}.json"));
-    let source = fs::read_to_string(&path)
+    load_file(&sessions_dir()?.join(format!("{name}.json")))
+}
+
+/// The same, for a caller that already holds the file: the picker lists the
+/// directory itself, so it resumes the snapshot it listed rather than one
+/// re-derived from a name.
+pub fn load_file(path: &Path) -> Result<Snapshot, String> {
+    let source = fs::read_to_string(path)
         .map_err(|error| format!("cannot read snapshot '{}': {error}", path.display()))?;
     let snapshot = serde_json::from_str::<Snapshot>(&source)
-        .map_err(|error| format!("snapshot '{name}' is corrupt: {error}"))?;
+        .map_err(|error| format!("snapshot '{}' is corrupt: {error}", path.display()))?;
     validate(&snapshot)?;
     Ok(snapshot)
 }

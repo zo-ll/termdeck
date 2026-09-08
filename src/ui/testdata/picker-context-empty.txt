@@ -1,0 +1,42 @@
+    termdeck   pick up where you left off  ·  0 saved sessions                                        sessions › resume one, or open a folder   
+                                                                                                                                                
+┌── > sessions  ·  saved sessions  ·  ⏎ resume · shells restart ─────────────────────────────────────────────────────── filter (/ to search) ──┐
+│   SESSIONS saved on quit  ·  0 to resume                                                                                                     │
+│   ────────────────────────────────────────────────────────────────────────────────────────                                                   │
+│   ─── open a folder ──────────────────────────────────────────────────────────────────────                                                   │
+│    ▸  Open a folder…            · browse the filesystem                                                                                      │
+│   no saved sessions                                                                                                                          │
+│   sessions are saved when a workspace is quit                                                                                                │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│   ─── cursor on Open a folder… ────────────────────────────────────────────────────────                                                      │
+│   the file explorer, as termdeck opens it with no path                                                                                       │
+│   pick folders to open as panes                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                                                                                                                
+   ↑↓ move  ⏎ resume  / filter                                                                                     ⏎ resume or open  esc quit   
