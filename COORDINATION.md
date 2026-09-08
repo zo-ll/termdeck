@@ -2084,6 +2084,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   sessions-picker. Merge watch: picker touches session.rs/main.rs — will
   reconcile onto engine-merged main at picker merge. #156 stays open until
   both land.
+- 2026-09-08: sessions-picker at CRITIC = HAND-BACK (verdict: resume() opens
+  a fresh workspace under the restore banner instead of routing to the engine
+  restore — no transcripts/layout/skips; rewire to run_restored after
+  engine-first merge). Engine IS now merged (228e50f) so run_restored exists
+  on main. Queued for claude (after #157). Claude currently on #157
+  (hidden-stack-border). Critic idle. #156 stays open.
+- 2026-09-08: #157 (UI: no accent border when stack hidden) DISPATCHED to
+  claude — worktree ~/.worktrees/termdeck/hidden-stack-border
+  (coord/hidden-stack-border off origin/main 39105e9); brief
+  .scratch/tasks/hidden-stack-border.brief.md (when stack hidden —
+  Layout::Zoom|Narrow at deck.rs:156-159 — master border must be quiet not
+  ACCENT; stack-visible keeps ACCENT; don't regress drag/demoted/notify/
+  preview; fixtures both ways). Claude Working.
+  IN FLIGHT: claude → #157; then sessions-picker handback (rewire resume→
+  run_restored) after rebase onto engine-merged main; critic idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
