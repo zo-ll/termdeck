@@ -1490,6 +1490,13 @@ impl Deck<'_> {
             // gets the accent and a quiet lifted background.
             Pane::DragMasterSource | Pane::DragPreviewSource => (WARNING, CANVAS),
             Pane::DragMasterTarget | Pane::DragPreviewTarget => (ACCENT, DEMOTED_BG),
+            // The accent marks the master among a visible stack. Zoom and the
+            // narrow fallback hide the whole stack, so the master is the only
+            // pane on screen and the frame has nothing left to distinguish it
+            // from: it rests at the idle border instead of reading as a stray
+            // green box (#157). Zoom still says what it is in its badge, and
+            // the fallback in the status row.
+            Pane::Zoomed | Pane::Compact => (IDLE_BORDER, CANVAS),
             _ => (ACCENT, CANVAS),
         };
         let border_style = Style::new().fg(border).bg(background);

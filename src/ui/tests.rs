@@ -1137,6 +1137,50 @@ fn zoom_gives_the_master_the_full_width_and_hides_the_stack() {
     assert!(screen.contains("^g z"), "{screen}");
 }
 
+/// #157: the accent frame is how the master says which pane it is among a
+/// visible stack. Zoom and the narrow fallback hide the whole stack, so the
+/// master is the only pane on screen and the frame has nothing left to
+/// distinguish it from — it rests at the idle border there, and takes the
+/// accent back the moment the stack comes back.
+#[test]
+fn a_hidden_stack_leaves_the_master_a_quiet_border() {
+    let engine = fixture::frontend_active();
+
+    // The stack is visible, so the accent is doing its job: unchanged.
+    let (stacked, _) = render(&engine, &reference_deck(4), (144, 42));
+    assert_eq!(stacked[(0u16, 2u16)].symbol(), "┌");
+    assert_eq!(stacked[(0u16, 2u16)].fg, ACCENT);
+
+    // Zoom hides it. The border goes quiet, and the state is still stated —
+    // by the badge in the title row, which keeps the accent.
+    let (zoom, _) = render(&engine, &zoomed(), (144, 42));
+    assert_eq!(zoom[(0u16, 2u16)].symbol(), "┌");
+    assert_eq!(zoom[(0u16, 2u16)].fg, IDLE_BORDER);
+    assert_ne!(zoom[(0u16, 41u16)].fg, ACCENT, "and the foot of it too");
+    let badge = column_of(&zoom, 2, "ZOOM").expect("the zoom badge");
+    assert_eq!(zoom[(badge, 2u16)].bg, ACCENT);
+
+    // The narrow fallback hides it the same way: its master opens two rows
+    // under the pane strip, and wears the same quiet border.
+    let (narrow, _) = render(&engine, &reference_deck(4), (84, 22));
+    assert_eq!(narrow[(0u16, 4u16)].symbol(), "┌");
+    assert_eq!(narrow[(0u16, 4u16)].fg, IDLE_BORDER);
+    assert_ne!(narrow[(0u16, 21u16)].fg, ACCENT, "and the foot of it too");
+    // The strip above it still marks the master with the accent chip: the
+    // deck has not stopped saying which terminal is active.
+    assert_eq!(narrow[(1u16, 2u16)].bg, ACCENT);
+
+    // Unzooming hands the accent straight back.
+    let mut restored = zoomed();
+    restored.apply(
+        &ActionCommand::ToggleZoom,
+        &fixture::projects(),
+        fixture::NOW,
+    );
+    let (unzoomed, _) = render(&engine, &restored, (144, 42));
+    assert_eq!(unzoomed[(0u16, 2u16)].fg, ACCENT);
+}
+
 /// The spec's zoom + collapse rule: zoom hides the stack, so the folds
 /// it hides say nothing in the status row. Since #39 that is every run.
 #[test]
@@ -2265,10 +2309,11 @@ fn a_hidden_pane_notifies_through_a_toast_that_takes_no_focus() {
         .expect("the message");
     let worker = screen.find("4 worker · attention · 3s").expect("the bell");
     assert!(backend < worker, "{screen}");
-    // The master pane behind it keeps its cursor and its colours: a toast
-    // never takes the focus a modal does.
+    // The master pane behind it keeps its cursor and its ink: a toast never
+    // takes the focus a modal does. This deck is zoomed, so its border is
+    // the quiet one either way (#157) and the ink is what tells the two
+    // apart — a modal would drop it to `UNDER_FG`.
     assert_eq!(cursor, Some(Position::new(3, 31)));
-    assert_eq!(buffer[(0u16, 2u16)].fg, ACCENT);
     assert_eq!(buffer[(5u16, 3u16)].fg, super::MASTER_FG);
 }
 
