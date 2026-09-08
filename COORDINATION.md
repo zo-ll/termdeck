@@ -2036,6 +2036,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Scope: save-on-clean-quit + termctl save/restore + attach/sessions +
   context picker + 2000-line text replay + banner. Still daemon-less,
   #112-gated, spike-first on restore_lines. Awaiting user GO to dispatch.
+- 2026-09-08: USER GO — sessions feature DISPATCHED (full scope, both termctl
+  verbs). Two parallel lanes off origin/main 0e061de:
+  - coord/sessions-engine (codex): step-0 restore_lines spike (hostile
+    transcript: shell unaffected, pending_input_len()==0, no Notify),
+    session.v1 DTO + save/load (0600 atomic, XDG state dir, 2000-line cap),
+    save-on-clean-quit, termctl save [name]/restore <name>, termdeck
+    attach/sessions; must NOT touch shutdown model/daemon.
+  - coord/sessions-picker (claude): SnapshotBrowse over sessions dir
+    (recent-first, age+pane-count), context picker (Resume… + Open a folder…,
+    empty→fall-through, no auto-attach), restore banner via set_notice;
+    UI-only, interface = session.v1 schema + restore invocation.
+  Both read /tmp/shipwright/termdeck/sessions/sessions-research-{2,2b}.md.
+  Interface contract pinned (session.v1 schema fixed in §3). Both Working.
+  COORDINATOR: apply AGENTS.md narrowing + #112 update (governance edit, per
+  design §6) as part of this feature.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
