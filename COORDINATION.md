@@ -80,6 +80,13 @@ events in order; only the top dashboard describes current status.
   the studies), SEQUENTIALLY: lua-scripting (Working) → performance → theming,
   each a separate deliverable + marker + ping. Complement slice (tmux read-only
   proof on separate branch) queued after the research.
+- 2026-09-08: lua-scripting research DONE (codex astra/low as researcher;
+  deliverable lua-scripting-research.md 23KB; worker initially skipped the
+  finish artifacts — nudged to write marker + ping; now complete). RECS: mlua
+  0.12.1 vendored Lua 5.4; min = notify/pane-lifecycle hooks + copied state +
+  bounded action API (retain YAML); interpreter in a session-owned helper
+  process (crash can NEVER kill the deck); ~12-21 person-days minimum.
+  performance research DISPATCHED next (same worker; marker+ping path pinned).
 - 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
   multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
   not compete by building a pane server / live-resume. User endorsed the
