@@ -1888,6 +1888,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #145; claude → #146; codex idle.
   AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153 #154; at critic #145;
   in flight #146 (claude). Remaining open: 2 (#145 #146).
+- 2026-09-08: #145 MERGED + CLOSED (no-ff 4e95f3b; critic PASS no nits:
+  value-aware help prepass mirroring the real parser, both literals x all
+  three options, zoom texts truthful with dispatch untouched; gate 453+7+1).
+  Worktree+branch pruned. Audit P2 closed.
+  IN FLIGHT: claude → #146 (last audit issue); critic idle (next #146); codex
+  idle. AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153 #154 #145;
+  remaining open: 1 (#146).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
