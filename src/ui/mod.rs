@@ -34,7 +34,7 @@ pub use input::{Input, Key, Reaction};
 pub mod picker;
 pub use picker::{
     Browse, Entry, EntryKind, FsBrowse, Hit, Instance, Listing, Open, Picker, PickerReaction,
-    PickerState, Sheet, SheetHit, SheetState, SnapshotBrowse, SnapshotHeader,
+    PickerState, Sheet, SheetHit, SheetState,
 };
 pub use state::{
     DEFAULT_MASTER_RATIO, DeckState, MAX_MASTER_RATIO, MIN_MASTER_RATIO, Modal, NOTIFY_WINDOW,

@@ -43,8 +43,7 @@ use crate::{
     engine::NativeEngine,
     ui::{
         Browse, Deck, DeckState, FsBrowse, Input, Key, Listing, Notifications, Picker,
-        PickerReaction, PickerState, Reaction, Selection, Sheet, SheetState, SnapshotBrowse,
-        SnapshotHeader, picker,
+        PickerReaction, PickerState, Reaction, Selection, Sheet, SheetState, picker,
     },
 };
 
@@ -65,62 +64,13 @@ static SAVED_PANIC_HOOK: OnceLock<Mutex<Option<PanicHook>>> = OnceLock::new();
 /// nothing to run. The picker only reads the filesystem through its browser
 /// and hands back an ordered list of terminals.
 pub fn pick(roots: Vec<std::path::PathBuf>) -> Result<Option<Workspace>, Box<dyn Error>> {
-    Ok(match choose(None, roots)? {
-        Some(Chosen::Open(workspace)) => Some(workspace),
-        // With no session inventory in front of it the picker has no resume
-        // row to land on, so this is unreachable by construction.
-        Some(Chosen::Resume(_)) | None => None,
-    })
-}
-
-/// What `termdeck` opens on when there is something to resume: the context
-/// picker (§2), which asks one question before the file explorer's.
-///
-/// The inventory arrives already read — whether it is empty is what decides
-/// that this function is called at all — and the browser it becomes is the
-/// picker's first listing. Choosing "Open a folder…" hands the screen to the
-/// ordinary file explorer without leaving the loop.
-pub fn pick_context(
-    sessions: SnapshotBrowse,
-    roots: Vec<std::path::PathBuf>,
-) -> Result<Option<Chosen>, Box<dyn Error>> {
-    choose(Some(sessions), roots)
-}
-
-/// What the picker settled on: a folder workspace to open, or a saved
-/// session to bring back.
-///
-/// The resume half carries the snapshot's header — name, root, age, pane
-/// count — which is everything the caller needs to address the restore and
-/// to say what came back, and nothing of the transcripts it did not read.
-#[derive(Clone, Debug)]
-pub enum Chosen {
-    Open(Workspace),
-    Resume(SnapshotHeader),
-}
-
-/// The picker loop itself, in either of its two openings: the context list
-/// when there are saved sessions, the file explorer when there are not.
-fn choose(
-    sessions: Option<SnapshotBrowse>,
-    roots: Vec<std::path::PathBuf>,
-) -> Result<Option<Chosen>, Box<dyn Error>> {
     let _panic = PanicGuard::install();
     let _signals = SignalGuard::install()?;
     let outer = OuterTerminal::enter()?;
     let mut terminal = Terminal::new(AnsiBackend::new()?)?;
     let mut keys = KeyReader::default();
     let browser = FsBrowse::new(roots);
-    let mut state = match sessions.as_ref() {
-        Some(sessions) => {
-            let mut state = PickerState::context();
-            if let Some(notice) = sessions.notice() {
-                state.set_notice(notice);
-            }
-            state
-        }
-        None => PickerState::new(),
-    };
+    let mut state = PickerState::new();
     // The pointer's `→`: a second click on the row it is already on.
     let mut last_click: Option<(usize, Timestamp)> = None;
     let mut dirty = true;
@@ -141,14 +91,7 @@ fn choose(
         dirty |= resized(&mut size, screen_size()?);
         if dirty {
             roots = Browse::roots(&browser);
-            // Two browsers, one loop: the context list while the picker is
-            // asking which session, the filesystem once it has been told to
-            // go looking for a folder instead.
-            let source: &dyn Browse = match sessions.as_ref().filter(|_| state.choosing()) {
-                Some(sessions) => sessions,
-                None => &browser,
-            };
-            listing = state.listing(source);
+            listing = state.listing(&browser);
             rows = listing.entries.clone();
             let height = usize::from(size.rows.saturating_sub(12));
             state.follow_cursor(height);
@@ -220,22 +163,7 @@ fn choose(
                 _ => None,
             };
             match reaction {
-                Some(PickerReaction::Launch) => {
-                    break 'picker Some(Chosen::Open(workspace_of(&state)));
-                }
-                // The row named a snapshot file; the inventory that listed it
-                // says what is in it. A row with no header behind it is not a
-                // resume, so the picker stays open rather than guessing.
-                Some(PickerReaction::Resume) => {
-                    let header = state
-                        .resumed()
-                        .zip(sessions.as_ref())
-                        .and_then(|(file, sessions)| sessions.header(file))
-                        .cloned();
-                    if let Some(header) = header {
-                        break 'picker Some(Chosen::Resume(header));
-                    }
-                }
+                Some(PickerReaction::Launch) => break 'picker Some(workspace_of(&state)),
                 Some(PickerReaction::Quit) => break 'picker None,
                 None => {}
             }
@@ -657,57 +585,6 @@ pub fn run_restored(snapshot: snapshot::Snapshot) -> Result<(), Box<dyn Error>> 
     run_inner(plan.workspace.clone(), Some(plan))
 }
 
-/// Brings back the saved session the context picker landed on (§4).
-///
-/// The picker only ever read headers, so the transcripts are still on disk;
-/// this is where the file it listed is opened in full. The restore itself is
-/// the engine's: [`run_restored`] rebuilds the saved deck — order, zoom,
-/// collapse, pin, split — opens fresh shells for the panes whose directories
-/// still exist, replays each pane's transcript, and only then raises the
-/// banner that says how old that text is, what was skipped, and that nothing
-/// behind it is still running.
-pub fn resume(header: &SnapshotHeader) -> Result<(), Box<dyn Error>> {
-    run_restored(snapshot::load_file(&header.file)?)
-}
-
-/// Puts a restore plan onto shells that have just been opened for it: every
-/// pane that came back is handed its saved transcript, and the deck is given
-/// the banner that says how old that text is, what did not come back with
-/// it, and that nothing behind it is still running.
-///
-/// A pane the plan skipped — its directory is gone — has no shell to replay
-/// into, so it is passed over here and named in the banner instead.
-fn apply_restore<E: TerminalEngine>(
-    plan: &snapshot::RestorePlan,
-    projects: &[Project],
-    engine: &mut E,
-    deck: &mut DeckState,
-) {
-    let age = snapshot::age(plan.snapshot.saved_at);
-    for pane in &plan.snapshot.panes {
-        if projects
-            .iter()
-            .any(|project| project.terminal.to_string() == pane.id)
-        {
-            engine.dispatch(EngineCommand::RestoreLines {
-                terminal: TerminalId::new(pane.id.clone()),
-                workspace: plan.workspace.name.clone(),
-                age: age.clone(),
-                lines: pane.lines.clone(),
-            });
-        }
-    }
-    let skipped = if plan.skipped.is_empty() {
-        String::new()
-    } else {
-        format!(" · {}", plan.skipped.join("; "))
-    };
-    deck.set_notice(format!(
-        "restored {} · snapshot {age} · shells restarted{skipped}",
-        plan.workspace.name,
-    ));
-}
-
 fn run_inner(
     mut workspace: Workspace,
     restored: Option<snapshot::RestorePlan>,
@@ -745,7 +622,30 @@ fn run_inner(
     let mut engine = spawn_terminals_with_scrollback(&projects, &deck, size, workspace.scrollback)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
     if let Some(plan) = restored.as_ref() {
-        apply_restore(plan, &projects, &mut engine, &mut deck);
+        for pane in &plan.snapshot.panes {
+            if projects
+                .iter()
+                .any(|project| project.terminal.to_string() == pane.id)
+            {
+                engine.dispatch(EngineCommand::RestoreLines {
+                    terminal: TerminalId::new(pane.id.clone()),
+                    workspace: workspace.name.clone(),
+                    age: snapshot::age(plan.snapshot.saved_at),
+                    lines: pane.lines.clone(),
+                });
+            }
+        }
+        let skipped = if !plan.skipped.is_empty() {
+            format!(" · {}", plan.skipped.join("; "))
+        } else {
+            String::new()
+        };
+        deck.set_notice(format!(
+            "restored {} · snapshot {} · shells restarted{}",
+            workspace.name,
+            snapshot::age(plan.snapshot.saved_at),
+            skipped,
+        ));
     }
     // The engine begins with safe all-terminal timing visibility. Replace it
     // before the first drain with the panes this initial deck actually draws.
@@ -912,9 +812,7 @@ fn run_inner(
                         sheet = None;
                     }
                     Some(PickerReaction::Quit) => sheet = None,
-                    // The sheet lists folders, never saved sessions, so
-                    // there is nothing here to resume.
-                    Some(PickerReaction::Resume) | None => {}
+                    None => {}
                 }
                 continue;
             }

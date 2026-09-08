@@ -11,7 +11,7 @@ use ratatui::{
 
 use super::super::{Key, clip, palette::*, right_aligned};
 use super::render::{COL_GLYPH, COL_NAME, INSET, display_path};
-use super::{Browse, Entry, Instance, PickerReaction, PickerState};
+use super::{Browse, Entry, EntryKind, Instance, PickerReaction, PickerState};
 
 /// A repository the session already holds, and the pane it is in.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -294,10 +294,21 @@ impl Sheet<'_> {
         put(
             buffer,
             COL_GLYPH,
-            vec![{
-                let (glyph, colour) = super::render::glyph(entry.kind);
-                Span::styled(glyph, Style::new().fg(colour).bg(background))
-            }],
+            vec![Span::styled(
+                match entry.kind {
+                    EntryKind::Repository => "◆",
+                    EntryKind::Folder => "▸",
+                    EntryKind::Parent => "▴",
+                    EntryKind::File => "·",
+                },
+                Style::new()
+                    .fg(match entry.kind {
+                        EntryKind::Repository => ACCENT,
+                        EntryKind::Folder => WARNING,
+                        EntryKind::Parent | EntryKind::File => HINT,
+                    })
+                    .bg(background),
+            )],
         );
         put(
             buffer,
