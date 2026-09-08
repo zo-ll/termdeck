@@ -43,6 +43,17 @@ The historical #1-#14 issue/slice/Waves tables were pruned 2026-09-05 per #129 (
 Rotated history: [219 older handoffs](docs/coordination-archive.md); earlier
 archives in `.coordinator/journal/` (2026-09). Entries below are historical
 events in order; only the top dashboard describes current status.
+
+- 2026-09-08: ack-supervision done (codex gpt-6-astra/low, all external — no
+  repo commit). Relay now CONFIRMS tmux sends (DELIVER+consume only after text
+  AND Enter succeed; RETRY on transient failure, retained event + FAILED after
+  3, Enter-phase isolation, no interleave); new read-only `check-aborted.sh`
+  + provider-recovery.md (bounded 10/20/40s+jitter, one nudge after verified
+  idle abort, restart/model switch needs coordinator auth); finish-protocol +
+  SKILL.md require reviewed-HEAD in verdict (post-PASS behavioral change needs
+  re-review). Tests: test_relay.py (extended), test-check-aborted.py,
+  fmt/clippy/499. Relay PID 265383 (single). Live detector: critic idle-ok,
+  claude idle-ok, codex working, researcher retry-wait (heuristic).
 - 2026-09-08: USER SCOPE DECISION — add BOTH termctl verbs, FULL
   functionality (not the cut MVP). Surface: `termdeck attach <ws>`/
   `sessions` = launch-time resume; `termctl save [name]` = runtime checkpoint
