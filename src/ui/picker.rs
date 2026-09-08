@@ -11,7 +11,6 @@ mod fs;
 mod input;
 mod render;
 mod sheet;
-mod snapshot;
 mod state;
 
 #[cfg(test)]
@@ -23,7 +22,6 @@ pub use render::{Hit, Picker};
 pub use sheet::{
     Open, Sheet, SheetHit, SheetState, open_pane, sheet_click, sheet_click_secondary, sheet_press,
 };
-pub use snapshot::{OPEN_A_FOLDER, SnapshotBrowse, SnapshotHeader};
 pub use state::{
     Browse, Entry, EntryKind, Instance, Listing, PickerState, match_at, matches, unique_name,
 };

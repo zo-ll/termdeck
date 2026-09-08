@@ -269,30 +269,6 @@ impl TerminalEngine for FakeEngine {
                     EngineEvent::FrameReady(state.frame.clone()),
                 ]
             }
-            EngineCommand::RestoreLines {
-                terminal,
-                workspace,
-                age,
-                lines,
-            } => {
-                let Some(state) = self.terminals.get_mut(&terminal) else {
-                    return Vec::new();
-                };
-                state.history.push(format!(
-                    "─ termdeck restored session · {workspace} · snapshot {age} · shells restarted ─"
-                ));
-                state.history.extend(lines.clone());
-                state
-                    .history
-                    .push("─ end of restored transcript ─".to_owned());
-                let screen = state.screen.get_or_insert_with(Vec::new);
-                screen.push(format!(
-                    "─ termdeck restored session · {workspace} · snapshot {age} · shells restarted ─"
-                ));
-                screen.extend(lines);
-                screen.push("─ end of restored transcript ─".to_owned());
-                Vec::new()
-            }
             EngineCommand::Shutdown => {
                 let mut events = Vec::new();
                 for (terminal, state) in &mut self.terminals {

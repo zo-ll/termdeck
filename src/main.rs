@@ -36,60 +36,13 @@ fn run_with_arguments(
             // No path: the picker chooses the workspace, then the session
             // opens it. Cancelling is successful, but says what happened
             // after the alternate screen has been restored.
-            //
-            // With saved sessions on disk the picker asks the context
-            // question first — resume one, or open a folder — and even a
-            // single session is offered rather than attached to (user
-            // decision 2). With none, there is no question to ask: a first
-            // run is exactly the file explorer it has always been, so the
-            // context picker is skipped rather than shown empty.
-            //
-            // The engine names the directory the snapshots live in; the
-            // picker only reads it, and a termdeck with nowhere to keep
-            // sessions has none to offer.
-            let sessions = termdeck::session::snapshot::sessions_dir()
-                .ok()
-                .map(|directory| termdeck::ui::SnapshotBrowse::new(&directory))
-                .filter(|sessions| !sessions.is_empty());
-            let Some(sessions) = sessions else {
-                return match termdeck::session::pick(termdeck::cli::picker_roots())? {
-                    Some(workspace) => {
-                        termdeck::session::run(&workspace)?;
-                        Ok(None)
-                    }
-                    None => Ok(Some("picker cancelled".to_owned())),
-                };
-            };
-            match termdeck::session::pick_context(sessions, termdeck::cli::picker_roots())? {
-                Some(termdeck::session::Chosen::Open(workspace)) => {
+            match termdeck::session::pick(termdeck::cli::picker_roots())? {
+                Some(workspace) => {
                     termdeck::session::run(&workspace)?;
-                    Ok(None)
-                }
-                Some(termdeck::session::Chosen::Resume(snapshot)) => {
-                    termdeck::session::resume(&snapshot)?;
                     Ok(None)
                 }
                 None => Ok(Some("picker cancelled".to_owned())),
             }
-        }
-        termdeck::cli::CliCommand::Attach { workspace } => {
-            let snapshot = termdeck::session::snapshot::load(workspace).map_err(|error| {
-                let names = termdeck::session::snapshot::list()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|item| item.name)
-                    .collect::<Vec<_>>();
-                if names.is_empty() {
-                    error
-                } else {
-                    format!("{error}; available snapshots: {}", names.join(", "))
-                }
-            })?;
-            termdeck::session::run_restored(snapshot)?;
-            Ok(None)
-        }
-        termdeck::cli::CliCommand::Sessions => {
-            termdeck::cli::run(std::iter::once("sessions".to_owned()))
         }
         termdeck::cli::CliCommand::Help(topic) => Ok(Some(termdeck::cli::help(*topic).to_owned())),
         termdeck::cli::CliCommand::Launch { workspace } => {

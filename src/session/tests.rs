@@ -3,9 +3,9 @@ use super::dispatch_control;
 use super::input::{CAPTURE_PAYLOAD, MOUSE_SEQUENCE_CAP, PASTE_CLOSE, PASTE_OPEN};
 use super::{
     InputEvent, KeyReader, MouseAction, SelectStep, Selecting, WheelRoute, add_failure,
-    add_terminal, app_wheel, apply_restore, chosen, clipboard_sequence, close_terminal,
-    dispatch_live_input, encode_paste, master_terminal, mouse_action, now, open_terminals,
-    request_close, resize_terminals, resized, route_wheel, schedule_expiry_repaint, selection_text,
+    add_terminal, app_wheel, chosen, clipboard_sequence, close_terminal, dispatch_live_input,
+    encode_paste, master_terminal, mouse_action, now, open_terminals, request_close,
+    resize_terminals, resized, route_wheel, schedule_expiry_repaint, selection_text,
     spawn_terminals, spawn_terminals_with_socket, terminal_sizes, workspace_of,
 };
 use crate::{
@@ -318,7 +318,7 @@ fn ctl_paste_with_an_embedded_closer_is_refused_atomically() {
         ],
         shell_hook: false,
     }];
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -344,7 +344,7 @@ fn ctl_paste_with_an_embedded_closer_is_refused_atomically() {
             ..Default::default()
         },
         None,
-        &mut workspace,
+        &workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1111,7 +1111,7 @@ fn closing_a_pane_that_is_not_the_last_asks_nothing() {
 fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(2);
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let socket = std::path::Path::new("/tmp/termdeck-ctl-test.sock");
@@ -1132,7 +1132,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
             dispatch_control(
                 $request,
                 $caller,
-                &mut workspace,
+                &workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -1153,7 +1153,7 @@ fn ctl_controls_share_the_live_paths_and_enforce_their_gates() {
     let response = dispatch_control(
         sheet_open,
         None,
-        &mut workspace,
+        &workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1238,7 +1238,7 @@ fn ctl_input_to_an_exited_pane_is_refused_truthfully() {
         command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
         shell_hook: false,
     }];
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1278,7 +1278,7 @@ fn ctl_input_to_an_exited_pane_is_refused_truthfully() {
             ..Default::default()
         },
         None,
-        &mut workspace,
+        &workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1320,7 +1320,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
         ],
         shell_hook: false,
     }];
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1344,7 +1344,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
             ..Default::default()
         },
         None,
-        &mut workspace,
+        &workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1410,7 +1410,7 @@ fn ctl_input_to_a_wedged_pane_is_refused_truthfully() {
     let response = dispatch_control(
         request,
         None,
-        &mut workspace,
+        &workspace,
         &mut projects,
         &mut deck,
         &mut engine,
@@ -1449,7 +1449,7 @@ fn a_reopened_directory_never_reuses_its_tombstoned_identity() {
 
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(1);
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1470,7 +1470,7 @@ fn a_reopened_directory_never_reuses_its_tombstoned_identity() {
             dispatch_control(
                 $request,
                 $caller,
-                &mut workspace,
+                &workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -1558,7 +1558,7 @@ fn identities_stay_unique_across_close_reopen_cycles() {
 
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(1);
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -1574,7 +1574,7 @@ fn identities_stay_unique_across_close_reopen_cycles() {
             dispatch_control(
                 $request,
                 None,
-                &mut workspace,
+                &workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -2277,7 +2277,7 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
     let _lock = crate::ctl::LISTENER_TEST_LOCK.lock().unwrap();
     let size = ScreenSize::new(144, 42);
     let mut projects = sleepers(2);
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     let mut notifies = crate::ui::Notifications::new();
@@ -2301,7 +2301,7 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
             dispatch_control(
                 request,
                 caller,
-                &mut workspace,
+                &workspace,
                 &mut projects,
                 &mut deck,
                 &mut engine,
@@ -2377,7 +2377,7 @@ fn a_socket_paste_cannot_escape_bracketed_paste_and_execute() {
         ],
         shell_hook: false,
     }];
-    let mut workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
     let mut deck = DeckState::new(projects.len());
     let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
     engine.dispatch(EngineCommand::Input {
@@ -2429,7 +2429,7 @@ fn a_socket_paste_cannot_escape_bracketed_paste_and_execute() {
                 dispatch_control(
                     request,
                     caller,
-                    &mut workspace,
+                    &workspace,
                     &mut projects,
                     &mut deck,
                     &mut engine,
@@ -2696,208 +2696,4 @@ fn the_pointer_copy_pastes_back_as_a_paste_operation() {
         encode_paste(&engine, &frontend, "ls -l".to_owned()).unwrap(),
         expected
     );
-}
-
-// ---------------------------------------------------------------------------
-// Resuming a picked session (#156): the picker chooses, the engine restores.
-// ---------------------------------------------------------------------------
-
-/// A sessions directory and a workspace root of this test's own.
-fn restore_root(label: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "termdeck-resume-{label}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::create_dir_all(&root).unwrap();
-    root
-}
-
-/// Writes a two-pane `session.v1` beside the workspace it was taken on, and
-/// hands back the header the context picker would list it as — the only
-/// thing a resume is ever given.
-fn saved_session(root: &std::path::Path, panes: &[&str]) -> crate::ui::SnapshotHeader {
-    let sessions = root.join("sessions");
-    std::fs::create_dir_all(&sessions).unwrap();
-    let snapshot = crate::session::snapshot::Snapshot {
-        schema: "session.v1".to_owned(),
-        workspace: "demo".to_owned(),
-        root: root.join("work"),
-        saved_at: 0,
-        deck: crate::session::snapshot::SnapshotDeck {
-            order: (0..panes.len()).rev().collect(),
-            zoomed: false,
-            collapsed: vec![false; panes.len()],
-            pinned: None,
-            master_ratio: 0.7,
-        },
-        panes: panes
-            .iter()
-            .map(|pane| crate::session::snapshot::SnapshotPane {
-                id: (*pane).to_owned(),
-                cwd: root.join("work").join(pane),
-                command: vec!["bash".to_owned(), "-l".to_owned()],
-                shell_hook: true,
-                alt_screen: false,
-                lines: vec![format!("TRANSCRIPT-{pane}"), "$ cargo test".to_owned()],
-            })
-            .collect(),
-    };
-    std::fs::write(
-        sessions.join("demo.json"),
-        serde_json::to_vec(&snapshot).unwrap(),
-    )
-    .unwrap();
-    crate::ui::SnapshotBrowse::new(&sessions)
-        .header(&sessions.join("demo.json"))
-        .expect("the picker lists the session it just wrote")
-        .clone()
-}
-
-/// The plan `resume` builds from a picked row: the file the inventory listed,
-/// read in full and planned against the directories that still exist. This is
-/// `run_restored`'s own body, so what it asserts is what a resume opens on.
-fn resumed(header: &crate::ui::SnapshotHeader) -> crate::session::snapshot::RestorePlan {
-    crate::session::snapshot::restore_plan(
-        crate::session::snapshot::load_file(&header.file).unwrap(),
-    )
-    .unwrap()
-}
-
-/// #156: a resume is a restore, not a fresh workspace under a restore banner.
-///
-/// The picker hands back a header it read four fields out of; what opens is
-/// the whole snapshot — the panes it saved (and only those, though the root
-/// holds a folder it never knew about), the layout it was arranged in, and
-/// the transcript each pane had on screen, replayed into the fresh shell.
-#[test]
-fn a_resume_restores_the_saved_panes_layout_and_transcripts() {
-    let root = restore_root("whole");
-    for pane in ["left", "right", "opened-since"] {
-        std::fs::create_dir_all(root.join("work").join(pane)).unwrap();
-    }
-    let header = saved_session(&root, &["left", "right"]);
-
-    let plan = resumed(&header);
-
-    // Not a rediscovered folder: the panes are the snapshot's, in the
-    // snapshot's order, with the commands and directories it saved. A fresh
-    // open of the same root would have picked up `opened-since` as well.
-    assert_eq!(plan.workspace.name, "demo");
-    assert_eq!(
-        plan.workspace
-            .projects
-            .iter()
-            .map(|project| project.terminal.to_string())
-            .collect::<Vec<_>>(),
-        vec!["left".to_owned(), "right".to_owned()],
-    );
-    assert_eq!(plan.workspace.projects[0].path, root.join("work/left"));
-    assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
-    // The durable half of the deck came back with them.
-    let (order, zoomed, collapsed, pinned, ratio) = plan.deck.saved_layout();
-    assert_eq!(order, vec![1, 0], "the saved arrangement, not a fresh one");
-    assert!(!zoomed);
-    assert_eq!(collapsed, vec![false, false]);
-    assert_eq!(pinned, None);
-    assert!((ratio - 0.7).abs() < f64::EPSILON, "{ratio}");
-
-    // And the text: fresh shells, into which the saved transcript is
-    // replayed under a banner that says it is not live.
-    let mut deck = plan.deck.clone();
-    let mut engine = FakeEngine::new(
-        plan.workspace
-            .projects
-            .iter()
-            .map(|project| project.terminal.clone()),
-    );
-    apply_restore(&plan, &plan.workspace.projects, &mut engine, &mut deck);
-
-    for pane in ["left", "right"] {
-        let history = engine
-            .history_lines(&TerminalId::new(pane), 100)
-            .expect("a restored pane");
-        assert!(
-            history
-                .iter()
-                .any(|line| line == &format!("TRANSCRIPT-{pane}")),
-            "{pane}: {history:?}"
-        );
-        assert!(
-            history.iter().any(|line| line.contains("restored session")),
-            "{pane}: {history:?}"
-        );
-    }
-    let notice = deck.notice().expect("the restore banner");
-    assert!(notice.starts_with("restored demo · snapshot "), "{notice}");
-    assert!(notice.ends_with(" · shells restarted"), "{notice}");
-
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-/// A pane whose directory is gone cannot be reopened, so the resume says so
-/// rather than failing or pretending: the survivor is restored, the loss is
-/// named in the same banner, and the layout falls back to a fresh
-/// arrangement because the saved one no longer describes the panes.
-#[test]
-fn a_resume_skips_a_pane_whose_directory_is_gone_and_says_so() {
-    let root = restore_root("skips");
-    std::fs::create_dir_all(root.join("work").join("left")).unwrap();
-    let header = saved_session(&root, &["left", "gone"]);
-
-    let plan = resumed(&header);
-
-    assert_eq!(
-        plan.workspace
-            .projects
-            .iter()
-            .map(|project| project.terminal.to_string())
-            .collect::<Vec<_>>(),
-        vec!["left".to_owned()],
-    );
-    assert_eq!(plan.skipped.len(), 1, "{:?}", plan.skipped);
-    assert!(
-        plan.skipped[0].contains("skipped gone"),
-        "{:?}",
-        plan.skipped
-    );
-
-    let mut deck = plan.deck.clone();
-    let mut engine = FakeEngine::new([TerminalId::new("left")]);
-    apply_restore(&plan, &plan.workspace.projects, &mut engine, &mut deck);
-
-    assert!(
-        engine
-            .history_lines(&TerminalId::new("left"), 100)
-            .expect("the surviving pane")
-            .iter()
-            .any(|line| line == "TRANSCRIPT-left")
-    );
-    let notice = deck.notice().expect("the restore banner");
-    assert!(notice.contains("skipped gone"), "{notice}");
-    assert!(notice.contains("shells restarted"), "{notice}");
-
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-/// And it is the snapshot file that a resume opens, not the root it names: a
-/// header whose file has gone missing fails as a restore rather than quietly
-/// opening that directory as a fresh workspace.
-#[test]
-fn a_resume_without_its_snapshot_file_is_an_error_not_a_fresh_open() {
-    let root = restore_root("missing");
-    std::fs::create_dir_all(root.join("work").join("left")).unwrap();
-    let header = saved_session(&root, &["left"]);
-    std::fs::remove_file(&header.file).unwrap();
-
-    let error = super::resume(&header).expect_err("no snapshot, no restore");
-
-    assert!(
-        error.to_string().contains("cannot read snapshot"),
-        "{error}"
-    );
-    std::fs::remove_dir_all(root).unwrap();
 }

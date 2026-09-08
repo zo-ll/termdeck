@@ -436,23 +436,14 @@ fn last_line(path: &Path) -> Option<String> {
 /// it. A time in the future — a clock that disagrees with the one that
 /// wrote it — is not an age, and says nothing rather than a wrong something.
 fn age(when: SystemTime) -> Option<String> {
-    Some(phrase_age(
-        SystemTime::now().duration_since(when).ok()?.as_secs(),
-    ))
-}
-
-/// How long ago something happened, from the seconds since it did. The
-/// listing's ages and the saved sessions' are the same phrasing on purpose:
-/// `2h ago` in the context picker means what `2h ago` means anywhere else in
-/// the picker.
-pub(super) fn phrase_age(elapsed: u64) -> String {
-    match elapsed {
+    let elapsed = SystemTime::now().duration_since(when).ok()?.as_secs();
+    Some(match elapsed {
         0..=59 => "just now".to_owned(),
         60..=3599 => format!("{}m ago", elapsed / 60),
         3600..=86_399 => format!("{}h ago", elapsed / 3600),
         86_400..=2_591_999 => format!("{}d ago", elapsed / 86_400),
         _ => format!("{}w ago", elapsed / 604_800),
-    }
+    })
 }
 
 /// What a folder holds, for `9 items · 5 repos`. `None` when it could not be
