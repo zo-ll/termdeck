@@ -1747,6 +1747,23 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   slices). IN FLIGHT: codex → #142; critic idle.
   AUDIT status: ✓ #143 #134 #139 #153; remaining P1 #142 #141; P2 #154 #145
   #146 #147.
+- 2026-09-08: #142 DONE (codex 7e7d7d0 "fix: bound terminal parser retention";
+  marker RESULT=pass: bounded VT control-string and combining-mark retention,
+  full gate green; files Cargo.toml +1 / Cargo.lock +1 / src/engine/vt.rs +351;
+  not pushed; duplicate ping ignored per twin-ping protocol). ROUTED to CRITIC
+  (assignment .scratch/review/142-parser-memory.critic.md; critic Working).
+- 2026-09-08: #141 (shutdown never sweeps escaped descendants, P1) DISPATCHED
+  to the codex lane — worktree ~/.worktrees/termdeck/141-shutdown-descendants
+  (coord/141-shutdown-descendants off origin/main 0213b9a); brief
+  .scratch/tasks/141-shutdown-descendants.brief.md (include validated snapshot
+  survivors in the force decision / always sweep after grace regardless of the
+  group/session check; completion must not report success while a snapshotted
+  descendant is alive; regression test spawns a setsid descendant and asserts
+  nothing owned survives; explicitly OUT OF SCOPE #146's PID-reuse guards +
+  connect timeout). Fresh codex session; one lost-Enter retry; verified Working.
+  IN FLIGHT: critic → #142; codex → #141.
+  AUDIT status: ✓ #143 #134 #139 #153; #142 at critic; P1 #141 in flight;
+  P2 #154 #145 #146 #147 queued (codex lane).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
