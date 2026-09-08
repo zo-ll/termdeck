@@ -326,3 +326,10 @@ events in order; only the top dashboard describes current status.
 - Durable-resumption: read COORDINATION.md + docs/RESUME.md + journal
   (the skills repo has the coordinator/critic/researcher specs incl. the
   canonical env + protocols).
+
+- 2026-09-09: COORDINATOR SKILL de-termdecked (user request, project wrap-up): deleted
+  references/env-termdeck.md + scripts/relay-termdeck.sh; SKILL.md env detection now
+  generic (tmux runbook only, no termdeck/tmux bifurcation); relay env override renamed
+  TERMDECK_COORD_PANE -> RELAY_COORD_PANE (relay.sh + env-tmux.md). Next relay restart
+  must use RELAY_COORD_PANE=current coordinator pane id. Historical ack-supervision.notes.md
+  left as a dated record (3 mentions) — delete on request.
