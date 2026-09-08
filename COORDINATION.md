@@ -122,6 +122,24 @@ events in order; only the top dashboard describes current status.
   <0.5% core target at 16 idle panes; smallest high-confidence change =
   cancellable reader waits. Routed to user. theming research in flight
   (codex). LANES: codex → theming research; critic + claude idle.
+- 2026-09-09: theming research DONE (codex astra/low; deliverable
+  theming-research.md 165 lines complete; finish marker+ping NOT written —
+  codex hit its 5h limit mid-finish (resets 03:30); deliverable verified
+  complete + routed). RECS: typed 18-token RGB palette, one versioned YAML
+  theme file, built-in default = current palette exactly; colors-only v1
+  (~7-12 person-days), startup loading + recoverable file errors, defer
+  live reload + terminal-theme detection; theming does NOT recolor child
+  ANSI palettes (separate engine-facing extension if wanted); border-state
+  contract = distinguishable RENDERED states (not 6 unique colors — notify
+  shares warning, master/target share accent, #157 quiet rule kept);
+  contrast: HINT 2.5:1 (low), MUTED 4.1 — high-contrast preset + diagnostics
+  rather than recoloring default. ALL THREE research topics delivered:
+  lua-scripting, performance, theming.
+- 2026-09-09: CODEX 5H LIMIT EXHAUSTED (user hit limits; 5h window 0%,
+  resets 03:30; weekly 62%). No codex dispatches until reset. Theming
+  finish (marker+ping) pending reset. Complement proof (tmux read-only)
+  still queued — codex after reset or another lane. LANES: critic + claude
+  idle; codex capped (resets 03:30).
 - 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
   multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
   not compete by building a pane server / live-resume. User endorsed the
