@@ -2171,6 +2171,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   fmt/clippy/499 tests pass; NO repo commits (infra+doc task, nothing to
   critic/merge). Worktree coord/relay-fix left for now (no repo change).
   LANES all idle. Open: none.
+- 2026-09-08: WORKFLOW FIXES dispatched to the SAME codex worker
+  (gpt-6-astra/low), time-boxed ~45 min, fixing the issues it identified in its
+  review: (P0) relay.sh singleton lock + atomic inbox claim + task/role/round
+  event identity, verified live; finish-protocol.md de-drifted (drop md5
+  claim, document round identity); research-protocol.md artifact-completeness
+  check; (P1) env-tmux.md dispatch-state (foreground ≠ Working); COORDINATION.md
+  reconcile + rotate oldest handoffs to tracked archive (repo commit, local
+  only). Brief workflow-fixes.brief.md. Worker Working; reports completed vs
+  deferred. COORDINATION rotation commit will be reviewed by coordinator
+  (governance) before merge.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
