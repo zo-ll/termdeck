@@ -1991,6 +1991,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   ★ ALL audit issues + #152 residual now CLOSED. Remaining open: #155
   (named send-keys, filed, not picked up) + sessions (research done, awaiting
   user decision). LANES: critic/codex/claude/researcher idle.
+- 2026-09-08: SESSIONS design decisions locked with user (flow): no-arg
+  termdeck → context picker (Resume a session… + Open a folder…), zero-session
+  fall-through to explorer, NO auto-attach, explicit args bypass picker, file
+  picker reachable from inside a session to open a new terminal,
+  `termdeck attach <workspace>`. User declined a Claude design prompt and asked
+  for RESEARCH. ROUND-2 study dispatched to the researcher lane
+  (/tmp/shipwright/termdeck/sessions/study2.md): resolve the ONE load-bearing
+  unknown (how captured text replays into a fresh pane's scrollback —
+  synthetic injection vs non-executed transcript vs hybrid; must not touch
+  #119/#141/#146), plus session-picker reuse of ui/picker, JSON/XDG data
+  model + naming + 0600/secrets, save/autosave lifecycle, CLI/ctl surface,
+  #112 gate narrowing, and the codex/claude lane split. Deliverable
+  /tmp/shipwright/termdeck/sessions/sessions-research-2.md. Researcher Working.
+  LANES: researcher → sessions2; critic/codex/claude idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
