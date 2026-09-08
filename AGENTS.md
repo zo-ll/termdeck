@@ -12,10 +12,7 @@ adopting work from a new machine or agent session.
 - PTY and terminal-emulation code belongs in `src/engine/`.
 - Configuration and CLI code belong in `src/config/` and `src/cli/`.
 - Horizon integration must remain configuration-only.
-- Do not add tmux, OpenMux, or a background daemon. Session persistence is
-  limited to on-disk snapshots of layout + visible pane text restored into
-  fresh shells (see docs/design/termdeck/sessions*); live-process resume stays
-  out of scope.
+- Do not add tmux, OpenMux, a background daemon, or session persistence.
 
 ## Agent ownership
 
