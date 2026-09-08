@@ -2139,6 +2139,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   error; align encoder with key_sequence()/KeyReader in src/session/input.rs;
   help + tests). One lost-Enter retry; verified Working.
   LANES: codex → #155; critic/claude/researcher idle.
+- 2026-09-08: #155 DONE (codex d755812 "feat(termctl): encode named key
+  input"; marker RESULT=pass: named termctl key encoder committed, full gate
+  green; files input.rs +239 / termctl.rs +65 / session.rs ±2; not pushed).
+  ROUTED to CRITIC (assignment .scratch/review/155-send-keys.critic.md —
+  named-grammar correctness vs key_sequence()/KeyReader, wire/gate unchanged,
+  and the REQUIRED backward-compat decision for raw-byte senders as the key
+  focus; critic Working). IN FLIGHT: critic → #155; codex + claude idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
