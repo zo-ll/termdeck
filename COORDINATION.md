@@ -2099,6 +2099,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   preview; fixtures both ways). Claude Working.
   IN FLIGHT: claude → #157; then sessions-picker handback (rewire resume→
   run_restored) after rebase onto engine-merged main; critic idle.
+- 2026-09-08: #157 DONE (claude d598cf7; marker RESULT=pass: zoom/narrow
+  master border now IDLE_BORDER not ACCENT, stack-visible unchanged, gate
+  467/7/1; deck.rs +7 / tests.rs +51; not pushed). ROUTED to CRITIC
+  (assignment .scratch/review/hidden-stack-border.critic.md; critic Working).
+  sessions-picker HANDBACK dispatched to claude (relaunched at sessions-picker
+  worktree; brief .scratch/tasks/sessions-picker.handback.md: rebase onto
+  engine-merged main + rewire resume()→run_restored so transcripts/layout/
+  cwd-skips actually load, prove with a test; claude Working).
+  IN FLIGHT: critic → #157; claude → sessions-picker handback; codex idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
