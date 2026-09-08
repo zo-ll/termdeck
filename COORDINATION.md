@@ -2051,6 +2051,19 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Interface contract pinned (session.v1 schema fixed in §3). Both Working.
   COORDINATOR: apply AGENTS.md narrowing + #112 update (governance edit, per
   design §6) as part of this feature.
+- 2026-09-08: AGENTS.md narrowed (session persistence = on-disk snapshots into
+  fresh shells; no daemon/live-resume) at 4fee436; #112 CLOSED (decision:
+  snapshot-restore adopted, live-resume out of scope).
+- 2026-09-08: sessions-engine DONE (codex b45d577 replay + b57ca2a snapshots;
+  marker RESULT=pass: engine-safe replay plus daemon-less session snapshots,
+  CLI, ctl save/restore; 11 files +937 — snapshot.rs +433, native.rs +139,
+  session.rs +142, ui/state.rs +47 [lane-adjacent], cli +49, termctl +39, ctl
+  +32, main.rs +19, fake +24, contracts/engine.rs +9 [additive trait],
+  tests ±36; not pushed). ROUTED to CRITIC (assignment
+  .scratch/review/sessions-engine.critic.md — security-relevant replay
+  hardening + non-execution proof; critic Working). Claude still on
+  sessions-picker (13m+). IN FLIGHT: critic → sessions-engine; claude →
+  sessions-picker.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
