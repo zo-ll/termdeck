@@ -35,6 +35,15 @@ pub enum EngineCommand {
     Respawn {
         terminal: TerminalId,
     },
+    /// Replays a saved, plain-text transcript into a fresh terminal viewport.
+    /// This is synthetic output: implementations must never write it to the
+    /// child PTY's input transport.
+    RestoreLines {
+        terminal: TerminalId,
+        workspace: String,
+        age: String,
+        lines: Vec<String>,
+    },
     Shutdown,
 }
 
