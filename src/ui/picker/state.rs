@@ -12,6 +12,12 @@ pub enum EntryKind {
     Parent,
     /// `·` — a plain file: listed, dimmed, never selectable.
     File,
+    /// `◇` — a saved session, offered by the context picker. It is resumed
+    /// rather than selected: one row is one whole deck, not one pane.
+    Snapshot,
+    /// `▸` — the context picker's way out of the session list and into the
+    /// file explorer. It stands for a place to look, not a place to work.
+    Escape,
 }
 
 /// One row of a listing, as the browser hands it over: classified, annotated,
@@ -33,6 +39,11 @@ pub struct Entry {
     /// What a folder holds, drawn as `9 items` / `9 items · no repos`.
     pub items: Option<usize>,
     pub repos: Option<usize>,
+    /// How many panes a saved session holds.
+    pub panes: Option<usize>,
+    /// The directory a saved session was opened on, which is what the row is
+    /// about — `path` is the snapshot file that records it.
+    pub root: Option<PathBuf>,
 }
 
 impl Entry {
@@ -46,6 +57,8 @@ impl Entry {
             age: None,
             items: None,
             repos: None,
+            panes: None,
+            root: None,
         }
     }
 
@@ -68,6 +81,33 @@ impl Entry {
             kind: EntryKind::File,
             ..Self::repository(name, path)
         }
+    }
+
+    /// A saved session: named by its workspace, addressed by the snapshot
+    /// file that holds it.
+    pub fn snapshot(name: impl Into<String>, file: impl Into<PathBuf>) -> Self {
+        Self {
+            kind: EntryKind::Snapshot,
+            ..Self::repository(name, file)
+        }
+    }
+
+    /// The context picker's "Open a folder…" row: not a session, and not a
+    /// folder either — the door to the file explorer.
+    pub fn escape(label: impl Into<String>) -> Self {
+        Self {
+            kind: EntryKind::Escape,
+            ..Self::repository(label, PathBuf::new())
+        }
+    }
+
+    /// What a snapshot row says about itself: where it was taken, how many
+    /// panes it holds, and how long ago it was saved.
+    pub fn saved(mut self, root: impl Into<PathBuf>, panes: usize, age: impl Into<String>) -> Self {
+        self.root = Some(root.into());
+        self.panes = Some(panes);
+        self.age = Some(age.into());
+        self
     }
 
     pub fn git(
@@ -179,6 +219,14 @@ pub struct PickerState {
     workspace: String,
     renaming: bool,
     offset: usize,
+    /// Whether the picker is choosing a context — a saved session to resume,
+    /// or the folder explorer — rather than browsing folders (#153).
+    context: bool,
+    /// The snapshot file the context picker settled on, once it has.
+    resumed: Option<PathBuf>,
+    /// One line the picker has to say about itself: the snapshots it could
+    /// not read, which are skipped rather than drawn.
+    notice: Option<String>,
 }
 
 impl PickerState {
@@ -192,6 +240,19 @@ impl PickerState {
             workspace: String::new(),
             renaming: false,
             offset: 0,
+            context: false,
+            resumed: None,
+            notice: None,
+        }
+    }
+
+    /// Opens on the context list: saved sessions first, the way into the file
+    /// explorer last. It is the same picker — same keys, same rows — asked a
+    /// different question, so nothing here is a second input language.
+    pub fn context() -> Self {
+        Self {
+            context: true,
+            ..Self::new()
         }
     }
 
@@ -225,6 +286,52 @@ impl PickerState {
         self.renaming
     }
 
+    /// Whether the context list is what is on screen.
+    pub fn choosing(&self) -> bool {
+        self.context
+    }
+
+    /// The snapshot the context picker settled on: the file that holds it,
+    /// which is what the restore is addressed by.
+    pub fn resumed(&self) -> Option<&Path> {
+        self.resumed.as_deref()
+    }
+
+    /// `⏎` on a saved session: it is resumed whole, so this ends the picker
+    /// rather than adding a pane to a selection.
+    pub fn resume(&mut self, entry: &Entry) -> bool {
+        if entry.kind != EntryKind::Snapshot {
+            return false;
+        }
+        self.resumed = Some(entry.path.clone());
+        true
+    }
+
+    /// `⏎` on "Open a folder…": the context question is answered, and the
+    /// file explorer takes the screen on its own terms — at its roots, with
+    /// nothing selected and no query carried in.
+    pub fn leave_context(&mut self) -> bool {
+        if !self.context {
+            return false;
+        }
+        self.context = false;
+        self.cursor = 0;
+        self.offset = 0;
+        self.filter = None;
+        self.notice = None;
+        true
+    }
+
+    /// One line about the listing itself — the snapshots that could not be
+    /// read, which the picker skips rather than crashing on.
+    pub fn set_notice(&mut self, notice: impl Into<String>) {
+        self.notice = Some(notice.into());
+    }
+
+    pub fn notice(&self) -> Option<&str> {
+        self.notice.as_deref()
+    }
+
     pub fn offset(&self) -> usize {
         self.offset
     }
@@ -256,6 +363,20 @@ impl PickerState {
     /// this root first and everything else after; `elsewhere` is how many fell
     /// in the second group, which is where the view draws its rule.
     pub fn listing(&self, browser: &dyn Browse) -> Listing {
+        if self.context {
+            let Some(query) = self.filter.as_deref().filter(|query| !query.is_empty()) else {
+                return Listing::of(browser.roots());
+            };
+            // The way out is never filtered away: a query that matches no
+            // session still has to leave the user somewhere to go.
+            return Listing::of(
+                browser
+                    .search(Path::new(""))
+                    .into_iter()
+                    .filter(|entry| entry.kind == EntryKind::Escape || names_or_path(entry, query))
+                    .collect(),
+            );
+        }
         let Some(cwd) = self.cwd.as_deref() else {
             return Listing::of(browser.roots());
         };
@@ -539,7 +660,7 @@ impl PickerState {
 
     /// `/` opens the query line; typing narrows; `esc` clears it.
     pub fn begin_filter(&mut self) -> bool {
-        if self.cwd.is_none() || self.filter.is_some() {
+        if (self.cwd.is_none() && !self.context) || self.filter.is_some() {
             return false;
         }
         self.filter = Some(String::new());
@@ -646,6 +767,17 @@ pub fn unique_name(taken: &[&str], base: &str) -> String {
         .map(|instance| format!("{base}-{instance}"))
         .find(|candidate| !taken.iter().any(|name| *name == candidate))
         .expect("an unused suffix exists")
+}
+
+/// What the context picker's filter narrows on: the workspace a snapshot
+/// names, or the directory it was taken in. A session is remembered by both,
+/// and typing either should find it.
+fn names_or_path(entry: &Entry, query: &str) -> bool {
+    matches(&entry.name, query)
+        || entry
+            .root
+            .as_deref()
+            .is_some_and(|root| matches(&root.to_string_lossy(), query))
 }
 
 /// Case-insensitive substring match, which is what the filter promises.

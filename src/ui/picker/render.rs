@@ -51,6 +51,22 @@ pub enum Hit {
     Filter,
 }
 
+/// One line of the listing body: a row of the listing, or a rule that
+/// introduces the group it belongs to.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Slot {
+    Rule(String),
+    Row(usize),
+}
+
+/// A section rule, drawn the width the listing header is drawn to.
+fn rule(label: &str) -> String {
+    format!(
+        "─── {label} {}",
+        "─".repeat(88_usize.saturating_sub(5 + label.chars().count()))
+    )
+}
+
 /// The picker, drawn.
 pub struct Picker<'a> {
     pub state: &'a PickerState,
@@ -108,7 +124,10 @@ impl Picker<'_> {
 
     /// The two panels, or one when the canvas is too narrow to seat both.
     fn panels(&self, body: Rect) -> (Rect, Option<Rect>) {
-        if body.width < NARROW_PICKER {
+        // The context picker selects nothing: one row is one whole deck, so
+        // there is no pane order to keep beside the listing and the browse
+        // panel takes the canvas.
+        if body.width < NARROW_PICKER || self.state.choosing() {
             return (body, None);
         }
         let browse = Rect {
@@ -153,6 +172,22 @@ impl Picker<'_> {
                 .add_modifier(Modifier::BOLD),
         )];
         let selected = self.state.selection().len();
+        if self.state.choosing() {
+            let saved = self
+                .entries()
+                .iter()
+                .filter(|entry| entry.kind == EntryKind::Snapshot)
+                .count();
+            spans.push(Span::styled("  pick up where you left off  ·  ", hint));
+            spans.push(Span::styled(
+                match saved {
+                    1 => "1 saved session".to_owned(),
+                    saved => format!("{saved} saved sessions"),
+                },
+                Style::new().fg(PREVIEW_FG).bg(STATUS_BG),
+            ));
+            return spans;
+        }
         if self.state.filtering() {
             spans.push(Span::styled("  filtering  ·  ", hint));
             spans.push(Span::styled(
@@ -179,6 +214,13 @@ impl Picker<'_> {
 
     fn top_right(&self) -> Vec<Span<'static>> {
         let hint = Style::new().fg(HINT).bg(STATUS_BG);
+        if self.state.choosing() {
+            return vec![
+                Span::styled("sessions", Style::new().fg(PREVIEW_FG).bg(STATUS_BG)),
+                Span::styled(" › ", Style::new().fg(SEPARATOR).bg(STATUS_BG)),
+                Span::styled("resume one, or open a folder", hint),
+            ];
+        }
         let crumb = match self.state.cwd() {
             Some(path) => display_path(path, self.home),
             None => "roots".to_owned(),
@@ -198,7 +240,11 @@ impl Picker<'_> {
     }
 
     fn keys(&self, key: Style, hint: Style) -> Vec<Span<'static>> {
-        let pairs: &[(&str, &str)] = if self.state.filtering() {
+        let pairs: &[(&str, &str)] = if self.state.choosing() {
+            // The same keys the listing has always had, asked a different
+            // question: nothing new to learn on the first screen of the day.
+            &[("↑↓", " move  "), ("⏎", " resume  "), ("/", " filter")]
+        } else if self.state.filtering() {
             &[
                 ("type", " to narrow  "),
                 ("↑↓", " move  "),
@@ -230,6 +276,14 @@ impl Picker<'_> {
     }
 
     fn actions(&self, key: Style, hint: Style) -> Vec<Span<'static>> {
+        if self.state.choosing() {
+            return vec![
+                Span::styled("⏎", Style::new().fg(ACCENT).bg(STATUS_BG)),
+                Span::styled(" resume or open  ", hint),
+                Span::styled("esc", key),
+                Span::styled(" quit", hint),
+            ];
+        }
         vec![
             Span::styled(
                 "o",
@@ -257,9 +311,10 @@ impl Picker<'_> {
     /// The browse panel: the listing, its header, the detail block under the
     /// cursor, and the filter's query line pinned to the bottom.
     fn browse(&self, buffer: &mut Buffer, area: Rect) {
-        let title = match self.state.cwd() {
-            Some(path) => display_path(path, self.home),
-            None => "roots".to_owned(),
+        let title = match (self.state.choosing(), self.state.cwd()) {
+            (true, _) => "saved sessions".to_owned(),
+            (false, Some(path)) => display_path(path, self.home),
+            (false, None) => "roots".to_owned(),
         };
         self.panel(buffer, area, true, |buffer, content| {
             let mut row = content.y;
@@ -278,7 +333,11 @@ impl Picker<'_> {
             self.rows(buffer, listing);
             self.footer(buffer, content);
         });
-        let hints = if self.state.filtering() {
+        let hints = if self.state.choosing() {
+            // The honesty requirement the round-2 brief calls non-negotiable:
+            // a restored session is text, not the processes that wrote it.
+            "⏎ resume · shells restart"
+        } else if self.state.filtering() {
             "⌫ edit · esc clear"
         } else {
             "← back · → inside · ~ home · g root"
@@ -316,6 +375,46 @@ impl Picker<'_> {
     fn listing_header(&self) -> Vec<Vec<Span<'static>>> {
         let hint = Style::new().fg(MUTED);
         let mut header = Vec::new();
+        if self.state.choosing() {
+            let saved = self
+                .entries()
+                .iter()
+                .filter(|entry| entry.kind == EntryKind::Snapshot)
+                .count();
+            header.push(vec![
+                Span::styled("SESSIONS ", hint),
+                Span::styled(
+                    match self.state.filter() {
+                        Some(query) => query.to_owned(),
+                        None => "saved on quit".to_owned(),
+                    },
+                    Style::new().fg(if self.state.filtering() {
+                        ACCENT
+                    } else {
+                        MASTER_FG
+                    }),
+                ),
+                Span::styled("  ·  ", Style::new().fg(SEPARATOR)),
+                Span::styled(
+                    match saved {
+                        1 => "1 to resume".to_owned(),
+                        saved => format!("{saved} to resume"),
+                    },
+                    hint,
+                ),
+            ]);
+            // A snapshot that could not be read is skipped, not drawn and not
+            // fatal — but it is not silent either: the count says how much of
+            // the disk is missing from the list below.
+            if let Some(notice) = self.state.notice() {
+                header.push(vec![Span::styled(
+                    notice.to_owned(),
+                    Style::new().fg(WARNING),
+                )]);
+            }
+            header.push(vec![Span::styled("─".repeat(88), Style::new().fg(HINT))]);
+            return header;
+        }
         match (self.state.cwd(), self.state.filter()) {
             (Some(cwd), Some(query)) => {
                 let here = self.entries().len().saturating_sub(self.elsewhere());
@@ -357,42 +456,75 @@ impl Picker<'_> {
         header
     }
 
+    /// The lines the listing body is made of, from the scroll offset down:
+    /// its rows, and the rules that introduce a group of them.
+    ///
+    /// One sequence, because the pointer has to land on the same row the eye
+    /// does: a rule that the drawing counts and the hit test does not is an
+    /// off-by-one between them.
+    fn slots(&self) -> Vec<Slot> {
+        let boundary = (self.elsewhere() > 0).then(|| self.entries().len() - self.elsewhere());
+        let mut slots = Vec::new();
+        for index in self.state.offset()..self.entries().len() {
+            if let Some(label) = self.section(index, boundary) {
+                slots.push(Slot::Rule(rule(label)));
+            }
+            slots.push(Slot::Row(index));
+        }
+        slots
+    }
+
+    /// The rule that belongs above row `index`, if one does: the context
+    /// picker's two sections, or the filter's boundary between this root's
+    /// matches and the rest.
+    fn section(&self, index: usize, boundary: Option<usize>) -> Option<&'static str> {
+        if boundary == Some(index) {
+            return Some("also in other roots");
+        }
+        if !self.state.choosing() {
+            return None;
+        }
+        let kind = self.entries().get(index)?.kind;
+        let first_of_kind = index == 0
+            || self
+                .entries()
+                .get(index - 1)
+                .is_none_or(|previous| previous.kind != kind);
+        match kind {
+            EntryKind::Snapshot if first_of_kind => Some("resume a session"),
+            EntryKind::Escape if first_of_kind => Some("open a folder"),
+            _ => None,
+        }
+    }
+
     fn rows(&self, buffer: &mut Buffer, area: Rect) {
         // Whatever else is true, the rows that exist are drawn — an
         // unreadable or empty folder still shows the `..` that leads out of
         // it, exactly as the export's empty-folder card does.
-        // The rule that separates this root's matches from the rest takes a
-        // row of its own; it does not stand in for the match it introduces.
-        let boundary = (self.elsewhere() > 0)
-            .then(|| self.entries().len() - self.elsewhere())
-            .filter(|first| *first >= self.state.offset());
+        // The rule that introduces a group takes a row of its own; it does
+        // not stand in for the row it introduces.
         let mut drawn = 0usize;
-        let mut y = area.y;
-        for index in self.state.offset()..self.entries().len() {
+        for (line, slot) in self.slots().into_iter().enumerate() {
+            let y = area.y + line as u16;
             if y >= area.y + area.height {
                 break;
             }
-            if boundary == Some(index) {
-                buffer.set_line(
-                    area.x + INSET,
-                    y,
-                    &Line::from(Span::styled(
-                        format!("─── also in other roots {}", "─".repeat(64)),
-                        Style::new().fg(HINT),
-                    )),
-                    area.width,
-                );
-                y += 1;
-                drawn += 1;
-                if y >= area.y + area.height {
-                    break;
+            match slot {
+                Slot::Rule(label) => {
+                    buffer.set_line(
+                        area.x + INSET,
+                        y,
+                        &Line::from(Span::styled(label, Style::new().fg(HINT))),
+                        area.width,
+                    );
+                }
+                Slot::Row(index) => {
+                    let Some(entry) = self.entries().get(index) else {
+                        break;
+                    };
+                    self.row(buffer, area, y, index, entry);
                 }
             }
-            let Some(entry) = self.entries().get(index) else {
-                break;
-            };
-            self.row(buffer, area, y, index, entry);
-            y += 1;
             drawn += 1;
         }
         let visible = drawn;
@@ -430,6 +562,26 @@ impl Picker<'_> {
                 (format!("cannot read {path}"), Style::new().fg(ERROR)),
                 (error.to_owned(), muted),
                 ("← back · ~ home".to_owned(), muted),
+            ];
+        }
+        if self.state.choosing()
+            && !self
+                .entries()
+                .iter()
+                .any(|entry| entry.kind == EntryKind::Snapshot)
+        {
+            return vec![
+                (
+                    match self.state.filter() {
+                        Some(query) => format!("no saved session matches {query}"),
+                        None => "no saved sessions".to_owned(),
+                    },
+                    muted,
+                ),
+                (
+                    "sessions are saved when a workspace is quit".to_owned(),
+                    muted,
+                ),
             ];
         }
         if self.state.filtering() && self.entries().is_empty() {
@@ -496,12 +648,7 @@ impl Picker<'_> {
             (false, _) => "   ",
         };
         put(buffer, 0, vec![Span::styled(selection_box, box_style)]);
-        let (glyph, colour) = match entry.kind {
-            EntryKind::Repository => ("◆", ACCENT),
-            EntryKind::Folder => ("▸", WARNING),
-            EntryKind::Parent => ("▴", HINT),
-            EntryKind::File => ("·", HINT),
-        };
+        let (glyph, colour) = glyph(entry.kind);
         put(
             buffer,
             COL_GLYPH,
@@ -594,6 +741,25 @@ impl Picker<'_> {
                 }
                 spans
             }
+            // A saved session says what it costs to bring back — how many
+            // panes, and where they stood — in the columns a repository
+            // spends on its branch.
+            EntryKind::Snapshot => {
+                let mut facts = Vec::new();
+                match entry.panes {
+                    Some(1) => facts.push("1 pane".to_owned()),
+                    Some(panes) => facts.push(format!("{panes} panes")),
+                    None => {}
+                }
+                if let Some(root) = entry.root.as_deref() {
+                    facts.push(display_path(root, self.home));
+                }
+                vec![Span::styled(
+                    clip(&facts.join(" · "), (COL_TAIL - COL_META - 1) as usize),
+                    muted,
+                )]
+            }
+            EntryKind::Escape => vec![Span::styled("browse the filesystem", muted)],
             EntryKind::Folder => match (entry.items, entry.repos) {
                 // The root list is a list of roots: what matters about one is
                 // how many repositories it holds — the export's
@@ -643,15 +809,32 @@ impl Picker<'_> {
         let Some(entry) = self.entries().get(self.state.cursor()) else {
             return;
         };
-        let rule = format!(
+        let cursor_rule = format!(
             "─── cursor on {} {}",
             entry.name,
             "─".repeat(70_usize.saturating_sub(entry.name.chars().count()))
         );
+        // What the context picker's detail block has to say is not where a
+        // file is but what pressing `⏎` on it does — and, for a session, the
+        // one thing the restored text cannot say for itself.
+        let (subject, facts) = if self.state.choosing() {
+            match entry.kind {
+                EntryKind::Snapshot => (
+                    super::snapshot::detail(entry, self.home),
+                    "shells restart · the text is what was on screen when it was saved".to_owned(),
+                ),
+                _ => (
+                    "the file explorer, as termdeck opens it with no path".to_owned(),
+                    "pick folders to open as panes".to_owned(),
+                ),
+            }
+        } else {
+            (display_path(&entry.path, self.home), self.facts(entry))
+        };
         for (index, spans) in [
-            vec![Span::styled(rule, Style::new().fg(SEPARATOR))],
-            vec![Span::styled(display_path(&entry.path, self.home), muted)],
-            vec![Span::styled(self.facts(entry), muted)],
+            vec![Span::styled(cursor_rule, Style::new().fg(SEPARATOR))],
+            vec![Span::styled(subject, muted)],
+            vec![Span::styled(facts, muted)],
         ]
         .into_iter()
         .enumerate()
@@ -937,7 +1120,10 @@ impl Picker<'_> {
         if pointer.y < first || pointer.y >= last {
             return None;
         }
-        let index = self.state.offset() + (pointer.y - first) as usize;
+        let line = (pointer.y - first) as usize;
+        let Some(&Slot::Row(index)) = self.slots().get(line) else {
+            return None;
+        };
         let entry = self.entries().get(index)?;
         let column = pointer.x.saturating_sub(content.x);
         Some(match column {
@@ -945,6 +1131,23 @@ impl Picker<'_> {
             COL_BADGE..COL_SEPARATOR if self.state.instances(&entry.path) > 0 => Hit::Badge(index),
             _ => Hit::Row(index),
         })
+    }
+}
+
+/// The mark a row wears and the colour it wears it in. One table, because
+/// the sheet draws the same rows the listing does and the two must never
+/// disagree about what a kind looks like.
+pub(super) fn glyph(kind: EntryKind) -> (&'static str, ratatui::style::Color) {
+    match kind {
+        EntryKind::Repository => ("◆", ACCENT),
+        EntryKind::Folder => ("▸", WARNING),
+        EntryKind::Parent => ("▴", HINT),
+        EntryKind::File => ("·", HINT),
+        // A saved session is a repository's sibling, hollowed: the same
+        // shape, because it is a place to work, and not filled, because it
+        // is a memory of one rather than the thing itself.
+        EntryKind::Snapshot => ("◇", ACCENT),
+        EntryKind::Escape => ("▸", WARNING),
     }
 }
 

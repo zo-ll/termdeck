@@ -1,4 +1,4 @@
-use super::{Entry, Hit, PickerState};
+use super::{Entry, EntryKind, Hit, PickerState};
 
 use super::super::Key;
 
@@ -8,6 +8,9 @@ use super::super::Key;
 pub enum PickerReaction {
     /// Open the selection as a workspace.
     Launch,
+    /// Resume the saved session the cursor settled on — the whole deck, not
+    /// a pane of one. [`PickerState::resumed`] says which.
+    Resume,
     /// Leave without opening anything.
     Quit,
 }
@@ -50,6 +53,23 @@ pub fn press(
         return None;
     }
     let cursor = rows.get(state.cursor()).cloned();
+    // The context list borrows the browse keys rather than defining its own:
+    // `↑↓` moves, `/` filters, `esc` leaves, and the keys that open something
+    // — `⏎`, `⇥`, `space`, `o`, `→` — do the one thing there is to do to the
+    // row under the cursor. A saved session is resumed whole; the way out is
+    // the file explorer, which takes the screen on its own terms.
+    if state.choosing()
+        && let Some(entry) = cursor.as_ref().filter(|_| opens(key))
+    {
+        return match entry.kind {
+            EntryKind::Snapshot => state.resume(entry).then_some(PickerReaction::Resume),
+            EntryKind::Escape => {
+                state.leave_context();
+                None
+            }
+            _ => None,
+        };
+    }
     match key {
         // `ctrl+j` is the control twin of `j`, and no shell is listening
         // here, so it moves the cursor rather than falling through (#95).
@@ -141,6 +161,16 @@ pub fn press(
     None
 }
 
+/// The keys that act on the row under the cursor rather than move to
+/// another one. In the browse listing they select, descend, or launch; in the
+/// context list there is one row and one thing to do with it, so they agree.
+fn opens(key: Key) -> bool {
+    matches!(
+        key,
+        Key::Enter | Key::Tab | Key::Char(' ') | Key::Char('o') | Key::Right | Key::Char('l')
+    )
+}
+
 /// The pointer's `→`: a second click on a row it is already on goes inside
 /// it. One click selects (the pointer's `⏎`), two descend.
 pub fn descend(state: &mut PickerState, rows: &[Entry], hit: Hit) -> bool {
@@ -188,6 +218,26 @@ pub fn click_secondary(state: &mut PickerState, rows: &[Entry], hit: Hit) -> boo
 
 /// Applies one pointer gesture, in the same terms as the keys (§7).
 pub fn click(state: &mut PickerState, rows: &[Entry], hit: Hit) -> Option<PickerReaction> {
+    // Pointer parity in the context list is the same one gesture the keys
+    // have: a click on a row is `⏎` on it.
+    if state.choosing() {
+        let (Hit::Row(index) | Hit::Checkbox(index) | Hit::Badge(index)) = hit else {
+            if hit == Hit::Filter {
+                state.begin_filter();
+            }
+            return None;
+        };
+        let entry = rows.get(index).cloned()?;
+        state.point_at(index, rows.len());
+        return match entry.kind {
+            EntryKind::Snapshot => state.resume(&entry).then_some(PickerReaction::Resume),
+            EntryKind::Escape => {
+                state.leave_context();
+                None
+            }
+            _ => None,
+        };
+    }
     match hit {
         Hit::Row(index) => {
             let entry = rows.get(index).cloned()?;
