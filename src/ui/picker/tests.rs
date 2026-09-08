@@ -9,6 +9,7 @@ use ratatui::{
 
 use super::super::Key;
 use super::sheet::SHEET_INSTANCE;
+use super::snapshot::OPEN_A_FOLDER;
 use super::*;
 
 /// The export's screen 06 folder, frozen so the snapshots do not depend on
@@ -2295,5 +2296,390 @@ fn unicode_names_render_with_their_accent() {
         let state = filtered(query);
         let buffer = draw(&Unicode, &state);
         assert!(!accented(&buffer).is_empty(), "{query} accents something");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The context picker (#153): saved sessions, and the way out to the folders.
+// ---------------------------------------------------------------------------
+
+/// The clock the session fixtures are aged against, so "2h ago" is a fact
+/// about the fixture and not about when the suite ran.
+const SNAPSHOT_NOW: u64 = 1_700_000_000_000;
+
+/// A sessions directory of this test's own.
+fn sessions_root(label: &str) -> PathBuf {
+    let dir = temp_root(label);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// One `session.v1` file, saved `ago` milliseconds before [`SNAPSHOT_NOW`].
+///
+/// Every pane carries a transcript, because the point of the header read is
+/// that the picker never looks at one.
+fn write_session(dir: &Path, workspace: &str, root: &str, ago: u64, panes: usize) {
+    let panes: Vec<String> = (0..panes)
+        .map(|pane| {
+            format!(
+                r#"{{"id":"pane-{pane}","cwd":"{root}","command":["bash","-l"],
+                 "shell_hook":true,"alt_screen":false,
+                 "lines":["SECRET-TRANSCRIPT-{workspace}-{pane}","$ cargo test"]}}"#
+            )
+        })
+        .collect();
+    std::fs::write(
+        dir.join(format!("{workspace}.json")),
+        format!(
+            r#"{{"schema":"session.v1","workspace":"{workspace}","root":"{root}",
+             "saved_at":{},"deck":{{"order":[0],"zoomed":false,"collapsed":[false],
+             "pinned":null,"master_ratio":0.62}},"panes":[{}]}}"#,
+            SNAPSHOT_NOW - ago,
+            panes.join(",")
+        ),
+    )
+    .unwrap();
+}
+
+fn browse_sessions(dir: &Path) -> SnapshotBrowse {
+    SnapshotBrowse::at(
+        dir,
+        std::time::UNIX_EPOCH + std::time::Duration::from_millis(SNAPSHOT_NOW),
+    )
+}
+
+const HOUR: u64 = 3_600_000;
+
+/// The three-session fixture: one from this morning, one from yesterday, one
+/// from last month, written out of order so the sort has something to do.
+fn three_sessions(label: &str) -> (PathBuf, SnapshotBrowse) {
+    let dir = sessions_root(label);
+    write_session(
+        &dir,
+        "horizon",
+        "/home/dev/code/horizon-frontend",
+        26 * HOUR,
+        4,
+    );
+    write_session(&dir, "idp", "/home/dev/code/idp", 2 * HOUR, 3);
+    write_session(&dir, "termdeck", "/home/dev/code/termdeck", 800 * HOUR, 1);
+    let browser = browse_sessions(&dir);
+    (dir, browser)
+}
+
+fn context_rows(browser: &SnapshotBrowse) -> Vec<Entry> {
+    PickerState::context().rows(browser)
+}
+
+/// The listing the round-2 brief asks for: saved sessions recent first, each
+/// row saying its workspace, how old the snapshot is and how many panes it
+/// holds, and one row out to the file explorer under them.
+#[test]
+fn saved_sessions_list_recent_first_with_age_and_pane_count() {
+    let (_dir, browser) = three_sessions("sessions-order");
+
+    let rows = context_rows(&browser);
+
+    let names: Vec<_> = rows.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, ["idp", "horizon", "termdeck", OPEN_A_FOLDER]);
+    assert_eq!(rows[0].age.as_deref(), Some("2h ago"));
+    assert_eq!(rows[1].age.as_deref(), Some("1d ago"));
+    assert_eq!(rows[2].age.as_deref(), Some("4w ago"));
+    assert_eq!(rows[0].panes, Some(3));
+    assert_eq!(rows[1].panes, Some(4));
+    assert_eq!(rows[2].panes, Some(1));
+    assert_eq!(
+        rows[0].root.as_deref(),
+        Some(Path::new("/home/dev/code/idp"))
+    );
+    assert_eq!(rows[3].kind, EntryKind::Escape, "the way out comes last");
+}
+
+/// A corrupt snapshot is one bad file, not a broken picker: it is skipped,
+/// counted, and every readable session beside it still lists.
+#[test]
+fn a_corrupt_snapshot_is_skipped_and_counted_rather_than_fatal() {
+    let dir = sessions_root("sessions-corrupt");
+    write_session(&dir, "idp", "/home/dev/code/idp", 2 * HOUR, 3);
+    // Half-written, mis-schema'd, empty, and not JSON at all.
+    std::fs::write(
+        dir.join("truncated.json"),
+        r#"{"schema":"session.v1","work"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("future.json"),
+        r#"{"schema":"session.v9","workspace":"x"}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("empty.json"), "").unwrap();
+    std::fs::write(dir.join("notes.txt"), "not a snapshot at all").unwrap();
+
+    let browser = browse_sessions(&dir);
+
+    let names: Vec<_> = browser
+        .headers()
+        .iter()
+        .map(|header| header.workspace.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        ["idp"],
+        "the readable session survives its neighbours"
+    );
+    assert_eq!(
+        browser.notice().as_deref(),
+        Some("3 unreadable snapshots skipped"),
+        "the files that are not JSON snapshots are counted, not named"
+    );
+    let mut state = PickerState::context();
+    state.set_notice(browser.notice().unwrap());
+    let rendered = text(&draw(&browser, &state));
+    assert!(
+        rendered.contains("3 unreadable snapshots skipped"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("idp"), "{rendered}");
+}
+
+/// The listing is built from headers alone. A snapshot holds every pane's
+/// transcript and the picker reads none of it: nothing a saved session
+/// printed can reach the screen that offers to resume it.
+#[test]
+fn the_listing_never_carries_a_transcript_line() {
+    let (_dir, browser) = three_sessions("sessions-headers");
+
+    let rendered = text(&draw(&browser, &PickerState::context()));
+
+    assert!(!rendered.contains("SECRET-TRANSCRIPT"), "{rendered}");
+    assert!(!rendered.contains("cargo test"), "{rendered}");
+    assert!(
+        !format!("{:?}", browser.headers()).contains("SECRET-TRANSCRIPT"),
+        "no transcript line is even held in memory"
+    );
+}
+
+/// Both sections, drawn: the sessions to resume, the way into the folders,
+/// and the hint that says what a resume does not bring back.
+#[test]
+fn the_context_picker_draws_both_sections_and_the_restart_hint() {
+    let (_dir, browser) = three_sessions("sessions-render");
+
+    let buffer = draw(&browser, &PickerState::context());
+
+    let rendered = text(&buffer);
+    assert!(rendered.contains("resume a session"), "{rendered}");
+    assert!(rendered.contains("open a folder"), "{rendered}");
+    assert!(rendered.contains("shells restart"), "{rendered}");
+    assert!(rendered.contains("~/code/idp"), "{rendered}");
+    assert!(rendered.contains("3 panes · 2h ago"), "{rendered}");
+    assert!(rendered.contains("1 pane · 4w ago"), "one is not 1 panes");
+    assert_snapshot("picker-context-many", &buffer);
+}
+
+/// User decision 2: one saved session is offered, never attached to. The
+/// picker draws it like any other and waits for the key that resumes it.
+#[test]
+fn one_saved_session_is_offered_rather_than_attached_to() {
+    let dir = sessions_root("sessions-one");
+    write_session(&dir, "idp", "/home/dev/code/idp", 2 * HOUR, 3);
+    let browser = browse_sessions(&dir);
+    let mut state = PickerState::context();
+
+    assert!(!browser.is_empty(), "there is something to resume");
+    assert_eq!(state.resumed(), None, "and nothing is resumed by arriving");
+    let buffer = draw(&browser, &state);
+    assert_snapshot("picker-context-one", &buffer);
+
+    let rows = state.rows(&browser);
+    assert_eq!(
+        press(&mut state, &rows, &[], Key::Enter),
+        Some(PickerReaction::Resume),
+        "the key does it, not the count"
+    );
+    assert_eq!(state.resumed(), Some(dir.join("idp.json").as_path()));
+}
+
+/// Zero saved sessions is no context picker at all: the caller falls through
+/// to the file explorer, so a first run is what it has always been. What the
+/// mode draws with nothing in it is defensive, and says so rather than
+/// offering an empty list.
+#[test]
+fn no_saved_sessions_means_there_is_no_context_to_pick() {
+    let dir = sessions_root("sessions-none");
+    let browser = browse_sessions(&dir);
+
+    assert!(browser.is_empty(), "the caller skips the context picker");
+    assert_eq!(browser.notice(), None, "nothing was skipped either");
+
+    let buffer = draw(&browser, &PickerState::context());
+    let rendered = text(&buffer);
+    assert!(rendered.contains("no saved sessions"), "{rendered}");
+    assert_snapshot("picker-context-empty", &buffer);
+}
+
+/// `⏎` on "Open a folder…" is the escape hatch: the context question is
+/// answered and the file explorer takes the screen on its own terms.
+#[test]
+fn open_a_folder_hands_the_screen_to_the_file_explorer() {
+    let (_dir, browser) = three_sessions("sessions-escape");
+    let mut state = PickerState::context();
+    let rows = state.rows(&browser);
+    let escape = rows.len() - 1;
+    state.point_at(escape, rows.len());
+
+    assert_eq!(press(&mut state, &rows, &[], Key::Enter), None);
+
+    assert!(!state.choosing(), "the picker is browsing folders now");
+    assert_eq!(state.resumed(), None, "and nothing was resumed on the way");
+    let names: Vec<_> = state
+        .rows(&Fixture)
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect();
+    assert_eq!(names, ["~/code", "~/work", "/srv"], "the roots, as ever");
+}
+
+/// The filter is the picker's own `/`, narrowing on what a session is
+/// remembered by: its workspace name, or the directory it was taken in. The
+/// way out is never filtered away.
+#[test]
+fn the_filter_narrows_on_names_and_roots_and_keeps_the_way_out() {
+    let (_dir, browser) = three_sessions("sessions-filter");
+    let mut state = PickerState::context();
+
+    assert!(state.begin_filter(), "the context list can be filtered");
+    for character in "idp".chars() {
+        state.push_filter(character);
+    }
+    let names: Vec<_> = state
+        .rows(&browser)
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect();
+    assert_eq!(names, ["idp", OPEN_A_FOLDER]);
+
+    state.clear_filter();
+    state.begin_filter();
+    for character in "frontend".chars() {
+        state.push_filter(character);
+    }
+    let names: Vec<_> = state
+        .rows(&browser)
+        .iter()
+        .map(|entry| entry.name.clone())
+        .collect();
+    assert_eq!(
+        names,
+        ["horizon", OPEN_A_FOLDER],
+        "a session is found by where it was taken too"
+    );
+}
+
+/// Pointer parity: a click resumes the row it lands on, and the section
+/// rules between the rows do not move the target out from under it.
+#[test]
+fn the_pointer_resumes_the_row_it_lands_on() {
+    let (dir, browser) = three_sessions("sessions-pointer");
+    let mut state = PickerState::context();
+    let listing = state.listing(&browser);
+    let rows = listing.entries.clone();
+    let roots = browser.roots();
+    let view = Picker {
+        state: &state,
+        listing: &listing,
+        roots: &roots,
+        home: Some(Path::new("/home/dev")),
+    };
+    let area = Rect::new(0, 0, 144, 42);
+    // Where "termdeck" is drawn, found the way the eye finds it.
+    let buffer = draw(&browser, &state);
+    let row = (0..42)
+        .find(|row| {
+            (0..144)
+                .map(|column| buffer[(column, *row)].symbol())
+                .collect::<String>()
+                .contains("◇  termdeck")
+        })
+        .expect("the third session is on screen");
+    let hit = view.hit(area, Position::new(20, row)).expect("a row");
+
+    assert_eq!(hit, Hit::Row(2), "the rules do not shift the pointer");
+    assert_eq!(
+        click(&mut state, &rows, hit),
+        Some(PickerReaction::Resume),
+        "one click is the pointer's ⏎"
+    );
+    assert_eq!(state.resumed(), Some(dir.join("termdeck.json").as_path()));
+}
+
+/// The banner a restored deck opens under (§4): what came back, how stale it
+/// is, and the one thing restored text cannot say for itself.
+#[test]
+fn the_restore_banner_says_what_came_back_and_that_the_shells_are_new() {
+    let (_dir, browser) = three_sessions("sessions-banner");
+    let header = browser.header(&_dir.join("idp.json")).expect("listed");
+
+    let notice = restore_notice(
+        header,
+        std::time::UNIX_EPOCH + std::time::Duration::from_millis(SNAPSHOT_NOW),
+    );
+
+    assert_eq!(notice, "restored idp · snapshot 2h ago · shells restarted");
+}
+
+/// A snapshot stamped in the future is a clock disagreement, not an age. The
+/// row says it does not know rather than a wrong something, and no
+/// subtraction underflows on the way.
+#[test]
+fn a_snapshot_from_the_future_has_no_age_and_does_not_panic() {
+    let dir = sessions_root("sessions-future");
+    write_session(&dir, "ahead", "/home/dev/code/ahead", 0, 1);
+    std::fs::write(
+        dir.join("ahead.json"),
+        std::fs::read_to_string(dir.join("ahead.json"))
+            .unwrap()
+            .replace(
+                &SNAPSHOT_NOW.to_string(),
+                &(SNAPSHOT_NOW + HOUR).to_string(),
+            ),
+    )
+    .unwrap();
+
+    let browser = browse_sessions(&dir);
+
+    assert_eq!(browser.headers().len(), 1);
+    assert_eq!(browser.headers()[0].age(std::time::UNIX_EPOCH), None);
+    let rendered = text(&draw(&browser, &PickerState::context()));
+    assert!(rendered.contains("unknown"), "{rendered}");
+}
+
+/// The context list draws and answers the pointer at every canvas size too:
+/// a saved-session row is a row like any other, and the section rules that
+/// sit between them must not put a click or a draw out of bounds.
+#[test]
+fn the_context_picker_renders_and_answers_at_every_canvas_size() {
+    let (_dir, browser) = three_sessions("sessions-sizes");
+    let state = PickerState::context();
+    let listing = state.listing(&browser);
+    let roots = browser.roots();
+
+    for width in 1..=130u16 {
+        for height in 1..=40u16 {
+            let view = Picker {
+                state: &state,
+                listing: &listing,
+                roots: &roots,
+                home: Some(Path::new("/home/dev")),
+            };
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| view.render(frame)).unwrap();
+            let area = Rect::new(0, 0, width, height);
+            for x in [0, width / 2, width - 1] {
+                for y in [0, height / 2, height - 1] {
+                    view.hit(area, Position::new(x, y));
+                }
+            }
+        }
     }
 }

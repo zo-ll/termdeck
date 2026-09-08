@@ -1,0 +1,42 @@
+    termdeck   pick up where you left off  ·  1 saved session                                         sessions › resume one, or open a folder   
+                                                                                                                                                
+┌── > sessions  ·  saved sessions  ·  ⏎ resume · shells restart ─────────────────────────────────────────────────────── filter (/ to search) ──┐
+│   SESSIONS saved on quit  ·  1 to resume                                                                                                     │
+│   ────────────────────────────────────────────────────────────────────────────────────────                                                   │
+│   ─── resume a session ───────────────────────────────────────────────────────────────────                                                   │
+│    ◇  idp                       · ~/code/idp          3 panes · 2h ago                                                                       │
+│   ─── open a folder ──────────────────────────────────────────────────────────────────────                                                   │
+│    ▸  Open a folder…            · browse the filesystem                                                                                      │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│                                                                                                                                              │
+│   ─── cursor on idp ───────────────────────────────────────────────────────────────────                                                      │
+│   ~/code/idp · 3 panes · saved 2h ago                                                                                                        │
+│   shells restart · the text is what was on screen when it was saved                                                                          │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                                                                                                                
+   ↑↓ move  ⏎ resume  / filter                                                                                     ⏎ resume or open  esc quit   

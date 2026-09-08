@@ -59,6 +59,18 @@ enum Slot {
     Row(usize),
 }
 
+/// What a row says in its last column: an age, and for a saved session the
+/// size of the deck that age belongs to — the two facts the round-2 brief
+/// calls non-negotiable, kept together where the eye scans for staleness.
+fn tail(entry: &Entry) -> Option<String> {
+    let age = entry.age.as_deref()?;
+    match (entry.kind, entry.panes) {
+        (EntryKind::Snapshot, Some(1)) => Some(format!("1 pane · {age}")),
+        (EntryKind::Snapshot, Some(panes)) => Some(format!("{panes} panes · {age}")),
+        _ => Some(age.to_owned()),
+    }
+}
+
 /// A section rule, drawn the width the listing header is drawn to.
 fn rule(label: &str) -> String {
     format!(
@@ -346,7 +358,14 @@ impl Picker<'_> {
             buffer,
             area,
             vec![
-                Span::styled("> browse", Style::new().fg(ACCENT)),
+                Span::styled(
+                    if self.state.choosing() {
+                        "> sessions"
+                    } else {
+                        "> browse"
+                    },
+                    Style::new().fg(ACCENT),
+                ),
                 Span::styled("  ·  ", Style::new().fg(SEPARATOR)),
                 Span::styled(title, Style::new().fg(PREVIEW_FG)),
                 Span::styled("  ·  ", Style::new().fg(SEPARATOR)),
@@ -677,14 +696,11 @@ impl Picker<'_> {
             );
             put(buffer, COL_META, meta);
         }
-        if let Some(age) = entry.age.as_deref().filter(|_| area.width > COL_TAIL) {
+        if let Some(tail) = tail(entry).filter(|_| area.width > COL_TAIL) {
             put(
                 buffer,
                 COL_TAIL,
-                vec![Span::styled(
-                    age.to_owned(),
-                    Style::new().fg(MUTED).bg(background),
-                )],
+                vec![Span::styled(tail, Style::new().fg(MUTED).bg(background))],
             );
         }
     }
@@ -744,21 +760,16 @@ impl Picker<'_> {
             // A saved session says what it costs to bring back — how many
             // panes, and where they stood — in the columns a repository
             // spends on its branch.
-            EntryKind::Snapshot => {
-                let mut facts = Vec::new();
-                match entry.panes {
-                    Some(1) => facts.push("1 pane".to_owned()),
-                    Some(panes) => facts.push(format!("{panes} panes")),
-                    None => {}
-                }
-                if let Some(root) = entry.root.as_deref() {
-                    facts.push(display_path(root, self.home));
-                }
-                vec![Span::styled(
-                    clip(&facts.join(" · "), (COL_TAIL - COL_META - 1) as usize),
+            EntryKind::Snapshot => match entry.root.as_deref() {
+                Some(root) => vec![Span::styled(
+                    clip(
+                        &display_path(root, self.home),
+                        (COL_TAIL - COL_META - 1) as usize,
+                    ),
                     muted,
-                )]
-            }
+                )],
+                None => Vec::new(),
+            },
             EntryKind::Escape => vec![Span::styled("browse the filesystem", muted)],
             EntryKind::Folder => match (entry.items, entry.repos) {
                 // The root list is a list of roots: what matters about one is

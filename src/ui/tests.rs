@@ -3302,3 +3302,57 @@ fn any_deck_command_drops_a_standing_selection() {
         "a close, which renumbers"
     );
 }
+
+/// A restored deck opens under the banner the round-2 brief calls
+/// non-negotiable (§4): what came back, how old the snapshot is, and that the
+/// shells behind the text are new. Restored text looks exactly like live
+/// text, so the status row is where the difference is stated.
+#[test]
+fn a_restored_deck_says_what_came_back_and_that_the_shells_are_new() {
+    let mut state = expanded(4);
+    state.set_notice("restored idp · snapshot 2h ago · shells restarted".to_owned());
+
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+
+    let rendered = text(&buffer);
+    assert!(
+        rendered.contains("restored idp · snapshot 2h ago · shells restarted"),
+        "{rendered}"
+    );
+    assert_snapshot("restored-deck", &buffer);
+}
+
+/// User decision 4: the runtime-add sheet — "open a new terminal in a new
+/// folder" — stays reachable inside a restored session. A restore changes
+/// what is on screen, not what the session can do, so the banner neither
+/// swallows `^g a` nor takes the key hint that advertises it.
+#[test]
+fn a_restored_session_can_still_open_a_terminal_in_another_folder() {
+    let projects = fixture::projects();
+    let mut state = expanded(4);
+    state.set_notice("restored idp · snapshot 2h ago · shells restarted".to_owned());
+    let mut input = crate::ui::Input::new(38);
+
+    input.press(
+        crate::ui::Key::Ctrl('g'),
+        &mut state,
+        &projects,
+        fixture::NOW,
+    );
+    let reaction = input.press(
+        crate::ui::Key::Char('a'),
+        &mut state,
+        &projects,
+        fixture::NOW,
+    );
+
+    assert_eq!(
+        reaction,
+        Some(crate::ui::Reaction::AddTerminal),
+        "the sheet is one keypress away, banner or no banner"
+    );
+    // And the affordance the pointer reaches it by is still on the status
+    // row beside the banner, not displaced by it.
+    let (buffer, _) = render(&fixture::frontend_active(), &state, (144, 42));
+    assert!(text(&buffer).contains("+ add"), "{}", text(&buffer));
+}
