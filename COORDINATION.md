@@ -2146,6 +2146,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   named-grammar correctness vs key_sequence()/KeyReader, wire/gate unchanged,
   and the REQUIRED backward-compat decision for raw-byte senders as the key
   focus; critic Working). IN FLIGHT: critic → #155; codex + claude idle.
+- 2026-09-08: #155 MERGED + CLOSED (no-ff a55c421; critic PASS: named keys
+  byte-exact with the outer reader, encode pre-request, ctl.v1 schema
+  untouched, single-token raw bytes + Dollar-Ctrl pass through, Raw:
+  documented; gate 488+10+1; one NON-BLOCKING residual recorded — raw input
+  containing whitespace is split by the tokenizer; surfaced to user).
+  Worktree+branch pruned. All audit + sessions + #157 + #155 DONE. LANES all
+  idle. Open: none.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
