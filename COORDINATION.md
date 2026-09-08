@@ -1984,6 +1984,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   LANES: critic → #152; codex + claude idle; researcher idle (reusable).
   OPEN for user: sessions direction (snapshot-restore vs defer via #112),
   #152 verdict (at critic), #155 (named send-keys) pick-up.
+- 2026-09-08: #152 MERGED + CLOSED (no-ff 9e68a09; critic PASS no nits:
+  scoped hushlogin sentinel + HOME-restoring completion shim, proven in real
+  login bash with pre-fix behavioral failure; one-prompt PTY regression green;
+  gate 461+7+1; design doc login-bash-shim.md). Worktree+branch pruned.
+  ★ ALL audit issues + #152 residual now CLOSED. Remaining open: #155
+  (named send-keys, filed, not picked up) + sessions (research done, awaiting
+  user decision). LANES: critic/codex/claude/researcher idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
