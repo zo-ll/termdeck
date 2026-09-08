@@ -1764,6 +1764,27 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #142; codex → #141.
   AUDIT status: ✓ #143 #134 #139 #153; #142 at critic; P1 #141 in flight;
   P2 #154 #145 #146 #147 queued (codex lane).
+- 2026-09-08: #142 at CRITIC = HAND-BACK (verdict: “ESC DEL/C1 desync bypasses
+  the guard, vte retains ~27MB of 24MB fed; fix advance_escape arms to mirror
+  vte”). REWORK ROUND 2 routed back to codex in the SAME worktree
+  (coord/142-parser-memory; handback brief at
+  .scratch/tasks/142-parser-memory.handback.md: reproduce C1/ESC-DEL bypass
+  shapes, fix advance_escape arms to mirror vte exactly, keep all round-1
+  passing tests, per-shape flat-retention regressions that fail pre-fix). Codex
+  relaunched at the 142 worktree; verified Working. NOT merged.
+- 2026-09-08: #141 DONE (codex 1a2992d “fix: sweep escaped shutdown
+  descendants”; marker RESULT=pass: validated snapshot survivors are forced
+  and awaited; files native.rs +83 / pty.rs +38; not pushed) — ROUTED to
+  CRITIC (assignment .scratch/review/141-shutdown-descendants.critic.md;
+  critic Working). Held earlier per user direction — dispatched once critic
+  was free.
+- 2026-09-08: CRITIC LANE stays PI (user decision: forget the opencode
+  switch). Brief opencode validation attempt (register muse-spark under
+  opencode-go provider; gateway opencode.ai/zen/go) reverted —
+  opencode.jsonc restored to original.
+  IN FLIGHT: critic → #141 review; codex → #142 rework round 2.
+  AUDIT status: ✓ #143 #134 #139 #153; #141 at critic; #142 in rework;
+  P1 remaining #141 #142; P2s #154 #145 #146 #147.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
