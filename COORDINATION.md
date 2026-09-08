@@ -2108,6 +2108,12 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   engine-merged main + rewire resume()→run_restored so transcripts/layout/
   cwd-skips actually load, prove with a test; claude Working).
   IN FLIGHT: critic → #157; claude → sessions-picker handback; codex idle.
+- 2026-09-08: #157 MERGED + CLOSED (no-ff 01999a7; critic PASS no nits:
+  Zoomed|Compact arm maps exactly to the hidden-stack layouts with all other
+  border states precedent; test fails pre-fix with ACCENT teal; gate 467+7+1).
+  Worktree+branch pruned. (Earlier push to 68f5ef4 had a transient SSH timeout
+  — retried OK.) IN FLIGHT: claude → sessions-picker handback; critic idle
+  (next: picker re-review); codex idle. #156 open until picker re-passes.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
