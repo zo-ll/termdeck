@@ -2,7 +2,10 @@ use std::{
     collections::VecDeque,
     io::{Read, Write},
     path::Path,
-    sync::mpsc::{self, Receiver},
+    sync::{
+        Arc, Mutex, PoisonError,
+        mpsc::{self, Receiver},
+    },
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -70,6 +73,21 @@ pub enum InputOutcome {
     Refused,
 }
 
+/// What the waiter thread hands back the moment it reaps the shell (#146).
+///
+/// Reaping frees the pid: from that instant the number names nothing we
+/// own and may name somebody else's process, so no signal and no ownership
+/// expansion may use it again. The waiter therefore retires it and, in the
+/// same breath, records the session the shell leaves behind — captured
+/// while the number was still provably ours, each member with its start
+/// time, so the later sweep aims at identities rather than at a number.
+#[derive(Default)]
+struct ReapedShell {
+    reaped: bool,
+    #[cfg(target_os = "linux")]
+    session: Vec<(u32, u64)>,
+}
+
 /// A single host shell and its bounded PTY transport.
 ///
 /// Process-ownership boundary (#119): every process in the spawned shell's
@@ -79,11 +97,21 @@ pub enum InputOutcome {
 /// An interactive shell's jobs live in SEPARATE process groups that survive
 /// the shell's own group signals when they ignore SIGHUP, so the group
 /// alone is not the boundary; the session is, with the snapshot behind it.
+///
+/// That boundary is an identity, never a number (#146): every signal and
+/// every ownership expansion first proves the shell is still ours, and the
+/// whole identity is retired the moment the shell is reaped.
 pub struct PtyTransport {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
+    /// The shell's pid, which is also its process-group and session id.
+    /// This is a bare number: never signal it without going through
+    /// [`PtyTransport::owned_process_group`] (#146).
     process_group: Option<u32>,
+    /// Set by the waiter the instant the shell is reaped, together with
+    /// the session it left behind. See [`ReapedShell`].
+    reaped: Arc<Mutex<ReapedShell>>,
     /// The shell's start time (Linux `/proc` clock ticks), recorded at
     /// spawn to validate the session still belongs to us before a
     /// session-wide signal: a pid can be reused after our shell dies.
@@ -92,7 +120,9 @@ pub struct PtyTransport {
     /// Descendant (pid, start time) pairs snapshotted at shutdown start,
     /// while the tree is still parented. Catches processes that left our
     /// session (nested sessions, detached daemons); each kill revalidates
-    /// the start time so a reused pid is never signalled.
+    /// the start time so a reused pid is never signalled. Joined by what
+    /// the reaped shell left in its session — see [`PtyTransport::
+    /// owned_snapshot`].
     #[cfg(target_os = "linux")]
     descendants: Vec<(u32, u64)>,
     /// Bytes accepted but not yet written: the bounded queue between the
@@ -195,6 +225,8 @@ impl PtyTransport {
             read_output(reader, reader_terminal, reader_sender);
         });
         let waiter_terminal = terminal.clone();
+        let reaped = Arc::new(Mutex::new(ReapedShell::default()));
+        let waiter_reaped = Arc::clone(&reaped);
         let waiter = thread::spawn(move || {
             let status = match child.wait() {
                 Ok(status) => TerminalStatus::Exited {
@@ -204,6 +236,21 @@ impl PtyTransport {
                     message: error.to_string(),
                 },
             };
+            // `wait` freed the pid, so ownership moves off the number here,
+            // before anything else can look at it: what the shell leaves in
+            // its session is captured first — outside the lock, since that
+            // walk reads all of `/proc` — and only then is the number
+            // retired (#146). Nothing can signal by pid before this runs:
+            // an unreaped child, zombie or not, still holds its own number.
+            #[cfg(target_os = "linux")]
+            let session = process_group.map(session_snapshot).unwrap_or_default();
+            let mut owned = waiter_reaped.lock().unwrap_or_else(PoisonError::into_inner);
+            #[cfg(target_os = "linux")]
+            {
+                owned.session = session;
+            }
+            owned.reaped = true;
+            drop(owned);
             let _ = sender.send(PtyEvent::StatusChanged {
                 terminal: waiter_terminal,
                 status,
@@ -217,6 +264,7 @@ impl PtyTransport {
             writer,
             killer,
             process_group,
+            reaped,
             #[cfg(target_os = "linux")]
             shell_start,
             #[cfg(target_os = "linux")]
@@ -431,30 +479,95 @@ impl PtyTransport {
     /// gets what it expects, and the grace period and the SIGKILL escalation
     /// behind it are unchanged.
     pub fn request_shutdown(&mut self) -> Result<(), String> {
+        // Idempotent: a second request has no live identity to hang up,
+        // only a number that may since have been reused (#146).
+        if self.events.is_none() {
+            return Ok(());
+        }
         self.events.take();
         // Snapshot the owned tree at its most complete, while the shell is
-        // still alive to parent it (#119). Anything that already orphaned
-        // before this point stays covered by the session kill at force time.
+        // still alive to parent it (#119), and only while it is provably
+        // ours: capturing from a reused number would adopt a stranger's
+        // children as owned (#146). Anything that already orphaned before
+        // this point stays covered by the session sweep at force time.
         #[cfg(target_os = "linux")]
         {
             self.descendants = self
-                .process_group
+                .owned_process_group()
                 .map(descendant_snapshot)
                 .unwrap_or_default();
         }
-        #[cfg(unix)]
-        if let Some(process_group) = self.process_group {
-            let hangup = send_signal(process_group, libc::SIGHUP);
-            return hangup.and(send_signal(process_group, libc::SIGTERM));
+        #[cfg(not(unix))]
+        {
+            return self.killer.kill().map_err(|error| error.to_string());
         }
+        #[cfg(unix)]
+        match self.owned_process_group() {
+            Some(process_group) => send_signal(process_group, libc::SIGHUP)
+                .and(send_signal(process_group, libc::SIGTERM)),
+            // The shell was reaped, or its number no longer answers to the
+            // identity we recorded: there is nothing of ours to hang up.
+            // The killer holds that same number, so it is no fallback here
+            // — only a child that never had a pid at all is killed by it.
+            None if self.process_group.is_some() => Ok(()),
+            None => self.killer.kill().map_err(|error| error.to_string()),
+        }
+    }
 
-        self.killer.kill().map_err(|error| error.to_string())
+    /// The shell's process-group/session id, but only while this transport
+    /// still provably owns it (#146). Every signal and every ownership
+    /// expansion goes through here; nothing else may use the raw number.
+    ///
+    /// An unreaped child holds its own pid — a zombie holds it too — so
+    /// until the waiter reaps it the number cannot have been handed to
+    /// anybody else. After the reap it is the kernel's again, and this
+    /// returns `None` forever: what the shell left behind is owned through
+    /// the validated snapshots instead. The start-time comparison (#119)
+    /// closes the sliver between the reap and the flag.
+    #[cfg(unix)]
+    fn owned_process_group(&self) -> Option<u32> {
+        if self.is_reaped() {
+            return None;
+        }
+        let process_group = self.process_group?;
+        #[cfg(target_os = "linux")]
+        if let Some(recorded) = self.shell_start
+            && proc_stat(process_group).is_some_and(|info| info.starttime != recorded)
+        {
+            return None;
+        }
+        Some(process_group)
+    }
+
+    /// Whether the waiter has reaped the shell and retired its number.
+    #[cfg(unix)]
+    fn is_reaped(&self) -> bool {
+        self.reaped
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .reaped
+    }
+
+    /// Everything owned by identity rather than by number: the descendants
+    /// captured at shutdown start, plus the session the shell left behind
+    /// when it was reaped (#146). Each entry carries the start time that
+    /// revalidates it before it is signalled.
+    #[cfg(target_os = "linux")]
+    fn owned_snapshot(&self) -> Vec<(u32, u64)> {
+        let mut owned = self.descendants.clone();
+        let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
+        for entry in &reaped.session {
+            if !owned.contains(entry) {
+                owned.push(*entry);
+            }
+        }
+        owned
     }
 
     /// Reports whether the owned process group still has a live member.
     pub fn is_process_group_alive(&self) -> bool {
         #[cfg(unix)]
-        if let Some(process_group) = self.process_group {
+        if let Some(process_group) = self.owned_process_group() {
             return process_group_alive(process_group);
         }
 
@@ -468,21 +581,23 @@ impl PtyTransport {
     /// hold no descriptors and need only their reaper, not our signals.
     pub fn is_session_alive(&self) -> bool {
         #[cfg(target_os = "linux")]
-        if let Some(session) = self.process_group {
+        if let Some(session) = self.owned_process_group() {
             return !session_members(session).is_empty();
         }
 
         false
     }
 
-    /// Whether a descendant captured at shutdown start is still the same
-    /// live process. This covers descendants that escaped the shell session
-    /// with `setsid`; each identity is revalidated so PID reuse stays out of
-    /// the ownership boundary, and zombies do not delay completion.
+    /// Whether anything this transport captured is still the same live
+    /// process. That is the descendants taken at shutdown start — covering
+    /// the ones that escaped the session with `setsid` — together with the
+    /// session the shell left when it was reaped (#146). Each identity is
+    /// revalidated so PID reuse stays out of the ownership boundary, and
+    /// zombies do not delay completion.
     pub(crate) fn has_snapshot_survivors(&self) -> bool {
         #[cfg(target_os = "linux")]
         {
-            self.descendants.iter().any(|(pid, starttime)| {
+            self.owned_snapshot().iter().any(|(pid, starttime)| {
                 proc_stat(*pid)
                     .is_some_and(|info| info.starttime == *starttime && info.state != 'Z')
             })
@@ -493,8 +608,9 @@ impl PtyTransport {
     }
 
     /// Force must cover every still-live ownership boundary: the original
-    /// process group, its Linux session, and descendants that escaped both
-    /// after being captured while still parented to the shell.
+    /// process group and its Linux session while they are still provably
+    /// ours, plus everything captured while it was — descendants that
+    /// escaped both, and the session a reaped shell left behind.
     pub(crate) fn needs_force_shutdown(&self) -> bool {
         self.is_process_group_alive() || self.is_session_alive() || self.has_snapshot_survivors()
     }
@@ -502,18 +618,28 @@ impl PtyTransport {
     /// Kills what the grace period did not take (#119): the shell's group
     /// as before, plus the whole session (job groups, SIGHUP-ignorers,
     /// pre-shutdown orphans holding slave descriptors), plus every
-    /// snapshotted descendant that escaped the session. Each wider step is
-    /// guarded against pid reuse; see `kill_session`.
+    /// snapshotted identity that escaped the session. Every one of those
+    /// steps — the group SIGKILL included, which #119 left unguarded — is
+    /// aimed at a validated identity rather than a number (#146).
     pub fn force_shutdown(&mut self) -> Result<(), String> {
-        #[cfg(unix)]
-        if let Some(process_group) = self.process_group {
-            let group = send_signal(process_group, libc::SIGKILL);
-            let session = self.kill_session();
-            let tree = self.kill_descendants();
-            return group.and(session).and(tree);
+        #[cfg(not(unix))]
+        {
+            return self.killer.kill().map_err(|error| error.to_string());
         }
-
-        self.killer.kill().map_err(|error| error.to_string())
+        #[cfg(unix)]
+        {
+            // The widest-blast-radius signal is validated like every other
+            // one (#146): a group SIGKILL only goes out while the number is
+            // still the shell we spawned.
+            let live = match self.owned_process_group() {
+                Some(process_group) => {
+                    send_signal(process_group, libc::SIGKILL).and(self.kill_session(process_group))
+                }
+                None if self.process_group.is_some() => Ok(()),
+                None => self.killer.kill().map_err(|error| error.to_string()),
+            };
+            live.and(self.kill_descendants())
+        }
     }
 
     /// SIGKILLs the whole owned session: job process groups, SIGHUP
@@ -521,38 +647,27 @@ impl PtyTransport {
     ///
     /// Linux has no session-signalling syscall (kill(-id) names a process
     /// GROUP), so this enumerates session members via `/proc` and signals
-    /// each one. If the session id was reused by a new leader after our
-    /// shell died, that leader's fresh tree is excluded; a live shell
-    /// needs no guard since its pid cannot have been reused.
+    /// each one. `session` comes from `owned_process_group`, so the shell
+    /// is still unreaped and its number cannot have been handed out: a
+    /// stranger could only join this session by claiming that very pid and
+    /// calling `setsid`, which an unreaped pid forbids (#146). After the
+    /// reap there is no session to sweep by number at all — the members are
+    /// owned through the snapshot the waiter took instead.
     #[cfg(unix)]
-    fn kill_session(&self) -> Result<(), String> {
+    fn kill_session(&self, session: u32) -> Result<(), String> {
         #[cfg(not(target_os = "linux"))]
         {
+            let _ = session;
             // Without `/proc` there is no session enumeration: the group
             // kill above is the whole force stage, as before.
             return Ok(());
         }
         #[cfg(target_os = "linux")]
         {
-            let Some(session) = self.process_group else {
-                return Ok(());
-            };
-            let procs = all_processes();
-            let excluded = pid_reused(session, self.shell_start).then(|| {
-                let excluded = descendant_pids(session, &procs);
-                eprintln!("DEBUG pid reused, excluding new tree: {excluded:?}");
-                excluded
-            });
             let own = std::process::id();
             let mut first_error = None;
-            for info in &procs {
-                if info.session != session
-                    || info.pid == session
-                    || info.pid == own
-                    || excluded
-                        .as_ref()
-                        .is_some_and(|tree| tree.contains(&info.pid))
-                {
+            for info in all_processes() {
+                if info.session != session || info.pid == session || info.pid == own {
                     continue;
                 }
                 if let Err(error) = send_signal_pid(info.pid, libc::SIGKILL) {
@@ -563,11 +678,13 @@ impl PtyTransport {
         }
     }
 
-    /// SIGKILLs the snapshotted descendants that escaped the session
-    /// (nested sessions, detached daemons — #119). Best effort across the
-    /// set: every kill is attempted, the first error reported. Each pid is
-    /// revalidated against its snapshot start time first, so reuse since
-    /// the snapshot can never aim at an innocent — nor at ourselves.
+    /// SIGKILLs everything the snapshots own: the descendants that escaped
+    /// the session (nested sessions, detached daemons — #119) and, once the
+    /// shell has been reaped, the session it left behind (#146). Best
+    /// effort across the set: every kill is attempted, the first error
+    /// reported. Each pid is revalidated against its snapshot start time
+    /// first, so reuse since the snapshot can never aim at an innocent —
+    /// nor at ourselves.
     #[cfg(unix)]
     fn kill_descendants(&self) -> Result<(), String> {
         #[cfg(not(target_os = "linux"))]
@@ -579,7 +696,7 @@ impl PtyTransport {
             let own = std::process::id();
             let shell = self.process_group.unwrap_or(0);
             let mut first_error = None;
-            for (pid, starttime) in &self.descendants {
+            for (pid, starttime) in &self.owned_snapshot() {
                 if *pid == own || *pid == shell {
                     continue;
                 }
@@ -873,23 +990,18 @@ fn session_members(session: u32) -> Vec<ProcInfo> {
         .filter(|info| info.session == session && info.state != 'Z')
         .collect()
 }
-/// Whether pid was reused since `recorded` (#119 reuse guard). A matching
-/// start time means the same process, so the session is ours. A free pid
-/// means no reuser exists, and whoever else sits in the session could only
-/// have inherited it from our tree — also ours. Anything else is treated
-/// as reused, and the fresh tree under the new leader is excluded from the
-/// per-PID sweep.
+/// (pid, starttime) of every live member the reaped shell leaves in its
+/// session (#146). Taken by the waiter the instant `wait` returns, so the
+/// session id it enumerates is still the one our shell led; from then on
+/// these identities, not that number, are what shutdown may signal.
 #[cfg(target_os = "linux")]
-fn pid_reused(pid: u32, recorded: Option<u64>) -> bool {
-    let Some(recorded) = recorded else {
-        // No baseline (unreadable `/proc` at spawn): assume the worst so
-        // the group kill below stays off and the per-PID fallback decides.
-        return true;
-    };
-    match proc_stat(pid) {
-        Some(info) => info.starttime != recorded,
-        None => false,
-    }
+fn session_snapshot(session: u32) -> Vec<(u32, u64)> {
+    let own = std::process::id();
+    session_members(session)
+        .into_iter()
+        .filter(|info| info.pid != session && info.pid != own)
+        .map(|info| (info.pid, info.starttime))
+        .collect()
 }
 
 #[cfg(test)]
@@ -977,6 +1089,42 @@ mod tests {
             .unwrap()
             .parse()
             .unwrap()
+    }
+
+    /// A session leader of its own, with a child, standing in for whoever
+    /// the kernel hands a freed pid to next. `setsid` makes its pid both a
+    /// process-group and a session id, so an unguarded group SIGKILL or
+    /// session sweep aimed at that number really would take it down — which
+    /// is what the guards below are asserted to prevent.
+    #[cfg(target_os = "linux")]
+    fn decoy_session() -> std::process::Child {
+        let mut command = std::process::Command::new("/bin/sh");
+        command.args(["-c", "sleep 30 & sleep 30"]);
+        // SAFETY: the hook runs between fork and exec and only calls
+        // `setsid`, which is async-signal-safe and touches no allocation.
+        unsafe {
+            std::os::unix::process::CommandExt::pre_exec(&mut command, || {
+                libc::setsid();
+                Ok(())
+            })
+        };
+        let decoy = command.spawn().unwrap();
+        assert!(
+            poll_until(Duration::from_secs(15), || !super::descendant_snapshot(
+                decoy.id()
+            )
+            .is_empty()),
+            "the decoy never got a child"
+        );
+        decoy
+    }
+
+    /// SIGKILLs a decoy session and reaps it.
+    #[cfg(target_os = "linux")]
+    fn kill_decoy(mut decoy: std::process::Child) {
+        // SAFETY: `kill(2)` on a process group we created for this test.
+        unsafe { libc::kill(-(decoy.id() as libc::pid_t), libc::SIGKILL) };
+        let _ = decoy.wait();
     }
 
     /// Polls until `condition` holds or `timeout` passes. Shutdown asserts
@@ -1406,6 +1554,125 @@ mod tests {
 
         assert!(!super::process_group_alive(process_group));
         assert!(transport.has_joined_threads());
+    }
+
+    /// #146: the reuse guard #119 added only ran inside `kill_session`, so
+    /// the wider signals — the group SIGKILL, and the descendant snapshot
+    /// that decides what the sweep owns — still aimed at a bare number. A
+    /// number that has been handed to somebody else must be signalled by
+    /// nothing and must expand ownership over nothing.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_reused_process_group_is_neither_signalled_nor_captured() {
+        let terminal = TerminalId::new("reused");
+        let project = Project {
+            terminal,
+            path: PathBuf::from("/"),
+            command: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "printf READY; sleep 30".to_owned(),
+            ],
+            shell_hook: false,
+        };
+        let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
+        read_until(&mut transport, "READY");
+        let shell = transport.process_group.unwrap();
+        let decoy = decoy_session();
+        let stranger = decoy.id();
+        let stranger_child = super::descendant_snapshot(stranger)[0].0;
+
+        // The pid-reuse case exactly: the recorded identity stays ours, the
+        // number now belongs to a stranger who leads a session of its own.
+        transport.process_group = Some(stranger);
+        assert!(
+            transport.owned_process_group().is_none(),
+            "a start time that does not match cannot be ours"
+        );
+
+        transport.request_shutdown().unwrap();
+        assert!(
+            transport.descendants.is_empty(),
+            "a reused number must expand ownership over nothing"
+        );
+        transport.force_shutdown().unwrap();
+
+        assert!(
+            pid_alive(stranger) && pid_alive(stranger_child),
+            "the stranger's session must survive every stage of a shutdown"
+        );
+        assert!(
+            !transport.needs_force_shutdown(),
+            "nothing a reused number leads is ours to force"
+        );
+
+        // The same call against the identity we really own does land, so it
+        // is the guard and not a missing signal that spared the stranger.
+        transport.process_group = Some(shell);
+        transport.force_shutdown().unwrap();
+        assert!(
+            poll_until(Duration::from_secs(5), || !super::process_group_alive(
+                shell
+            )),
+            "our own process group must still be killable"
+        );
+        transport.join();
+        kill_decoy(decoy);
+    }
+
+    /// #146: an exited pane used to keep a signallable number. Once the
+    /// waiter has reaped the shell the pid is the kernel's to hand out
+    /// again, so the whole identity is retired — no signal, no capture,
+    /// whatever that number names by then.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_reaped_shell_holds_no_signallable_identity() {
+        let terminal = TerminalId::new("reaped");
+        let project = Project {
+            terminal,
+            path: PathBuf::from("/"),
+            command: vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+            shell_hook: false,
+        };
+        let mut transport = PtyTransport::spawn(&project, ScreenSize::new(80, 24)).unwrap();
+        let shell = transport.process_group.unwrap();
+        assert_eq!(transport.owned_process_group(), Some(shell));
+
+        assert!(
+            poll_until(Duration::from_secs(15), || transport
+                .owned_process_group()
+                .is_none()),
+            "the reaped shell kept a signallable id"
+        );
+        assert_eq!(
+            transport.process_id(),
+            Some(shell),
+            "the number is still reported as metadata; it is only unsignallable"
+        );
+        assert!(
+            !transport.needs_force_shutdown(),
+            "a shell that exited alone leaves nothing to force"
+        );
+
+        // Retirement does not depend on the number having been reused yet:
+        // even pointed at a live identity that would validate, a reaped
+        // transport signals nothing.
+        let decoy = decoy_session();
+        let stranger = decoy.id();
+        let stranger_child = super::descendant_snapshot(stranger)[0].0;
+        transport.process_group = Some(stranger);
+        transport.shell_start = super::proc_starttime(stranger);
+        assert!(transport.owned_process_group().is_none());
+
+        transport.request_shutdown().unwrap();
+        transport.force_shutdown().unwrap();
+
+        assert!(
+            pid_alive(stranger) && pid_alive(stranger_child),
+            "a reaped pane must not signal the number it used to hold"
+        );
+        transport.join();
+        kill_decoy(decoy);
     }
 
     #[cfg(target_os = "linux")]

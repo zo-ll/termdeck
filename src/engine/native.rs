@@ -340,6 +340,11 @@ pub struct NativeEngine {
     /// One deadline for all rendered timing values, rather than one per PTY.
     last_timing_refresh: Instant,
     timing_visible: BTreeSet<TerminalId>,
+    /// Whether shutdown has already run to completion (#146). `Drop` runs
+    /// shutdown too, and re-entering it after an explicit one would signal
+    /// pids that were retired the first time round — numbers the kernel is
+    /// free to have handed to somebody else by then.
+    shutdown_complete: bool,
 }
 
 impl NativeEngine {
@@ -383,6 +388,7 @@ impl NativeEngine {
             terminals,
             scrollback,
             last_timing_refresh: Instant::now(),
+            shutdown_complete: false,
         })
     }
 
@@ -471,6 +477,7 @@ impl NativeEngine {
             terminals,
             scrollback,
             last_timing_refresh: Instant::now(),
+            shutdown_complete: false,
         })
     }
 
@@ -506,6 +513,14 @@ impl NativeEngine {
     }
 
     fn shutdown(&mut self) -> Vec<EngineEvent> {
+        // Shutdown happens once. Every terminal it touched has had its
+        // process identity retired, so a second pass could only aim at
+        // numbers it no longer owns (#146); the `Drop` below is the caller
+        // this guards against.
+        if self.shutdown_complete {
+            return Vec::new();
+        }
+        self.shutdown_complete = true;
         let mut failures = vec![None; self.terminals.len()];
         for (index, terminal) in self.terminals.iter_mut().enumerate() {
             if let Some(transport) = &mut terminal.transport
@@ -612,6 +627,8 @@ impl NativeEngine {
 }
 
 impl Drop for NativeEngine {
+    /// A no-op after an explicit shutdown; the full path otherwise, so an
+    /// engine that is simply dropped still leaves no owned process behind.
     fn drop(&mut self) {
         self.shutdown();
     }
@@ -1029,6 +1046,55 @@ mod tests {
             "shutdown must not report success while a snapshot survivor is alive"
         );
         assert!(transport.has_joined_threads());
+    }
+
+    /// #146: `Drop` runs shutdown too, so an engine that was shut down
+    /// explicitly used to run the whole thing twice — the second pass
+    /// signalling process ids whose panes were already dead and reaped,
+    /// which is exactly when a number stops being ours. Shutdown happens
+    /// once; a pane started afterwards still cleans itself up through its
+    /// own transport's `Drop`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shutdown_is_not_re_entered_by_drop_after_an_explicit_one() {
+        let terminal = TerminalId::new("once");
+        let projects = [project(terminal.clone(), "printf READY; sleep 30")];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        wait_for_frame(&mut engine, &terminal, "READY");
+        assert!(!engine.shutdown_complete);
+
+        let events = engine.dispatch(EngineCommand::Shutdown);
+
+        assert!(!events.is_empty(), "the first shutdown reports its panes");
+        assert!(engine.shutdown_complete);
+
+        // A pane started after that shutdown makes the second pass visible:
+        // this is the very call `Drop` makes, and it must touch nothing.
+        let added = TerminalId::new("after");
+        engine
+            .add(
+                project(added.clone(), "printf LATER; sleep 30"),
+                ScreenSize::new(80, 24),
+            )
+            .unwrap();
+        wait_for_frame(&mut engine, &added, "LATER");
+        let group = engine.metadata(&added).unwrap().process.unwrap().pid;
+
+        let again = engine.dispatch(EngineCommand::Shutdown);
+
+        assert!(again.is_empty(), "a completed shutdown is not re-entered");
+        assert_eq!(engine.status(&added), Some(&TerminalStatus::Running));
+        assert!(crate::engine::pty::process_group_alive(group));
+
+        drop(engine);
+
+        // Nothing leaks either: the transport's own `Drop` is still the
+        // confirmed-quit path for a pane the engine never signalled.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && crate::engine::pty::process_group_alive(group) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!crate::engine::pty::process_group_alive(group));
     }
 
     /// Issue #46: a confirmed quit waited out the whole grace period, because
@@ -1758,6 +1824,7 @@ mod tests {
             scrollback: DEFAULT_SCROLLBACK,
             last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
             timing_visible: BTreeSet::from([visible.clone(), also_visible.clone()]),
+            shutdown_complete: false,
         };
 
         assert_eq!(
@@ -1862,6 +1929,7 @@ mod tests {
             scrollback: DEFAULT_SCROLLBACK,
             last_timing_refresh: observed.checked_sub(Duration::from_secs(1)).unwrap(),
             timing_visible,
+            shutdown_complete: false,
         };
 
         assert_eq!(
@@ -1926,6 +1994,7 @@ mod tests {
             scrollback: DEFAULT_SCROLLBACK,
             last_timing_refresh: Instant::now(),
             timing_visible: BTreeSet::from([terminal.clone()]),
+            shutdown_complete: false,
         };
         engine.dispatch(EngineCommand::Scroll {
             terminal: terminal.clone(),
@@ -2017,6 +2086,7 @@ mod tests {
             scrollback: DEFAULT_SCROLLBACK,
             last_timing_refresh: Instant::now(),
             timing_visible: BTreeSet::from([terminal.clone()]),
+            shutdown_complete: false,
         };
         engine.dispatch(EngineCommand::Scroll {
             terminal: terminal.clone(),
