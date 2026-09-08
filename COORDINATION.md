@@ -1931,6 +1931,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   do-nothing option quantified). Researcher Working; result routes to user for
   a decision (no branch yet — research never commits).
   LANES: researcher → #152 study; critic/codex/claude idle.
+- 2026-09-08: #152 REDIRECTED per user — NOT research; treat as a normal
+  coding slice. Researcher window killed (boot script kept for on-demand use).
+  #152 DISPATCHED to the codex lane — worktree
+  ~/.worktrees/termdeck/152-login-shim (coord/152-login-shim off origin/main
+  2d6cfe7); brief .scratch/tasks/152-login-shim.brief.md (login panes: stop
+  repeated sudo hint, honor ~/.hushlogin, load ~/.bash_completion under
+  scoped-HOME login bash; investigate real /etc/profile/bash behavior, pick +
+  document the mechanism, NO #151 regression — one prompt, no fed command;
+  real login-bash regression tests that fail pre-fix). One lost-Enter retry;
+  verified Working. LANES: codex → #152; critic/claude idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
