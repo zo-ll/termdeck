@@ -2114,6 +2114,13 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Worktree+branch pruned. (Earlier push to 68f5ef4 had a transient SSH timeout
   — retried OK.) IN FLIGHT: claude → sessions-picker handback; critic idle
   (next: picker re-review); codex idle. #156 open until picker re-passes.
+- 2026-09-08: sessions-picker HANDBACK DONE (claude 0a5d5fa on top of
+  rebased 2b31871+61579a1; base d4a9990; marker RESULT=pass: resume() routes
+  to engine run_restored — layout+transcripts+cwd skips; gate 483/7/1 green;
+  ahead 3, deduped against engine's snapshot.rs; not pushed). ROUTED to CRITIC
+  for RE-REVIEW (assignment updated with handback clause: confirm resume→
+  run_restored via engine-state test not banner; critic Working).
+  IN FLIGHT: critic → sessions-picker re-review; claude + codex idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
