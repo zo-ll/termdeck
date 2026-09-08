@@ -2162,6 +2162,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   to /home/az/Desktop/coordinator-workflow-review.md. Worktree
   coord/relay-fix; brief .scratch/tasks/relay-fix.brief.md. Worker Working.
   LANES: codex(astra/low) → relay-fix+review; critic/claude/researcher idle.
+- 2026-09-08: RELAY FIX COMPLETE + VERIFIED (codex gpt-6-astra/low; marker
+  RESULT=pass). Relay dedupes by EVENT/TASK-SLUG (not content): verified live
+  — same-slug re-write → DUP/dropped, distinct slug → delivered. Relay
+  restarted, single instance PID 256628. WORKFLOW REVIEW written to
+  /home/az/Desktop/coordinator-workflow-review.md (23KB, FACT/INFERENCE/
+  PREFERENCE, covers what worked/brittle + prioritized recommendations).
+  fmt/clippy/499 tests pass; NO repo commits (infra+doc task, nothing to
+  critic/merge). Worktree coord/relay-fix left for now (no repo change).
+  LANES all idle. Open: none.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
