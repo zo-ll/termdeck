@@ -2064,6 +2064,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   hardening + non-execution proof; critic Working). Claude still on
   sessions-picker (13m+). IN FLIGHT: critic → sessions-engine; claude →
   sessions-picker.
+- 2026-09-08: sessions-picker DONE (claude 2d2ba91 + 7b4eb6e; marker
+  RESULT=pass: context picker header-only reader, 2 sections, no auto-attach,
+  zero-sessions fall-through + restore banner; gate lib 475 / termctl 7 /
+  main 1, fmt+clippy clean; 16 files +1479 — snapshot.rs +270, render.rs
+  +312, state.rs +134, tests +386, session.rs +113, main.rs ±25; not pushed;
+  resume routes to session::resume, engine restore_lines seam still open →
+  merge sequenced engine-first). QUEUED for critic (assignment
+  .scratch/review/sessions-picker.critic.md; reviewed after sessions-engine
+  verdict). Critic Working on sessions-engine after a transient 429 nudge.
+  Overlap watch: picker touches session.rs + main.rs (engine branch also) —
+  merge engine first, then reconcile. IN FLIGHT: critic → sessions-engine
+  (then sessions-picker); codex + claude idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
