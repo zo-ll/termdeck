@@ -1905,6 +1905,18 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   ISSUE. IN FLIGHT: critic → #146; codex + claude idle.
   AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153 #154 #145; #146 at
   critic. Remaining open: 1 (#146).
+- 2026-09-08: #146 MERGED + CLOSED (no-ff 53ad87c; critic PASS no nits: every
+  signal validates identity, reap retires ownership, drop runs once, #141
+  sweep preserved; absolute client deadline with saturated-backlog proof; gate
+  457+5+1). Worktree+branch pruned. Audit P2 closed.
+  ★★ AUDIT COMPLETE — every audit-b3df768 issue (#139 #140 #141 #142 #143
+  #144→#153/#154 #145 #146 #147, plus CI flag #134) is MERGED + CLOSED. Open
+  audit issues: none. Closed this run: #143 #134 #139 #142 #141 #153 #154 #147
+  #145 #146 (all merged no-ff + CI + closed); #144 split into #153+#154.
+  OPEN DECISIONS FOR USER: (1) #152 residual — include in "audit closed" or
+  keep design-first/deferred? (2) ~62 stale origin/coord/* remote branches —
+  clean up? (3) rebuild/refresh installed ~/.local/bin/termdeck binary
+  (deferred during batch).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
