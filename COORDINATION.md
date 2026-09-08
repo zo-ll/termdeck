@@ -2013,6 +2013,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   (data model, lifecycle, CLI/ctl, #112 gate, lane split, MVP slice).
   RE-DISPATCHED completion to researcher (study2b → sessions-research-2b.md,
   keep <10KB to avoid re-truncation; sections 3-7 only). Researcher Working.
+- 2026-09-08: sessions design COMPLETE (round-2 §1-2 + 2b §3-7;
+  /tmp/shipwright/termdeck/sessions/sessions-research{-2,-2b}.md). Summary:
+  replay via adapter.feed hardened (drop replies/bells, skip notify scan,
+  sanitize C0, never touches shutdown model); picker reuses Browse seam;
+  session.v1 JSON + $XDG_STATE_HOME/termdeck/sessions/<ws>.json (0600,
+  last-quit-wins, 2000-line cap); save-on-clean-quit only (no autosave v1);
+  `termdeck attach <ws>` + `termdeck sessions`, termctl verbs deferred;
+  #112 one-line narrowing of no-persistence clause (no-daemon line untouched);
+  lane split codex(engine/CLI: DTO+save/load+restore_lines+attach/sessions)
+  + claude(UI: SnapshotBrowse + context picker + notice banner), interface =
+  session.v1 DTO + restore_lines API; MVP = save-on-clean-quit + attach +
+  context picker + 2000-line text + banner (OUT: autosave, termctl verbs,
+  redaction, alt-screen fidelity, multi-open locking); step-0 spike =
+  restore_lines + hostile-transcript test. Routed to USER for go/no-go.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
