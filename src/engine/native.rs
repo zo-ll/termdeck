@@ -9,7 +9,7 @@ use crate::{
         Elapsed, EngineCommand, EngineEvent, NotifyKind, ProcessInfo, Project, ScreenSize,
         TerminalEngine, TerminalFrame, TerminalId, TerminalMetadata, TerminalStatus, Timestamp,
     },
-    engine::{InputOutcome, PtyEvent, PtyTransport, VtFrameAdapter},
+    engine::{InputOutcome, PtyEvent, PtyTransport, VtFrameAdapter, pty::FORCE_SETTLE},
 };
 
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
@@ -531,13 +531,38 @@ impl NativeEngine {
             let Some(transport) = &mut terminal.transport else {
                 continue;
             };
-            // Force when anything owned survives — the shell's group OR the
-            // wider session (#119). A dead shell with live jobs must still
-            // reach `force_shutdown`; the group check alone misses it.
-            if (transport.is_process_group_alive() || transport.is_session_alive())
+            // Force when anything owned survives — the shell's group, the
+            // wider session (#119), or a descendant captured before it
+            // escaped with `setsid` (#141).
+            if transport.needs_force_shutdown()
                 && let Err(message) = transport.force_shutdown()
             {
                 failures[index].get_or_insert(message);
+            }
+        }
+
+        // A detached descendant can hold the PTY open after the shell and
+        // its session have gone away. Do not report a successful shutdown
+        // until the validated snapshot says those processes are gone.
+        let settle = Instant::now() + FORCE_SETTLE;
+        while Instant::now() < settle
+            && self.terminals.iter().any(|terminal| {
+                terminal
+                    .transport
+                    .as_ref()
+                    .is_some_and(PtyTransport::has_snapshot_survivors)
+            })
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        for (index, terminal) in self.terminals.iter_mut().enumerate() {
+            let Some(transport) = &mut terminal.transport else {
+                continue;
+            };
+            if transport.has_snapshot_survivors() {
+                failures[index]
+                    .get_or_insert_with(|| "snapshotted descendant survived shutdown".to_owned());
             }
             transport.join();
         }
@@ -954,6 +979,54 @@ mod tests {
         assert!(
             !transport.is_session_alive(),
             "no session member may survive"
+        );
+        assert!(transport.has_joined_threads());
+    }
+
+    /// #141: a descendant that creates its own session is outside both the
+    /// shell process group and session by force time, but was still owned
+    /// when shutdown captured the descendant tree. It must be swept before
+    /// shutdown reports success.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn engine_shutdown_kills_a_setsid_descendant_after_the_shell_exits() {
+        let terminal = TerminalId::new("setsid-child");
+        let projects = [project(
+            terminal.clone(),
+            "python3 -c 'import os, signal, time\npid = os.fork()\nif pid:\n    time.sleep(60)\nelse:\n    os.setsid()\n    signal.signal(signal.SIGHUP, signal.SIG_IGN)\n    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n    print(f\"ESCAPED={os.getpid()}\", flush=True)\n    time.sleep(60)'",
+        )];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        wait_for_frame(&mut engine, &terminal, "ESCAPED=");
+        let text = frame_text(engine.frame(&terminal).unwrap());
+        let marker = "ESCAPED=";
+        let escaped: u32 = text[text.find(marker).unwrap() + marker.len()..]
+            .split(|character: char| !character.is_ascii_digit())
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(
+            pid_alive(escaped),
+            "the escaped descendant must be alive before shutdown"
+        );
+
+        let events = engine.dispatch(EngineCommand::Shutdown);
+
+        assert!(matches!(
+            events.as_slice(),
+            [
+                EngineEvent::StatusChanged { terminal: event_terminal, status: TerminalStatus::Exited { code: None } },
+                EngineEvent::MetadataChanged { terminal: metadata_terminal, .. },
+            ] if event_terminal == &terminal && metadata_terminal == &terminal
+        ));
+        assert!(
+            !pid_alive(escaped),
+            "the snapshotted setsid descendant must not survive shutdown"
+        );
+        let transport = engine.terminals[0].transport.as_ref().unwrap();
+        assert!(
+            !transport.has_snapshot_survivors(),
+            "shutdown must not report success while a snapshot survivor is alive"
         );
         assert!(transport.has_joined_threads());
     }
