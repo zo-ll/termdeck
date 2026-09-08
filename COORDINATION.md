@@ -2121,6 +2121,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   for RE-REVIEW (assignment updated with handback clause: confirm resume→
   run_restored via engine-state test not banner; critic Working).
   IN FLIGHT: critic → sessions-picker re-review; claude + codex idle.
+- 2026-09-08: SESSIONS FEATURE COMPLETE. sessions-picker MERGED (no-ff
+  0846cd7; critic PASS re-review: resume() routes through run_restored via
+  load_file with engine-state tests killing the old fresh-open behavior;
+  dedup complete; gate 483+7+1). #156 CLOSED. Worktree+branch pruned.
+  BINARIES REBUILT (cargo install --force): termdeck 1.99MB + termctl 514KB,
+  `termdeck sessions` + `termdeck attach NAME` live in help.
+  Remaining open: #155 (named send-keys) — queued, not picked up.
+  LANES: critic/codex/claude/researcher idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
