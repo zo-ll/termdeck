@@ -1794,6 +1794,35 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   2 verdict).
   AUDIT status: ✓ #143 #134 #139 #141 #153; #142 in rework; P2s #154 #145
   #146 #147 queued (codex lane).
+- 2026-09-08: #142 REWORK ROUND 2 DONE (codex 820e089 "fix: keep VT parser
+  guard aligned" on top of 7e7d7d0; marker RESULT=pass: aligned VT escape
+  guard with vte DEL/C1 arms, full gate green 445+5+1; files vt.rs +374 /
+  Cargo.toml +1 / Cargo.lock +1; not pushed). ROUTED to CRITIC (round-2
+  assignment rewritten at .scratch/review/142-parser-memory.critic.md:
+  verify the ESC DEL/C1 desync is actually closed, per-shape flat-retention
+  tests fail pre-fix, round-1 tests kept; critic Working).
+- 2026-09-08: LANE ADJUDICATION (user): “if there is no ui work claude can
+  take engine tasks as well”. #147 (bash hook clobbers $?, P2) DISPATCHED to
+  the CLAUDE lane — worktree ~/.worktrees/termdeck/147-bash-hook
+  (coord/147-bash-hook off origin/main c551118); brief
+  .scratch/tasks/147-bash-hook.brief.md (preserve captured $? across EVERY
+  return path incl. TERMDECK_NOTIFY=none early returns; test asserts what an
+  EXISTING prompt hook observes as $? with a real bash, fails pre-fix; scalar
+  AND array PROMPT_COMMAND forms; check zsh+fish for same shape; fix is in the
+  embedded SCRIPT TEXT, do not touch #152 shim). Fresh claude session; verified
+  Working.
+- 2026-09-08: #154 (discovery identity collision, P2) DISPATCHED to the codex
+  lane — worktree ~/.worktrees/termdeck/154-discovery-collision
+  (coord/154-discovery-collision off origin/main c551118); brief
+  .scratch/tasks/154-discovery-collision.brief.md (one deterministic identity
+  allocator across grouped+direct discovery mirroring the picker suffix
+  allocator at src/ui/picker/state.rs:645; end-to-end discover_workspace test
+  for frontends/web + fe-web collision plus multi-collision + order stability;
+  grouped-prefix baseline unchanged). Fresh codex session; one lost-Enter
+  retry; verified Working.
+  IN FLIGHT: critic → #142 round 2; codex → #154; claude → #147.
+  AUDIT status: ✓ #143 #134 #139 #141 #153; #142 round 2 at critic;
+  P2 in flight #154 (codex) + #147 (claude); queued #145 #146 (codex).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
