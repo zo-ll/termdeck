@@ -2076,6 +2076,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   Overlap watch: picker touches session.rs + main.rs (engine branch also) —
   merge engine first, then reconcile. IN FLIGHT: critic → sessions-engine
   (then sessions-picker); codex + claude idle.
+- 2026-09-08: sessions-engine MERGED (no-ff 228e50f; critic PASS no nits:
+  replay triple-hardening proven live with non-execution proof, schema
+  pinned, save/restore verbs work end-to-end live-probed, shutdown untouched,
+  no daemon; gate 466+7+1). #156 created (sessions feature tracking).
+  sessions-picker ADVANCED to critic (critic Working). IN FLIGHT: critic →
+  sessions-picker. Merge watch: picker touches session.rs/main.rs — will
+  reconcile onto engine-merged main at picker merge. #156 stays open until
+  both land.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
