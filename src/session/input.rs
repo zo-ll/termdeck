@@ -36,6 +36,245 @@ pub(super) const CAPTURE_PAYLOAD: usize = 64 * 1024;
 pub(super) const MOUSE_SEQUENCE_CAP: usize = 256;
 const ESC_SEQUENCE_CAP: usize = PASTE_OPEN.len();
 
+/// Encodes the token values accepted by `termctl input --keys` into the bytes
+/// a terminal receives. Named keys deliberately share the sequences used by
+/// [`KeyReader`]: arrows, paging, tab, enter, backspace, escape, and the
+/// two shift-arrow forms therefore cannot drift from the outer input path.
+///
+/// Bare words that are not key-shaped stay literal text, which makes mixed
+/// calls such as `C-c Enter Up text` useful. A malformed modifier expression
+/// (for example `C-not-a-key`) and an unknown function key are errors instead
+/// of silent text. `Raw:` forces the rest of one argument to stay literal,
+/// including spaces, so `Raw:Up` sends the three characters `Up` and existing
+/// shell-escaped control values such as `$'\x03'` continue to pass through.
+pub fn encode_keys<T: AsRef<str>>(values: &[T]) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    for value in values {
+        let value = value.as_ref();
+        if let Some(raw) = value.strip_prefix("Raw:") {
+            bytes.extend_from_slice(raw.as_bytes());
+            continue;
+        }
+        for token in value.split_whitespace() {
+            encode_key_token(token, &mut bytes)?;
+        }
+    }
+    Ok(bytes)
+}
+
+fn encode_key_token(token: &str, bytes: &mut Vec<u8>) -> Result<(), String> {
+    if let Some(raw) = token.strip_prefix("Raw:") {
+        bytes.extend_from_slice(raw.as_bytes());
+        return Ok(());
+    }
+
+    let (control, meta, shift, name) = modifiers(token)?;
+    if let Some(named) = named_key(name, control, meta, shift) {
+        bytes.extend_from_slice(&named?);
+        return Ok(());
+    }
+
+    if control || meta || shift || looks_like_function_key(name) {
+        return Err(unknown_key(token));
+    }
+    bytes.extend_from_slice(token.as_bytes());
+    Ok(())
+}
+
+fn modifiers(token: &str) -> Result<(bool, bool, bool, &str), String> {
+    if !token.contains('-') {
+        return Ok((false, false, false, token));
+    }
+    let mut pieces = token.split('-').peekable();
+    let mut control = false;
+    let mut meta = false;
+    let mut shift = false;
+    while let Some(piece) = pieces.peek().copied() {
+        // The final component is always the key name, even when it happens
+        // to be the literal character C, M, or S.
+        if pieces.clone().nth(1).is_none() {
+            break;
+        }
+        let modifier = match piece.to_ascii_uppercase().as_str() {
+            "C" => &mut control,
+            "M" => &mut meta,
+            "S" => &mut shift,
+            _ => break,
+        };
+        if *modifier {
+            return Err(unknown_key(token));
+        }
+        *modifier = true;
+        pieces.next();
+    }
+    let name = pieces.next().ok_or_else(|| unknown_key(token))?;
+    if pieces.next().is_some() || name.is_empty() {
+        return Err(unknown_key(token));
+    }
+    Ok((control, meta, shift, name))
+}
+
+fn named_key(
+    name: &str,
+    control: bool,
+    meta: bool,
+    shift: bool,
+) -> Option<Result<Vec<u8>, String>> {
+    let upper = name.to_ascii_uppercase();
+    let modifier = modifier_number(control, meta, shift);
+    let simple = |normal: &[u8]| {
+        if control || shift {
+            return Err(unknown_key(name));
+        }
+        let mut encoded = normal.to_vec();
+        if meta {
+            encoded.insert(0, 0x1b);
+        }
+        Ok(encoded)
+    };
+    let csi = |letter: u8| {
+        if modifier == 1 {
+            Ok([b"\x1b[".as_slice(), &[letter]].concat())
+        } else {
+            Ok(format!("\x1b[1;{modifier}{}", letter as char).into_bytes())
+        }
+    };
+    let tilde = |number: u8| {
+        if modifier == 1 {
+            Ok(format!("\x1b[{number}~").into_bytes())
+        } else {
+            Ok(format!("\x1b[{number};{modifier}~").into_bytes())
+        }
+    };
+    let result = match upper.as_str() {
+        "ENTER" => simple(b"\r"),
+        "TAB" if shift && !control && !meta => Ok(b"\x1b[Z".to_vec()),
+        "TAB" => simple(b"\t"),
+        "BACKSPACE" => simple(&[0x7f]),
+        "ESCAPE" => simple(&[0x1b]),
+        "UP" => csi(b'A'),
+        "DOWN" => csi(b'B'),
+        "RIGHT" => csi(b'C'),
+        "LEFT" => csi(b'D'),
+        "PAGEUP" => tilde(5),
+        "PAGEDOWN" => tilde(6),
+        "HOME" => csi(b'H'),
+        "END" => csi(b'F'),
+        "F1" | "F2" | "F3" | "F4" => {
+            let letter = b'P' + upper.as_bytes()[1] - b'1';
+            if modifier == 1 {
+                Ok([b"\x1bO".as_slice(), &[letter]].concat())
+            } else {
+                Ok(format!("\x1b[1;{modifier}{}", letter as char).into_bytes())
+            }
+        }
+        "F5" => tilde(15),
+        "F6" => tilde(17),
+        "F7" => tilde(18),
+        "F8" => tilde(19),
+        "F9" => tilde(20),
+        "F10" => tilde(21),
+        "F11" => tilde(23),
+        "F12" => tilde(24),
+        _ if control || meta || shift => return character_key(name, control, meta, shift),
+        _ => return None,
+    };
+    Some(result)
+}
+
+fn character_key(
+    name: &str,
+    control: bool,
+    meta: bool,
+    shift: bool,
+) -> Option<Result<Vec<u8>, String>> {
+    if name.chars().count() != 1 {
+        return None;
+    }
+    let mut character = name.as_bytes()[0];
+    if !character.is_ascii() {
+        return Some(Err(unknown_key(name)));
+    }
+    if shift {
+        character.make_ascii_uppercase();
+    }
+    if control {
+        if !matches!(character, b'@'..=b'_') && !character.is_ascii_alphabetic() {
+            return Some(Err(unknown_key(name)));
+        }
+        character = character.to_ascii_uppercase() & 0x1f;
+    }
+    let mut encoded = vec![character];
+    if meta {
+        encoded.insert(0, 0x1b);
+    }
+    Some(Ok(encoded))
+}
+
+fn modifier_number(control: bool, meta: bool, shift: bool) -> u8 {
+    1 + u8::from(shift) + 2 * u8::from(meta) + 4 * u8::from(control)
+}
+
+fn looks_like_function_key(name: &str) -> bool {
+    name.strip_prefix(['F', 'f']).is_some_and(|number| {
+        !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+    })
+}
+
+fn unknown_key(token: &str) -> String {
+    format!("unknown key name `{token}`; use Raw:{token} for literal text")
+}
+
+#[cfg(test)]
+mod key_encoding_tests {
+    use super::encode_keys;
+
+    #[test]
+    fn named_keys_match_the_outer_reader_sequences() {
+        assert_eq!(
+            encode_keys(&["C-c Enter Up Down Right Left PageUp PageDown Tab Backspace Escape"])
+                .unwrap(),
+            b"\x03\r\x1b[A\x1b[B\x1b[C\x1b[D\x1b[5~\x1b[6~\t\x7f\x1b"
+        );
+        assert_eq!(
+            encode_keys(&["S-Tab S-Up S-Down"]).unwrap(),
+            b"\x1b[Z\x1b[1;2A\x1b[1;2B"
+        );
+    }
+
+    #[test]
+    fn named_keys_cover_function_navigation_and_modifiers() {
+        assert_eq!(
+            encode_keys(&["Home End F1 F4 F5 F12 M-x C-a"]).unwrap(),
+            b"\x1b[H\x1b[F\x1bOP\x1bOS\x1b[15~\x1b[24~\x1bx\x01"
+        );
+    }
+
+    #[test]
+    fn key_values_allow_multiple_arguments_and_literal_text() {
+        assert_eq!(
+            encode_keys(&["C-c Enter Up", "text"]).unwrap(),
+            b"\x03\r\x1b[Atext"
+        );
+    }
+
+    #[test]
+    fn malformed_key_names_name_the_offending_token() {
+        let error = encode_keys(&["C-not-a-key"]).unwrap_err();
+        assert!(error.contains("C-not-a-key"));
+        assert!(error.contains("Raw:C-not-a-key"));
+        assert!(encode_keys(&["F13"]).is_err());
+    }
+
+    #[test]
+    fn raw_control_bytes_and_raw_prefix_remain_literal() {
+        assert_eq!(encode_keys(&["\u{3}"]).unwrap(), b"\x03");
+        assert_eq!(encode_keys(&["\x1b[A"]).unwrap(), b"\x1b[A");
+        assert_eq!(encode_keys(&["Raw:Up"]).unwrap(), b"Up");
+        assert_eq!(encode_keys(&["Raw:git status"]).unwrap(), b"git status");
+    }
+}
+
 /// Encodes a paste for one child (#120): bracketed while the child holds
 /// DEC 2004, raw bytes otherwise. Typed input (`Bytes`) and agent `text`
 /// stay raw — only a paste operation wraps, so a child without paste mode

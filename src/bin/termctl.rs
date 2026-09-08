@@ -3,7 +3,10 @@
 
 use std::{env, path::PathBuf, process};
 
-use termdeck::ctl::{self, Request, Response, SCHEMA};
+use termdeck::{
+    ctl::{self, Request, Response, SCHEMA},
+    session::input::encode_keys,
+};
 
 fn main() {
     process::exit(run(env::args().skip(1).collect()));
@@ -133,6 +136,11 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
         "close" | "promote" | "input" if positional.len() == 2 => {
             (Some(positional[1].clone()), None, None, None)
         }
+        "input"
+            if positional.len() > 2 && input.as_ref().is_some_and(|(kind, _)| kind == "--keys") =>
+        {
+            (Some(positional[1].clone()), None, None, None)
+        }
         "zoom" if positional.len() == 1 => (None, None, None, None),
         "status" | "list" | "peek" | "notify" | "version" | "save" | "restore" | "open"
         | "close" | "promote" | "zoom" | "input" => {
@@ -152,7 +160,14 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
     let (text, paste, keys) = match input {
         Some((kind, value)) if kind == "--text" => (Some(value), None, None),
         Some((kind, value)) if kind == "--paste" => (None, Some(value), None),
-        Some((_, value)) => (None, None, Some(value)),
+        Some((_, value)) => {
+            let mut values = vec![value];
+            values.extend(positional.iter().skip(2).cloned());
+            let bytes = encode_keys(&values)?;
+            let keys = String::from_utf8(bytes)
+                .map_err(|_| "encoded keys are not valid UTF-8".to_owned())?;
+            (None, None, Some(keys))
+        }
         None => (None, None, None),
     };
     Ok((
@@ -266,7 +281,7 @@ fn help_for(arguments: &[String]) -> Result<Option<&'static str>, String> {
 }
 
 const fn help() -> &'static str {
-    "TERMCTL\n\nUSAGE\n  termctl [OPTIONS] COMMAND [COMMAND OPTIONS]\n  termctl -- COMMAND [ARGUMENTS]\n\nA one-call ctl.v1 client for a running Termdeck session.\n\nCOMMANDS\n  status                 Show session status.\n  list                   List terminals.\n  save [NAME]            Save the live session snapshot.\n  restore NAME           Replace this session from a snapshot.\n  peek ID [--lines N|N]  Read a terminal screen or history.\n  notify MESSAGE         Send an explicit notification.\n  open PATH              Open a directory as a terminal.\n  close ID [--force]     Close a terminal.\n  promote ID             Promote a terminal to master.\n  zoom [--on|--off]      Toggle or set zoom mode; status reads it.\n  input ID KIND VALUE    Send --text, --paste, or --keys input.\n  version                Show the ctl.v1 schema version.\n  help [COMMAND]         Show general or command-specific help.\n\nGLOBAL OPTIONS\n  --json         Print the ctl.v1 response as JSON.\n  --socket PATH  Connect to PATH instead of TERMDECK_SOCK.\n  --             End option parsing; remaining arguments are positional.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  TERMDECK_SOCK               Socket path for the running Termdeck session.\n  TERMDECK_PANE               Current pane identity for notifications.\n  TERMDECK_NOTIFY             Enables automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permits termctl input requests from this pane.\n\nEXAMPLES\n  termctl status\n  termctl save\n  termctl restore idp\n  termctl list --json\n  termctl peek backend --lines 40\n  termctl notify 'build completed'\n  termctl input backend --paste 'git status'\n  termctl help input"
+    "TERMCTL\n\nUSAGE\n  termctl [OPTIONS] COMMAND [COMMAND OPTIONS]\n  termctl -- COMMAND [ARGUMENTS]\n\nA one-call ctl.v1 client for a running Termdeck session.\n\nCOMMANDS\n  status                 Show session status.\n  list                   List terminals.\n  save [NAME]            Save the live session snapshot.\n  restore NAME           Replace this session from a snapshot.\n  peek ID [--lines N|N]  Read a terminal screen or history.\n  notify MESSAGE         Send an explicit notification.\n  open PATH              Open a directory as a terminal.\n  close ID [--force]     Close a terminal.\n  promote ID             Promote a terminal to master.\n  zoom [--on|--off]      Toggle or set zoom mode; status reads it.\n  input ID KIND VALUE    Send --text, --paste, or --keys input.\n  version                Show the ctl.v1 schema version.\n  help [COMMAND]         Show general or command-specific help.\n\nGLOBAL OPTIONS\n  --json         Print the ctl.v1 response as JSON.\n  --socket PATH  Connect to PATH instead of TERMDECK_SOCK.\n  --             End option parsing; remaining arguments are positional.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  TERMDECK_SOCK               Socket path for the running Termdeck session.\n  TERMDECK_PANE               Current pane identity for notifications.\n  TERMDECK_NOTIFY             Enables automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permits termctl input requests from this pane.\n\nEXAMPLES\n  termctl status\n  termctl save\n  termctl restore idp\n  termctl list --json\n  termctl peek backend --lines 40\n  termctl notify 'build completed'\n  termctl input backend --paste 'git status'\n  termctl input backend --keys 'C-c Enter Up' 'text'\n  termctl help input"
 }
 
 fn command_help(command: &str) -> Option<&'static str> {
@@ -300,7 +315,7 @@ fn command_help(command: &str) -> Option<&'static str> {
             "TERMCTL-ZOOM\n\nUSAGE\n  termctl [OPTIONS] zoom [--on|--off]\n\nToggles zoom without an option. Use status to read zoom state; --on and --off explicitly set it.",
         ),
         "input" => Some(
-            "TERMCTL-INPUT\n\nUSAGE\n  termctl [OPTIONS] input ID (--text|--paste|--keys) VALUE [--force]\n\nSends text, bracketed paste, or encoded keys to terminal ID.",
+            "TERMCTL-INPUT\n\nUSAGE\n  termctl [OPTIONS] input ID --text VALUE [--force]\n  termctl [OPTIONS] input ID --paste VALUE [--force]\n  termctl [OPTIONS] input ID --keys VALUE... [--force]\n\nSends text, bracketed paste, or keys to terminal ID. --keys accepts C-, M-, and S- modifiers; Enter, Tab, Backspace, Up, Down, Left, Right, PageUp, PageDown, Home, End, Escape, and F1 through F12; other bare words are literal text. For raw compatibility, existing control bytes such as $'\\x03' pass through; prefix Raw: to force a named-looking token literal (Raw:Up).\n\nEXAMPLE\n  termctl input backend --keys 'C-c Enter Up' 'text'",
         ),
         "version" => Some(
             "TERMCTL-VERSION\n\nUSAGE\n  termctl [OPTIONS] version\n\nShows the supported ctl.v1 schema version.",
@@ -524,5 +539,47 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn parse_encodes_named_keys_before_building_the_request() {
+        let (_, _, request) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "input".to_owned(),
+            "backend".to_owned(),
+            "--keys".to_owned(),
+            "C-c Enter Up".to_owned(),
+            "text".to_owned(),
+            "--force".to_owned(),
+        ])
+        .unwrap();
+
+        assert_eq!(request.id.as_deref(), Some("backend"));
+        assert_eq!(request.keys.as_deref(), Some("\u{3}\r\u{1b}[Atext"));
+        assert!(request.force);
+    }
+
+    #[test]
+    fn parse_rejects_unknown_named_key_before_connecting() {
+        let arguments = vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "input".to_owned(),
+            "backend".to_owned(),
+            "--keys".to_owned(),
+            "C-not-a-key".to_owned(),
+        ];
+        let error = parse(arguments.clone()).unwrap_err();
+        assert!(error.contains("C-not-a-key"));
+        assert_eq!(run(arguments), 2);
+    }
+
+    #[test]
+    fn input_help_documents_named_keys_and_raw_compatibility() {
+        let input_help = command_help("input").unwrap();
+        assert!(input_help.contains("C-c Enter Up"));
+        assert!(input_help.contains("Raw:Up"));
+        assert!(help().contains("--keys 'C-c Enter Up' 'text'"));
     }
 }
