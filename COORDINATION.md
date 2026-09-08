@@ -2027,6 +2027,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   context picker + 2000-line text + banner (OUT: autosave, termctl verbs,
   redaction, alt-screen fidelity, multi-open locking); step-0 spike =
   restore_lines + hostile-transcript test. Routed to USER for go/no-go.
+- 2026-09-08: USER SCOPE DECISION — add BOTH termctl verbs, FULL
+  functionality (not the cut MVP). Surface: `termdeck attach <ws>`/
+  `sessions` = launch-time resume; `termctl save [name]` = runtime checkpoint
+  of the live session (default=workspace name, named for backups);
+  `termctl restore <name>` = runtime in-place restore (replace running
+  session's workspace from snapshot, fresh shells + replay, destructive-explicit).
+  Scope: save-on-clean-quit + termctl save/restore + attach/sessions +
+  context picker + 2000-line text replay + banner. Still daemon-less,
+  #112-gated, spike-first on restore_lines. Awaiting user GO to dispatch.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
