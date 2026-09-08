@@ -1723,6 +1723,21 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #139 review; codex → #142; claude → #153.
   AUDIT status: #143 ✓ #134 ✓; #139 at critic; remaining P1 #142 #141;
   P2s #153 #154 #145 #146 #147.
+- 2026-09-08: #139 MERGED + CLOSED (no-ff 3520b50; critic PASS no nits: shared
+  encode_paste refusal, atomic, ctl error 3; real-bash regression proven to
+  fail pre-fix; doc-comment premise corrected; gate 442+5+1). tests.rs
+  auto-merged cleanly with #143's earlier tests.rs. Worktree+branch pruned.
+  AUDIT P1 (fix-first amplifier) closed.
+- 2026-09-08: #153 DONE (claude ccc1367 "fix(picker): map filter match offsets
+  back onto the original name"; marker RESULT=pass: match_at maps folded offsets
+  back to original-name boundaries, renderer slice guarded, unicode tests
+  added; gate 444/5/1; 3 UI files state.rs +41 / render.rs +26 / tests.rs +142;
+  not pushed). ROUTED to CRITIC (assignment
+  .scratch/review/153-picker-unicode.critic.md; critic Working).
+  IN FLIGHT: critic → #153 review; codex → #142; claude idle (next #154? no —
+  #154 is CLI lane → codex queue; claude next UI slice TBD / may idle).
+  AUDIT status: #143 ✓ #134 ✓ #139 ✓; #153 at critic; remaining P1 #142 #141;
+  P2s #153 #154 #145 #146 #147.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
