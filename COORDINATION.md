@@ -1871,6 +1871,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #154; codex → #145; claude → #146.
   AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153; at critic #154;
   in flight #145 (codex) #146 (claude). Remaining open: 3 (#145 #146 #154).
+- 2026-09-08: #145 DONE (codex 48c4d00 "fix: preserve literal help input
+  values"; marker RESULT=pass: literal help input values preserved and zoom
+  help clarified; files termctl.rs +29/-3; not pushed). QUEUED for critic
+  (assignment .scratch/review/145-termctl-help.critic.md; reviewed after
+  #154 verdict). Codex lane now idle — all audit slices dispatched (remaining
+  are at critic or on claude). #152 remains deferred (user decision pending).
+  IN FLIGHT: critic → #154 (then #145 queued); claude → #146; codex idle.
+  AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153; at/queued critic #154
+  #145; in flight #146 (claude). Remaining open: 3 (#145 #146 #154).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
