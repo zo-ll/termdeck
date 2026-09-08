@@ -2129,6 +2129,16 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   `termdeck sessions` + `termdeck attach NAME` live in help.
   Remaining open: #155 (named send-keys) — queued, not picked up.
   LANES: critic/codex/claude/researcher idle.
+- 2026-09-08: #155 (named send-keys grammar) DISPATCHED to the codex lane —
+  worktree ~/.worktrees/termdeck/155-send-keys (coord/155-send-keys off
+  origin/main d736cca); brief .scratch/tasks/155-send-keys.brief.md (tmux-like
+  key-name grammar C-/M-/S- + named keys + literal text, encoded to bytes at
+  termctl BEFORE the ctl request so the wire/schema stays bytes; gate
+  --force/TERMDECK_ALLOW_INPUT + bounded path unchanged; BACKWARD COMPAT for
+  raw-byte senders is a required explicit design decision; unknown name → clear
+  error; align encoder with key_sequence()/KeyReader in src/session/input.rs;
+  help + tests). One lost-Enter retry; verified Working.
+  LANES: codex → #155; critic/claude/researcher idle.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
