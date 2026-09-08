@@ -1637,6 +1637,20 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   owed (handoff bullets span 09-04→09-07 across sections incl. a misplaced
   pre-close snapshot below) — archive the >15 oldest to the journal when next
   editing.
+- 2026-09-08 (resumed from the EOD lock): #143 (audit P1, panic-guard amplifier)
+  DISPATCHED to the codex lane — worktree
+  ~/.worktrees/termdeck/143-panic-guard (branch coord/143-panic-guard off
+  origin/main 88ccd41); brief .scratch/tasks/143-panic-guard.brief.md
+  (drop safe during unwinding: guard on std::thread::panicking() or a
+  non-mutating restore; non-panic path unchanged; SUBPROCESS regression test
+  asserting single panic + clean exit not SIGABRT; native.rs current_exe
+  precedent referenced; out of scope #139/#142/#141/#144-#147). Fresh codex
+  session (window relaunched at the worktree, gpt-5.6-terra high YOLO,
+  weekly 100%); manifest skill writing-rust (n/a for codex). One lost-Enter
+  retry, then verified Working (reading brief + exploring outer.rs/session
+  tests). In flight: codex → #143; critic idle; claude idle. Next: critic
+  review → merge (standing approval: nit-free PASS) → #139 on the codex
+  lane.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
