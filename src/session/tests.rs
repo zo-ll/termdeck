@@ -234,12 +234,12 @@ fn paste_encoding_follows_the_child_bracketed_paste_mode() {
     let terminal = TerminalId::new("pane");
     let mut engine = FakeEngine::new([terminal.clone()]);
     assert_eq!(
-        encode_paste(&engine, &terminal, "a\nb".to_owned()),
+        encode_paste(&engine, &terminal, "a\nb".to_owned()).unwrap(),
         b"a\nb".to_vec(),
         "no mode means raw bytes, as before"
     );
     assert_eq!(
-        encode_paste(&engine, &TerminalId::new("ghost"), "a\nb".to_owned()),
+        encode_paste(&engine, &TerminalId::new("ghost"), "a\nb".to_owned()).unwrap(),
         b"a\nb".to_vec(),
         "unknown terminals stay raw"
     );
@@ -251,10 +251,123 @@ fn paste_encoding_follows_the_child_bracketed_paste_mode() {
         },
     );
     assert_eq!(
-        encode_paste(&engine, &terminal, "SAFE\nTEXT".to_owned()),
+        encode_paste(&engine, &terminal, "SAFE\nTEXT".to_owned()).unwrap(),
         b"\x1b[200~SAFE\nTEXT\x1b[201~".to_vec(),
         "paste mode means a delimited region"
     );
+}
+
+/// The paste encoder is the shared trust boundary: ctl and copied text do
+/// not have the outer parser's guarantee that a close marker was stripped.
+#[test]
+fn paste_encoding_refuses_an_embedded_bracketed_paste_closer() {
+    let terminal = TerminalId::new("pane");
+    let mut engine = FakeEngine::new([terminal.clone()]);
+    let payload = format!(
+        "safe{close}unsafe",
+        close = String::from_utf8_lossy(PASTE_CLOSE)
+    );
+
+    assert_eq!(
+        encode_paste(&engine, &terminal, payload.clone()),
+        Err(super::input::PasteEncodeError::EmbeddedCloser),
+        "the check applies even before the child advertises paste mode"
+    );
+    engine.set_metadata(
+        &terminal,
+        TerminalMetadata {
+            bracketed_paste: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        encode_paste(&engine, &terminal, payload),
+        Err(super::input::PasteEncodeError::EmbeddedCloser),
+        "a wrapped region must never contain its own closer"
+    );
+}
+
+/// A refused ctl paste has not entered the engine at all. In particular it
+/// must not send an opener or a prefix before reporting the error to ctl.
+#[cfg(target_os = "linux")]
+#[test]
+fn ctl_paste_with_an_embedded_closer_is_refused_atomically() {
+    use std::{
+        thread,
+        time::{Duration, Instant},
+    };
+
+    let size = ScreenSize::new(80, 24);
+    let terminal = TerminalId::new("pane");
+    let probe = std::env::temp_dir().join(format!(
+        "termdeck-paste-atomic-{}-{}",
+        std::process::id(),
+        now().unix_millis
+    ));
+    let _ = std::fs::remove_file(&probe);
+    let mut projects = vec![Project {
+        terminal: terminal.clone(),
+        path: PathBuf::from("/"),
+        command: vec![
+            "/bin/sh".to_owned(),
+            "-c".to_owned(),
+            format!(
+                "stty raw -echo; exec dd bs=1 of={} 2>/dev/null",
+                probe.display()
+            ),
+        ],
+        shell_hook: false,
+    }];
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut used = BTreeSet::from([terminal.to_string()]);
+    let mut quit = false;
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && !probe.exists() {
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(probe.exists(), "the recording child never started");
+
+    let response = dispatch_control(
+        crate::ctl::Request {
+            schema: crate::ctl::SCHEMA.to_owned(),
+            verb: "input".to_owned(),
+            id: Some(terminal.to_string()),
+            paste: Some(format!(
+                "safe{close}touch should-not-run\\n",
+                close = String::from_utf8_lossy(PASTE_CLOSE)
+            )),
+            ..Default::default()
+        },
+        None,
+        &workspace,
+        &mut projects,
+        &mut deck,
+        &mut engine,
+        &mut notifies,
+        size,
+        false,
+        std::path::Path::new("/tmp/termdeck-ctl-test.sock"),
+        true,
+        &mut closed,
+        &mut used,
+        &mut quit,
+    );
+
+    let error = response.error.expect("ctl must report the rejected paste");
+    assert_eq!(error.code, 3);
+    assert!(error.message.contains("bracketed-paste closer"));
+    thread::sleep(Duration::from_millis(100));
+    assert!(
+        std::fs::read(&probe).unwrap().is_empty(),
+        "rejection must not dispatch an opener or a payload prefix"
+    );
+    engine.dispatch(EngineCommand::Shutdown);
+    let _ = std::fs::remove_file(&probe);
 }
 
 /// #120 audit repro at the byte level: a child holding DEC 2004 receives
@@ -307,7 +420,7 @@ fn a_child_with_paste_mode_receives_the_bracketed_region() {
     );
 
     let expected = b"\x1b[200~SAFE\nTEXT\x1b[201~".to_vec();
-    let bytes = encode_paste(&engine, &terminal, "SAFE\nTEXT".to_owned());
+    let bytes = encode_paste(&engine, &terminal, "SAFE\nTEXT".to_owned()).unwrap();
     assert_eq!(bytes, expected, "the dispatch must carry the region");
     engine.dispatch(EngineCommand::Input {
         terminal: terminal.clone(),
@@ -2231,6 +2344,135 @@ fn a_request_over_the_real_socket_reaches_the_live_deck() {
     engine.dispatch(EngineCommand::Shutdown);
 }
 
+/// #139 regression: the control socket receives text that never went through
+/// the outer paste parser. A closer in that text used to end the region early,
+/// leaving `touch` as ordinary readline input. This is deliberately a real
+/// bash, PTY, and socket path: a byte-only assertion would miss execution.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_socket_paste_cannot_escape_bracketed_paste_and_execute() {
+    use std::{
+        io::{Read, Write},
+        thread,
+        time::{Duration, Instant},
+    };
+
+    let _lock = crate::ctl::LISTENER_TEST_LOCK.lock().unwrap();
+    let marker = std::env::temp_dir().join(format!(
+        "termdeck-paste-escape-{}-{}",
+        std::process::id(),
+        now().unix_millis
+    ));
+    let _ = std::fs::remove_file(&marker);
+    let size = ScreenSize::new(80, 24);
+    let terminal = TerminalId::new("bash");
+    let mut projects = vec![Project {
+        terminal: terminal.clone(),
+        path: PathBuf::from("/"),
+        command: vec![
+            "/bin/bash".to_owned(),
+            "--noprofile".to_owned(),
+            "--norc".to_owned(),
+            "-i".to_owned(),
+        ],
+        shell_hook: false,
+    }];
+    let workspace = crate::config::Workspace::discovered(PathBuf::from("/"), projects.clone());
+    let mut deck = DeckState::new(projects.len());
+    let mut engine = spawn_terminals(&projects, &deck, size).unwrap();
+    engine.dispatch(EngineCommand::Input {
+        terminal: terminal.clone(),
+        bytes: b"bind 'set enable-bracketed-paste on'\n".to_vec(),
+    });
+    let mode_deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < mode_deadline
+        && !engine
+            .metadata(&terminal)
+            .is_some_and(|metadata| metadata.bracketed_paste)
+    {
+        engine.drain_events();
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        engine
+            .metadata(&terminal)
+            .is_some_and(|metadata| metadata.bracketed_paste),
+        "bash never enabled bracketed paste"
+    );
+
+    let mut notifies = crate::ui::Notifications::new();
+    let mut closed = BTreeSet::new();
+    let mut used = BTreeSet::from([terminal.to_string()]);
+    let mut quit = false;
+    let mut listener = crate::ctl::Listener::bind().unwrap();
+    let socket = listener.path().to_path_buf();
+    let payload = format!(
+        "{close}touch {marker}\n",
+        close = String::from_utf8_lossy(PASTE_CLOSE),
+        marker = marker.display(),
+    );
+    let request = crate::ctl::Request {
+        schema: crate::ctl::SCHEMA.to_owned(),
+        verb: "input".to_owned(),
+        id: Some(terminal.to_string()),
+        force: true,
+        paste: Some(payload),
+        ..Default::default()
+    };
+    let mut client = std::os::unix::net::UnixStream::connect(&socket).unwrap();
+    let mut wire = serde_json::to_vec(&request).unwrap();
+    wire.push(b'\n');
+    client.write_all(&wire).unwrap();
+    assert!(
+        listener
+            .poll_with(|request, caller| {
+                dispatch_control(
+                    request,
+                    caller,
+                    &workspace,
+                    &mut projects,
+                    &mut deck,
+                    &mut engine,
+                    &mut notifies,
+                    size,
+                    false,
+                    &socket,
+                    true,
+                    &mut closed,
+                    &mut used,
+                    &mut quit,
+                )
+            })
+            .unwrap(),
+        "the complete socket request must be dispatched"
+    );
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut reply = String::new();
+    client.read_to_string(&mut reply).unwrap();
+    let reply: crate::ctl::Response = serde_json::from_str(reply.trim()).unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while Instant::now() < deadline && !marker.exists() {
+        engine.drain_events();
+        thread::sleep(Duration::from_millis(10));
+    }
+    let executed = marker.exists();
+    engine.dispatch(EngineCommand::Shutdown);
+    let _ = std::fs::remove_file(&marker);
+
+    let error = reply
+        .error
+        .expect("the socket caller must learn the refusal");
+    assert_eq!(error.code, 3);
+    assert!(error.message.contains("bracketed-paste closer"));
+    assert!(
+        !executed,
+        "a closer must never let the rest of a socket paste execute in bash"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // #148: the pointer's text-selection gesture.
 
@@ -2437,7 +2679,7 @@ fn the_pointer_copy_pastes_back_as_a_paste_operation() {
     let mut engine = FakeEngine::new(projects.iter().map(|project| project.terminal.clone()));
     let frontend = projects[0].terminal.clone();
     assert_eq!(
-        encode_paste(&engine, &frontend, "ls -l".to_owned()),
+        encode_paste(&engine, &frontend, "ls -l".to_owned()).unwrap(),
         b"ls -l".to_vec()
     );
     engine.set_metadata(
@@ -2451,7 +2693,7 @@ fn the_pointer_copy_pastes_back_as_a_paste_operation() {
     expected.extend_from_slice(b"ls -l");
     expected.extend_from_slice(PASTE_CLOSE);
     assert_eq!(
-        encode_paste(&engine, &frontend, "ls -l".to_owned()),
+        encode_paste(&engine, &frontend, "ls -l".to_owned()).unwrap(),
         expected
     );
 }
