@@ -67,6 +67,19 @@ events in order; only the top dashboard describes current status.
   DECISION + minimal candidate revision before any implementation (connectors
   may observe/control user-managed sessions; Termdeck never starts their
   servers or destroys panes; no daemon/background service). OPEN FOR USER:
+- 2026-09-08: BRANCH CLEANUP (user-authorized): deleted all 62 stale
+  origin/coord/* remote branches + removed 3 merged local branches and
+  worktrees (coord/relay-fix, coord/sessions-engine, coord/complement-research).
+  Remote now has only main. Local: only main.
+- 2026-09-08: MISSED RESEARCH RECOVERED (user: “I told you to research some
+  other topics didn't I?” — correct). Three studies written 22:33-34 were never
+  run (researcher window gone; complement delivered, these did not):
+  lua-scripting, performance, theming (each a full study in
+  /tmp/shipwright/termdeck/<topic>/study.md). NOW RUNNING: re-dispatched to
+  the codex gpt-6-astra/low worker as researcher (read-only, no worktrees per
+  the studies), SEQUENTIALLY: lua-scripting (Working) → performance → theming,
+  each a separate deliverable + marker + ping. Complement slice (tmux read-only
+  proof on separate branch) queued after the research.
 - 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
   multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
   not compete by building a pane server / live-resume. User endorsed the
