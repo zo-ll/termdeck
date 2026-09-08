@@ -112,6 +112,9 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
     };
     let (id, lines, msg, path) = match verb.as_str() {
         "status" | "list" | "version" if positional.len() == 1 => (None, None, None, None),
+        "save" if positional.len() == 1 => (None, None, None, None),
+        "save" if positional.len() == 2 => (Some(positional[1].clone()), None, None, None),
+        "restore" if positional.len() == 2 => (Some(positional[1].clone()), None, None, None),
         "peek" if positional.len() == 2 => {
             (Some(positional[1].clone()), requested_lines, None, None)
         }
@@ -131,8 +134,10 @@ fn parse(arguments: Vec<String>) -> Result<(bool, PathBuf, Request), String> {
             (Some(positional[1].clone()), None, None, None)
         }
         "zoom" if positional.len() == 1 => (None, None, None, None),
-        "status" | "list" | "peek" | "notify" | "version" | "open" | "close" | "promote"
-        | "zoom" | "input" => return Err(format!("invalid arguments for {verb}")),
+        "status" | "list" | "peek" | "notify" | "version" | "save" | "restore" | "open"
+        | "close" | "promote" | "zoom" | "input" => {
+            return Err(format!("invalid arguments for {verb}"));
+        }
         _ => return Err(format!("unknown verb: {verb}")),
     };
     if (force && !matches!(verb.as_str(), "close" | "input"))
@@ -261,7 +266,7 @@ fn help_for(arguments: &[String]) -> Result<Option<&'static str>, String> {
 }
 
 const fn help() -> &'static str {
-    "TERMCTL\n\nUSAGE\n  termctl [OPTIONS] COMMAND [COMMAND OPTIONS]\n  termctl -- COMMAND [ARGUMENTS]\n\nA one-call ctl.v1 client for a running Termdeck session.\n\nCOMMANDS\n  status                 Show session status.\n  list                   List terminals.\n  peek ID [--lines N|N]  Read a terminal screen or history.\n  notify MESSAGE         Send an explicit notification.\n  open PATH              Open a directory as a terminal.\n  close ID [--force]     Close a terminal.\n  promote ID             Promote a terminal to master.\n  zoom [--on|--off]      Toggle or set zoom mode; status reads it.\n  input ID KIND VALUE    Send --text, --paste, or --keys input.\n  version                Show the ctl.v1 schema version.\n  help [COMMAND]         Show general or command-specific help.\n\nGLOBAL OPTIONS\n  --json         Print the ctl.v1 response as JSON.\n  --socket PATH  Connect to PATH instead of TERMDECK_SOCK.\n  --             End option parsing; remaining arguments are positional.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  TERMDECK_SOCK               Socket path for the running Termdeck session.\n  TERMDECK_PANE               Current pane identity for notifications.\n  TERMDECK_NOTIFY             Enables automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permits termctl input requests from this pane.\n\nEXAMPLES\n  termctl status\n  termctl list --json\n  termctl peek backend --lines 40\n  termctl notify 'build completed'\n  termctl input backend --paste 'git status'\n  termctl help input"
+    "TERMCTL\n\nUSAGE\n  termctl [OPTIONS] COMMAND [COMMAND OPTIONS]\n  termctl -- COMMAND [ARGUMENTS]\n\nA one-call ctl.v1 client for a running Termdeck session.\n\nCOMMANDS\n  status                 Show session status.\n  list                   List terminals.\n  save [NAME]            Save the live session snapshot.\n  restore NAME           Replace this session from a snapshot.\n  peek ID [--lines N|N]  Read a terminal screen or history.\n  notify MESSAGE         Send an explicit notification.\n  open PATH              Open a directory as a terminal.\n  close ID [--force]     Close a terminal.\n  promote ID             Promote a terminal to master.\n  zoom [--on|--off]      Toggle or set zoom mode; status reads it.\n  input ID KIND VALUE    Send --text, --paste, or --keys input.\n  version                Show the ctl.v1 schema version.\n  help [COMMAND]         Show general or command-specific help.\n\nGLOBAL OPTIONS\n  --json         Print the ctl.v1 response as JSON.\n  --socket PATH  Connect to PATH instead of TERMDECK_SOCK.\n  --             End option parsing; remaining arguments are positional.\n  -h, --help     Show this help page.\n\nENVIRONMENT\n  TERMDECK_SOCK               Socket path for the running Termdeck session.\n  TERMDECK_PANE               Current pane identity for notifications.\n  TERMDECK_NOTIFY             Enables automatic shell completion notifications.\n  TERMDECK_NOTIFY_LONG_SECS   Long-command threshold in seconds.\n  TERMDECK_ALLOW_INPUT        Permits termctl input requests from this pane.\n\nEXAMPLES\n  termctl status\n  termctl save\n  termctl restore idp\n  termctl list --json\n  termctl peek backend --lines 40\n  termctl notify 'build completed'\n  termctl input backend --paste 'git status'\n  termctl help input"
 }
 
 fn command_help(command: &str) -> Option<&'static str> {
@@ -271,6 +276,12 @@ fn command_help(command: &str) -> Option<&'static str> {
         ),
         "list" => Some(
             "TERMCTL-LIST\n\nUSAGE\n  termctl [OPTIONS] list\n\nLists terminals and their identities, paths, states, and master status.",
+        ),
+        "save" => Some(
+            "TERMCTL-SAVE\n\nUSAGE\n  termctl [OPTIONS] save [NAME]\n\nWrites a daemon-less layout and transcript checkpoint for the running session.",
+        ),
+        "restore" => Some(
+            "TERMCTL-RESTORE\n\nUSAGE\n  termctl [OPTIONS] restore NAME\n\nExplicitly replaces this session with fresh shells and the named saved transcript.",
         ),
         "peek" => Some(
             "TERMCTL-PEEK\n\nUSAGE\n  termctl [OPTIONS] peek ID [--lines N|N]\n\nReads up to N active-screen or retained-history lines; N defaults to 30.",
@@ -359,8 +370,8 @@ mod tests {
                 .contains("USAGE")
         );
         for verb in [
-            "status", "list", "peek", "notify", "open", "close", "promote", "zoom", "input",
-            "version",
+            "status", "list", "save", "restore", "peek", "notify", "open", "close", "promote",
+            "zoom", "input", "version",
         ] {
             assert_eq!(run(vec![verb.to_owned(), "--help".to_owned()]), 0);
             assert!(
@@ -462,6 +473,24 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(open.path.as_deref(), Some("/work/api"));
+
+        let (_, _, save) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "save".to_owned(),
+            "checkpoint".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(save.id.as_deref(), Some("checkpoint"));
+
+        let (_, _, restore) = parse(vec![
+            "--socket".to_owned(),
+            "/tmp/ctl.sock".to_owned(),
+            "restore".to_owned(),
+            "checkpoint".to_owned(),
+        ])
+        .unwrap();
+        assert_eq!(restore.id.as_deref(), Some("checkpoint"));
 
         let (_, _, input) = parse(vec![
             "--socket".to_owned(),

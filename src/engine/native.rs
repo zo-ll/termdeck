@@ -226,6 +226,35 @@ impl NativeTerminal {
         });
     }
 
+    /// Adds a saved transcript as synthetic terminal output.  This deliberately
+    /// touches only the emulator: a restored transcript must not become shell
+    /// input, terminal replies, bells, or TERMDECK_NOTIFY messages.
+    fn restore_lines(&mut self, workspace: &str, age: &str, lines: &[String]) -> Vec<EngineEvent> {
+        let mut transcript = format!(
+            "─ termdeck restored session · {} · snapshot {} · shells restarted ─\r\n",
+            sanitize_restore_text(workspace),
+            sanitize_restore_text(age),
+        );
+        for line in lines {
+            transcript.push_str(&sanitize_restore_text(line));
+            transcript.push_str("\r\n");
+        }
+        transcript.push_str("─ end of restored transcript ─\r\n");
+        self.frame = self.adapter.feed(transcript.as_bytes());
+        // Synthetic output is never allowed to communicate back to the
+        // fresh child or raise old attention events.
+        let _ = self.adapter.take_pty_replies();
+        let _ = self.adapter.take_bells();
+        self.refresh_viewport();
+        vec![
+            EngineEvent::FrameReady(self.frame.clone()),
+            EngineEvent::MetadataChanged {
+                terminal: self.frame.terminal.clone(),
+                metadata: self.metadata.clone(),
+            },
+        ]
+    }
+
     fn handle_pty_event(&mut self, event: PtyEvent, events: &mut Vec<EngineEvent>) {
         match event {
             PtyEvent::Output { terminal, bytes } if self.owns(&terminal) => {
@@ -328,6 +357,18 @@ impl NativeTerminal {
             EngineEvent::FrameReady(self.frame.clone()),
         ])
     }
+}
+
+fn sanitize_restore_text(text: &str) -> String {
+    let mut sanitized = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '\t' => sanitized.push_str("    "),
+            '\0'..='\u{1f}' | '\u{7f}' => {}
+            _ => sanitized.push(character),
+        }
+    }
+    sanitized
 }
 
 /// PTY-backed terminals behind the application-owned engine contract.
@@ -712,6 +753,15 @@ impl TerminalEngine for NativeEngine {
                     Err(message) => item.status_changed(TerminalStatus::Failed { message }),
                 }
             }
+            EngineCommand::RestoreLines {
+                terminal,
+                workspace,
+                age,
+                lines,
+            } => self
+                .terminal_mut(&terminal)
+                .map(|item| item.restore_lines(&workspace, &age, &lines))
+                .unwrap_or_default(),
             EngineCommand::Shutdown => self.shutdown(),
         }
     }
@@ -809,8 +859,8 @@ mod tests {
     use ratatui::layout::Rect;
 
     use super::{
-        NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter, scan_notify,
-        scan_notify_chunk,
+        NativeEngine, NativeTerminal, SHUTDOWN_GRACE, VtFrameAdapter, sanitize_restore_text,
+        scan_notify, scan_notify_chunk,
     };
 
     #[test]
@@ -2107,6 +2157,91 @@ mod tests {
                 && frame.size == ScreenSize::new(4, 1)
         ));
         assert_eq!(engine.metadata(&terminal).unwrap().scrollback, expected);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn restored_transcript_is_inert_and_never_reaches_the_child() {
+        let terminal = TerminalId::new("recording");
+        let projects = [project(
+            terminal.clone(),
+            "printf READY; IFS= read -r line; printf 'EXEC:%s' \"$line\"",
+        )];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(100, 24)).unwrap();
+        wait_for_frame(&mut engine, &terminal, "READY");
+
+        let events = engine.dispatch(EngineCommand::RestoreLines {
+            terminal: terminal.clone(),
+            workspace: "demo".to_owned(),
+            age: "just now".to_owned(),
+            lines: vec![
+                "\u{1b}]777;TERMDECK_NOTIFY=bad\u{7}".to_owned(),
+                "\u{1b}[c\u{7}\trm -rf-looking text".to_owned(),
+            ],
+        });
+
+        assert!(
+            events
+                .iter()
+                .all(|event| !matches!(event, EngineEvent::Notify { .. }))
+        );
+        assert_eq!(
+            engine.terminals[0]
+                .transport
+                .as_ref()
+                .unwrap()
+                .pending_input_len(),
+            0
+        );
+        let history = engine
+            .history_lines(&terminal, usize::MAX)
+            .unwrap()
+            .join("\n");
+        assert!(history.contains("restored session · demo"), "{history}");
+        assert!(history.contains("rm -rf-looking text"), "{history}");
+        assert!(
+            engine
+                .drain_events()
+                .iter()
+                .all(|event| !matches!(event, EngineEvent::Notify { .. }))
+        );
+        assert!(!frame_text(engine.frame(&terminal).unwrap()).contains("EXEC:"));
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn restored_device_query_drops_the_emulators_reply() {
+        let terminal = TerminalId::new("recording");
+        let projects = [project(terminal.clone(), "printf READY; sleep 1")];
+        let mut engine = NativeEngine::spawn(&projects, ScreenSize::new(80, 24)).unwrap();
+        wait_for_frame(&mut engine, &terminal, "READY");
+
+        engine.dispatch(EngineCommand::RestoreLines {
+            terminal: terminal.clone(),
+            workspace: "demo".to_owned(),
+            age: "now".to_owned(),
+            lines: vec!["\u{1b}[c".to_owned()],
+        });
+        assert_eq!(
+            engine.terminals[0]
+                .transport
+                .as_ref()
+                .unwrap()
+                .pending_input_len(),
+            0
+        );
+        engine.dispatch(EngineCommand::Shutdown);
+    }
+
+    #[test]
+    fn restore_sanitization_removes_controls_and_bounds_the_parser_input() {
+        let hostile = format!("\u{1b}]{}\u{7}\u{7}\tplain", "x".repeat(1024 * 1024));
+        let sanitized = sanitize_restore_text(&hostile);
+        assert!(!sanitized.contains('\u{1b}'));
+        assert!(!sanitized.contains('\u{7}'));
+        assert!(sanitized.ends_with("    plain"));
+        assert!(sanitized.len() <= hostile.len().saturating_add(3));
     }
 
     #[cfg(target_os = "linux")]

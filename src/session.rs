@@ -4,6 +4,7 @@ mod backend;
 mod input;
 mod lifecycle;
 mod outer;
+pub mod snapshot;
 
 #[cfg(test)]
 mod tests;
@@ -288,7 +289,7 @@ fn opened(path: &str, used: &mut BTreeSet<String>) -> Result<Project, crate::ctl
 fn dispatch_control(
     request: crate::ctl::Request,
     caller: Option<&str>,
-    workspace: &Workspace,
+    workspace: &mut Workspace,
     projects: &mut Vec<Project>,
     deck: &mut DeckState,
     engine: &mut NativeEngine,
@@ -325,6 +326,84 @@ fn dispatch_control(
         Err(response) => return response,
     };
     match control {
+        crate::ctl::Control::Save { name } => {
+            let name = name.as_deref().unwrap_or(&workspace.name);
+            match snapshot::save(name, workspace, projects, deck, engine) {
+                Ok(header) => crate::ctl::Response::ok(serde_json::json!({
+                    "name": header.name,
+                    "panes": header.panes,
+                    "saved_at": header.saved_at,
+                })),
+                Err(error) => crate::ctl::Response::error(1, error),
+            }
+        }
+        crate::ctl::Control::Restore { name } => {
+            let result = snapshot::load(&name).and_then(snapshot::restore_plan);
+            let plan = match result {
+                Ok(plan) => plan,
+                Err(error) => return crate::ctl::Response::error(2, error),
+            };
+            let next_projects = plan.workspace.projects.clone();
+            let next_deck = plan.deck.clone();
+            // This is an explicit in-place restore: the old session's own
+            // children are shut down before fresh shells are created.
+            engine.dispatch(EngineCommand::Shutdown);
+            #[cfg(unix)]
+            let replacement = spawn_terminals_with_socket(
+                &next_projects,
+                &next_deck,
+                size,
+                plan.workspace.scrollback,
+                socket,
+            );
+            #[cfg(not(unix))]
+            let replacement = spawn_terminals_with_scrollback(
+                &next_projects,
+                &next_deck,
+                size,
+                plan.workspace.scrollback,
+            );
+            let replacement = match replacement {
+                Ok(engine) => engine,
+                Err(error) => return crate::ctl::Response::error(1, error),
+            };
+            *engine = replacement;
+            *workspace = plan.workspace;
+            *projects = next_projects;
+            *deck = next_deck;
+            closed.clear();
+            *used = projects
+                .iter()
+                .map(|project| project.terminal.to_string())
+                .collect();
+            for pane in &plan.snapshot.panes {
+                if projects
+                    .iter()
+                    .any(|project| project.terminal.to_string() == pane.id)
+                {
+                    engine.dispatch(EngineCommand::RestoreLines {
+                        terminal: TerminalId::new(pane.id.clone()),
+                        workspace: workspace.name.clone(),
+                        age: snapshot::age(plan.snapshot.saved_at),
+                        lines: pane.lines.clone(),
+                    });
+                }
+            }
+            let skipped = if !plan.skipped.is_empty() {
+                format!(" · {}", plan.skipped.join("; "))
+            } else {
+                String::new()
+            };
+            deck.set_notice(format!(
+                "restored {} · snapshot {} · shells restarted{}",
+                workspace.name,
+                snapshot::age(plan.snapshot.saved_at),
+                skipped,
+            ));
+            crate::ctl::Response::ok(
+                serde_json::json!({ "name": workspace.name, "restored": true }),
+            )
+        }
         crate::ctl::Control::Open { path } => {
             if sheet_open {
                 return crate::ctl::Response::error(3, "refused: runtime-add sheet is open");
@@ -496,6 +575,20 @@ fn workspace_of(state: &PickerState) -> Workspace {
 /// Runs an already validated workspace. Configuration is deliberately loaded
 /// before this point, so no PTY exists when validation fails.
 pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
+    run_inner(workspace.clone(), None)
+}
+
+/// Opens fresh shells for a saved transcript and restores only its durable
+/// layout/text state.  No live process state survives this boundary.
+pub fn run_restored(snapshot: snapshot::Snapshot) -> Result<(), Box<dyn Error>> {
+    let plan = snapshot::restore_plan(snapshot)?;
+    run_inner(plan.workspace.clone(), Some(plan))
+}
+
+fn run_inner(
+    mut workspace: Workspace,
+    restored: Option<snapshot::RestorePlan>,
+) -> Result<(), Box<dyn Error>> {
     let _panic = PanicGuard::install();
     let _signals = SignalGuard::install()?;
     let outer = OuterTerminal::enter()?;
@@ -511,7 +604,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     // owns it from here (#50 A3).
     let mut projects = workspace.projects.clone();
     // The configuration seeds the split; the divider owns it from there.
-    let mut deck = DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get());
+    let mut deck = restored
+        .as_ref()
+        .map(|plan| plan.deck.clone())
+        .unwrap_or_else(|| {
+            DeckState::new(projects.len()).with_master_ratio(workspace.master_ratio.get())
+        });
     // What the terminals have asked for and the user has not seen (#97). It
     // lives beside the deck because it outlives every one of them: a bell is
     // still pending after the promotion, the resize and the fold that follow.
@@ -523,6 +621,32 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     #[cfg(not(unix))]
     let mut engine = spawn_terminals_with_scrollback(&projects, &deck, size, workspace.scrollback)
         .map_err(|error| format!("cannot start workspace '{}': {error}", workspace.name))?;
+    if let Some(plan) = restored.as_ref() {
+        for pane in &plan.snapshot.panes {
+            if projects
+                .iter()
+                .any(|project| project.terminal.to_string() == pane.id)
+            {
+                engine.dispatch(EngineCommand::RestoreLines {
+                    terminal: TerminalId::new(pane.id.clone()),
+                    workspace: workspace.name.clone(),
+                    age: snapshot::age(plan.snapshot.saved_at),
+                    lines: pane.lines.clone(),
+                });
+            }
+        }
+        let skipped = if !plan.skipped.is_empty() {
+            format!(" · {}", plan.skipped.join("; "))
+        } else {
+            String::new()
+        };
+        deck.set_notice(format!(
+            "restored {} · snapshot {} · shells restarted{}",
+            workspace.name,
+            snapshot::age(plan.snapshot.saved_at),
+            skipped,
+        ));
+    }
     // The engine begins with safe all-terminal timing visibility. Replace it
     // before the first drain with the panes this initial deck actually draws.
     resize_terminals(&mut engine, &projects, &deck, size);
@@ -559,6 +683,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
     // one remembered active pass so crossing its deadline produces the final
     // frame that removes it, then go idle again.
     let mut expiry_repaint = false;
+    let mut clean_quit = false;
     'session: loop {
         if SIGNAL.swap(0, Ordering::SeqCst) != 0 {
             break;
@@ -592,7 +717,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 dispatch_control(
                     request,
                     caller,
-                    workspace,
+                    &mut workspace,
                     &mut projects,
                     &mut deck,
                     &mut engine,
@@ -607,6 +732,7 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                 )
             })?;
             if quit {
+                clean_quit = true;
                 break 'session;
             }
         }
@@ -830,7 +956,10 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 );
                             }
                         }
-                        Some(Reaction::Quit) => break 'session,
+                        Some(Reaction::Quit) => {
+                            clean_quit = true;
+                            break 'session;
+                        }
                         None => {}
                     }
                 }
@@ -1195,6 +1324,11 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
             })?;
             dirty = false;
         }
+    }
+    if clean_quit
+        && let Err(error) = snapshot::save(&workspace.name, &workspace, &projects, &deck, &engine)
+    {
+        eprintln!("termdeck: could not save session snapshot: {error}");
     }
     // The interface is finished, so give the terminal back before the engine
     // takes its time: a pane that ignores the polite signals holds shutdown
