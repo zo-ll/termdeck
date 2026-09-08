@@ -327,7 +327,10 @@ events in order; only the top dashboard describes current status.
   (the skills repo has the coordinator/critic/researcher specs incl. the
   canonical env + protocols).
 
-- 2026-09-09: COORDINATOR SKILL de-termdecked (user request, project wrap-up): deleted
+- 2026-09-09: COORDINATOR SKILL de-termdecked (user request, project wrap-up) — actual
+  skill changes committed to the SKILLS repo (/home/az/projects/skills, master,
+  pushed) together with the session's relay/protocol hardening; this COORDINATION
+  entry is only the project journal. Details of the cleanup: deleted
   references/env-termdeck.md + scripts/relay-termdeck.sh; SKILL.md env detection now
   generic (tmux runbook only, no termdeck/tmux bifurcation); relay env override renamed
   TERMDECK_COORD_PANE -> RELAY_COORD_PANE (relay.sh + env-tmux.md). Next relay restart
