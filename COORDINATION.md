@@ -87,6 +87,19 @@ events in order; only the top dashboard describes current status.
   bounded action API (retain YAML); interpreter in a session-owned helper
   process (crash can NEVER kill the deck); ~12-21 person-days minimum.
   performance research DISPATCHED next (same worker; marker+ping path pinned).
+- 2026-09-08: USER: PURGE THE SESSIONS FEATURE (“we did some work regarding
+  sessions lately — that needs to go”). Purge slice DISPATCHED to CLAUDE
+  (idle; codex busy on performance research — engine-task ruling)
+  coord/purge-sessions off origin/main ffa8d81; brief
+  .scratch/tasks/purge-sessions.brief.md: revert BOTH sessions merges (228e50f
+  engine + 0846cd7 picker) with -m 1 in REVERSE order, resolving conflicts vs
+  #155/#157 (keep those); remove snapshot.rs/restore_lines/SnapshotBrowse/
+  attach/sessions/save/restore context picker + fixtures; revert AGENTS.md
+  persistence clause to original one-liner; acceptance = zero grep hits +
+  help shows no verbs + gate green. #156 REOPENED (tracks the purge); #112
+  commented SUPERSEDED. Claude Working.
+  LANES: claude → purge-sessions; codex → performance research;
+  theming queued (after performance).
 - 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
   multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
   not compete by building a pane server / live-resume. User endorsed the
