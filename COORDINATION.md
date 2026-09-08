@@ -100,6 +100,28 @@ events in order; only the top dashboard describes current status.
   commented SUPERSEDED. Claude Working.
   LANES: claude → purge-sessions; codex → performance research;
   theming queued (after performance).
+- 2026-09-09: PURGE MERGED + CLOSED. purge-sessions merged (no-ff e3a7c8b;
+  critic PASS no nits: greps clean, verbs/help purged, #155 named-keys + #157
+  border intact and passing, no ghost variants/modules, AGENTS.md one-liner
+  restored; gate 467+10+1). #156 CLOSED (purge complete). Binaries rebuilt —
+  termctl help shows input + named-keys only; termdeck help has no
+  attach/sessions/save/restore. ~2.6k lines of sessions code removed.
+  Also fixed the RELAY stuck-pings: it had been targeting a stale coordinator
+  pane (personal:coordinator.0); restarted pointed at %19; all retained
+  claims recovered and delivered.
+- 2026-09-09: performance research DONE (codex astra/low; deliverable
+  performance-research.md 27KB, 142 lines, with REAL measure-idle.py runs:
+  /bin/sleep 300 panes, CPU ticks + context switches). FINDINGS: dirty-only
+  draw + Ratatui diff already exist; idle wakes = main loop 20ms (~50/s) +
+  PTY readers 100ms (10/s/pane) — blocking polls not busy-spin; every chunk
+  parsed→full owned frame→cloned even for hidden panes. STAGED FIX ~10-19
+  person-days: P0 cancellable reader timeouts + cached geometry + baseline
+  protocol; P0 shared main readiness/deadline wait (4-7d, biggest idle win at
+  few panes); P1 parse/frame split + visible-only projections (best at many/
+  hidden panes). Honest: no battery % claimed; strict before/after protocol +
+  <0.5% core target at 16 idle panes; smallest high-confidence change =
+  cancellable reader waits. Routed to user. theming research in flight
+  (codex). LANES: codex → theming research; critic + claude idle.
 - 2026-09-08: STRATEGIC REFRAME (user): termdeck should COMPLEMENT
   multiplexers/agent-harness (tmux/zellij/herdr) as the watch/control layer,
   not compete by building a pane server / live-resume. User endorsed the
