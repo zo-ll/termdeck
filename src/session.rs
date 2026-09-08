@@ -436,7 +436,15 @@ fn dispatch_control(
             let bytes = if paste {
                 let text = String::from_utf8(bytes)
                     .expect("ctl input bytes are built from UTF-8 request text");
-                encode_paste(engine, &project.terminal, text)
+                match encode_paste(engine, &project.terminal, text) {
+                    Ok(bytes) => bytes,
+                    Err(PasteEncodeError::EmbeddedCloser) => {
+                        return crate::ctl::Response::error(
+                            3,
+                            "refused: paste payload contains a bracketed-paste closer",
+                        );
+                    }
+                }
             } else {
                 bytes
             };
@@ -735,7 +743,12 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                                 let bytes = match command {
                                     crate::contracts::InputCommand::Bytes(bytes) => bytes,
                                     crate::contracts::InputCommand::Paste(text) => {
-                                        encode_paste(&engine, &projects[active].terminal, text)
+                                        let Ok(bytes) =
+                                            encode_paste(&engine, &projects[active].terminal, text)
+                                        else {
+                                            continue;
+                                        };
+                                        bytes
                                     }
                                 };
                                 dispatch_live_input(
@@ -803,11 +816,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                             if let Some(active) = deck.active()
                                 && !copied.is_empty()
                             {
-                                let bytes = encode_paste(
+                                let Ok(bytes) = encode_paste(
                                     &engine,
                                     &projects[active].terminal,
                                     copied.clone(),
-                                );
+                                ) else {
+                                    continue;
+                                };
                                 dispatch_live_input(
                                     &mut engine,
                                     projects[active].terminal.clone(),
@@ -1136,8 +1151,13 @@ pub fn run(workspace: &Workspace) -> Result<(), Box<dyn Error>> {
                     {
                         // The outer paste stays a paste operation: bracketed
                         // while the child holds DEC 2004 (#120).
-                        let bytes = encode_paste(&engine, &projects[active].terminal, text);
-                        dispatch_live_input(&mut engine, projects[active].terminal.clone(), bytes);
+                        if let Ok(bytes) = encode_paste(&engine, &projects[active].terminal, text) {
+                            dispatch_live_input(
+                                &mut engine,
+                                projects[active].terminal.clone(),
+                                bytes,
+                            );
+                        }
                     }
                 }
             }

@@ -42,25 +42,39 @@ const ESC_SEQUENCE_CAP: usize = PASTE_OPEN.len();
 /// keeps today's submit-on-newline behavior while a paste-aware child gets
 /// its region with newlines non-executable.
 ///
-/// The content cannot hold the closer: the outer parse ended the paste at
-/// the first one, so the same bytes re-emit unambiguously. The wrapped
-/// unit rides the bounded input path like any other write (#118).
+/// Every caller is checked for a closer before bytes are made ready for the
+/// bounded input path (#118). Keyboard paste has already passed through the
+/// outer parser, but ctl and copied text have not; accepting a closer from
+/// either of those sources would let the payload escape the wrapped region.
 pub(super) fn encode_paste(
     engine: &dyn TerminalEngine,
     terminal: &TerminalId,
     text: String,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, PasteEncodeError> {
+    if text
+        .as_bytes()
+        .windows(PASTE_CLOSE.len())
+        .any(|window| window == PASTE_CLOSE)
+    {
+        return Err(PasteEncodeError::EmbeddedCloser);
+    }
     if !engine
         .metadata(terminal)
         .is_some_and(|metadata| metadata.bracketed_paste)
     {
-        return text.into_bytes();
+        return Ok(text.into_bytes());
     }
     let mut bytes = Vec::with_capacity(text.len() + PASTE_OPEN.len() + PASTE_CLOSE.len());
     bytes.extend_from_slice(PASTE_OPEN);
     bytes.extend_from_slice(text.as_bytes());
     bytes.extend_from_slice(PASTE_CLOSE);
-    bytes
+    Ok(bytes)
+}
+
+/// A paste payload cannot contain the delimiter that ends the region we add.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum PasteEncodeError {
+    EmbeddedCloser,
 }
 
 /// The pointer's text-selection gesture (#148).
