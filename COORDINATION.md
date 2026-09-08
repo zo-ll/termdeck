@@ -1863,6 +1863,14 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   IN FLIGHT: critic → #147 (then #154 queued); codex → #145; claude → #146.
   AUDIT status: ✓ #143 #134 #139 #141 #142 #153; at/queued critic #147 #154;
   in flight #145 (codex) #146 (claude). Remaining open: 4 (#145 #146 #147 #154).
+- 2026-09-08: #147 MERGED + CLOSED (no-ff d378049; critic PASS no nits: every
+  return path in bash/zsh/fish returns the captured status; live-bash test
+  asserts downstream observed $? fails pre-fix with garbage; gate 449+5+1).
+  Worktree+branch pruned. Audit P2 closed.
+  #154 moved into the critic slot (critic Working on it).
+  IN FLIGHT: critic → #154; codex → #145; claude → #146.
+  AUDIT status: ✓ #143 #134 #139 #141 #142 #147 #153; at critic #154;
+  in flight #145 (codex) #146 (claude). Remaining open: 3 (#145 #146 #154).
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
