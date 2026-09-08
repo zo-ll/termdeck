@@ -1941,6 +1941,49 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   document the mechanism, NO #151 regression — one prompt, no fed command;
   real login-bash regression tests that fail pre-fix). One lost-Enter retry;
   verified Working. LANES: codex → #152; critic/claude idle.
+- 2026-09-08: #152 DONE (codex 9384784 “fix(engine): preserve early login
+  bash home files”; marker RESULT=pass: login Bash early HOME shims preserve
+  hushlogin and user completion without a second prompt; files shell_hook.rs
+  +195/-14 + design doc docs/design/termdeck/login-bash-shim.md +68; not
+  pushed; duplicate ping ignored). ROUTED to CRITIC (assignment
+  .scratch/review/152-login-shim.critic.md — flagged the no-#151-regression
+  one-prompt check; critic Working).
+- 2026-09-08: #155 FILED (feature: termctl input --keys is raw-bytes only;
+  add tmux-like named-key syntax C-c/Enter/Up/... for agents). Finding that
+  prompted it: raw send-keys ALREADY works via `termctl input ID --keys
+  '<bytes>'` (Control::Input bytes=value.as_bytes(), paste=false) — agents can
+  send Ctrl-C/Enter/arrows today; only the friendly named-key language is
+  missing.
+- 2026-09-08: SESSIONS research DISPATCHED to the researcher lane (re-spawned
+  personal:4; user-requested: tmux-like session recoverability, NOT a full
+  multiplexer, research-only for now). Study at
+  /tmp/shipwright/termdeck/sessions/study.md (open questions: live-resume
+  daemon vs snapshot-restore interpretations; what per-pane state exists to
+  serialize; whether the no-daemon/no-persistence AGENTS.md stance must change;
+  CLI/ctl surface; feasibility). Deliverable
+  /tmp/shipwright/termdeck/sessions/sessions-research.md. Researcher Working
+  (reading lifecycle.rs/pty.rs/ctl/mod.rs; transient 429 auto-retry). NOTE:
+  user explicitly requested research on a feature AGENTS.md currently says not
+  to add — user override, exploration only.
+  LANES: critic → #152; researcher → sessions; codex + claude idle.
+- 2026-09-08: RELAY DEDUPE FIX (user: “workers should only ping once”).
+  relay.sh now drops re-written identical pings by content-md5 (log `DUP`);
+  finish-protocol.md updated. Old relay 12008 (and wrapper 12006) killed;
+  only dedupe relay 155525 runs. Verified: sessions ping delivered once.
+- 2026-09-08: SESSIONS research DONE (researcher brief at
+  /tmp/shipwright/termdeck/sessions/sessions-research.md; marker kept at
+  /tmp per study rule). RECOMMENDATION: snapshot restore (layout + pane text
+  on quit, `termdeck --resume` reopens fresh shells) — daemon-less, uses
+  existing peek/DeckState/Project read paths; NO persistence exists today.
+  Live resume (true tmux) needs a PTY-owning server → revises the no-daemon
+  rule + re-architects shutdown (#119/#141/#146); researcher proved no
+  daemonless live resume exists (OS-level). Honest limits: shells restart,
+  in-flight processes not preserved, text-only (no alt-screen/styling/cursor),
+  secrets-in-scrollback → 0600. Gate through #112 (open persistence decision).
+  Routed to USER for decision (research never decides).
+  LANES: critic → #152; codex + claude idle; researcher idle (reusable).
+  OPEN for user: sessions direction (snapshot-restore vs defer via #112),
+  #152 verdict (at critic), #155 (named send-keys) pick-up.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
