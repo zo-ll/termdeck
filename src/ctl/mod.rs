@@ -6,8 +6,9 @@ use std::{
     env, fs,
     io::{self, Read, Write},
     os::{
-        fd::AsRawFd,
+        fd::{AsRawFd, FromRawFd},
         unix::{
+            ffi::OsStrExt,
             fs::{MetadataExt, PermissionsExt},
             net::{UnixListener, UnixStream},
         },
@@ -39,6 +40,11 @@ const MAX_RESPONSE: usize = 2 * 1024 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(2);
+/// The pause between connect attempts while a session's listen queue is
+/// full (#146). Short enough that a freed slot is taken almost at once,
+/// long enough that waiting out a whole `CLIENT_TIMEOUT` costs a few
+/// hundred syscalls rather than a spin.
+const CONNECT_RETRY: Duration = Duration::from_millis(5);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Request {
@@ -607,8 +613,11 @@ fn call_with_limits(
     timeout: Duration,
     max_response: usize,
 ) -> Result<Response, String> {
-    let mut stream = UnixStream::connect(socket).map_err(|error| error.to_string())?;
+    // One absolute deadline for the whole call: establishing the connection
+    // is part of what `timeout` promises, not something that happens before
+    // the clock starts (#146).
     let deadline = Instant::now() + timeout;
+    let mut stream = connect_with_deadline(socket, deadline)?;
     let mut encoded = serde_json::to_vec(request).map_err(|error| error.to_string())?;
     encoded.push(b'\n');
     write_with_deadline(&mut stream, &encoded, deadline)?;
@@ -631,6 +640,130 @@ fn call_with_limits(
         .map_err(|error| error.to_string())?
         .trim();
     serde_json::from_str(response).map_err(|error| error.to_string())
+}
+
+/// Dials `socket` without ever waiting past `deadline` (#146).
+///
+/// `UnixStream::connect` blocks in the kernel while the listener's queue is
+/// full, and that wait sits outside every socket timeout — the old client
+/// started its clock only once connect returned, so against a saturated
+/// session `termctl status` blocked with no bound at all. The socket is
+/// created nonblocking instead: a full queue answers EAGAIN at once, which
+/// is retried under the same deadline that write and read then share.
+fn connect_with_deadline(socket: &Path, deadline: Instant) -> Result<UnixStream, String> {
+    let address = socket_address(socket)?;
+    loop {
+        let stream = nonblocking_socket()?;
+        // SAFETY: `address` is an initialised `sockaddr_un` of the length
+        // passed, and the descriptor is owned by `stream` for this call.
+        let dialled = unsafe {
+            libc::connect(
+                stream.as_raw_fd(),
+                (&raw const address).cast(),
+                std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t,
+            )
+        };
+        let established = if dialled == 0 {
+            true
+        } else {
+            let error = io::Error::last_os_error();
+            match error.raw_os_error() {
+                // A Unix socket refuses a full listen queue outright rather
+                // than queueing a handshake, so nothing is in flight and the
+                // next attempt starts from a fresh descriptor.
+                Some(libc::EAGAIN) => false,
+                // A handshake is under way: wait for writability and read
+                // the outcome back out of SO_ERROR.
+                Some(libc::EINPROGRESS) => wait_connected(&stream, deadline)?,
+                _ => return Err(error.to_string()),
+            }
+        };
+        if established {
+            // Back to blocking: write and read carry their own timeouts,
+            // both cut from the same deadline.
+            stream
+                .set_nonblocking(false)
+                .map_err(|error| error.to_string())?;
+            return Ok(stream);
+        }
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .ok_or_else(|| "connect deadline exceeded".to_owned())?;
+        std::thread::sleep(CONNECT_RETRY.min(remaining));
+    }
+}
+
+/// The AF_UNIX address for one socket path, refusing a path that would not
+/// fit `sun_path` rather than silently dialling a truncated name.
+fn socket_address(socket: &Path) -> Result<libc::sockaddr_un, String> {
+    // SAFETY: `sockaddr_un` is plain data; all-zero is a valid empty address.
+    let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    address.sun_family = libc::AF_UNIX as libc::sa_family_t;
+    let path = socket.as_os_str().as_bytes();
+    if path.len() >= address.sun_path.len() {
+        return Err(format!(
+            "socket path exceeds {} bytes: {}",
+            address.sun_path.len() - 1,
+            socket.display()
+        ));
+    }
+    for (slot, byte) in address.sun_path.iter_mut().zip(path) {
+        *slot = *byte as libc::c_char;
+    }
+    Ok(address)
+}
+
+/// A fresh nonblocking, close-on-exec AF_UNIX stream socket.
+fn nonblocking_socket() -> Result<UnixStream, String> {
+    // SAFETY: `socket(2)` with constant arguments; it only returns a new
+    // descriptor or -1.
+    let descriptor = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0) };
+    if descriptor < 0 {
+        return Err(io::Error::last_os_error().to_string());
+    }
+    // SAFETY: a fresh descriptor owned by nobody else; the stream takes it
+    // over and closes it, including on every error path below.
+    let stream = unsafe { UnixStream::from_raw_fd(descriptor) };
+    // SAFETY: `fcntl` with integer arguments on the owned descriptor.
+    if unsafe { libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
+        return Err(io::Error::last_os_error().to_string());
+    }
+    stream
+        .set_nonblocking(true)
+        .map_err(|error| error.to_string())?;
+    Ok(stream)
+}
+
+/// Whether an in-flight connect completed before `deadline`. A timeout, an
+/// interrupted poll or a refused queue all report "not yet" so the caller
+/// retries under its own deadline; anything else is a real dial failure.
+fn wait_connected(stream: &UnixStream, deadline: Instant) -> Result<bool, String> {
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| "connect deadline exceeded".to_owned())?;
+    let mut watched = libc::pollfd {
+        fd: stream.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    let millis = libc::c_int::try_from(remaining.as_millis()).unwrap_or(libc::c_int::MAX);
+    // SAFETY: `watched` is one valid descriptor record.
+    let ready = unsafe { libc::poll(&mut watched, 1, millis) };
+    if ready < 0 {
+        let error = io::Error::last_os_error();
+        if error.kind() == io::ErrorKind::Interrupted {
+            return Ok(false);
+        }
+        return Err(error.to_string());
+    }
+    if ready == 0 {
+        return Ok(false);
+    }
+    match stream.take_error().map_err(|error| error.to_string())? {
+        None => Ok(true),
+        Some(error) if error.raw_os_error() == Some(libc::EAGAIN) => Ok(false),
+        Some(error) => Err(error.to_string()),
+    }
 }
 
 fn write_with_deadline(
@@ -791,7 +924,8 @@ mod tests {
 
     use super::{
         Control, LISTENER_TEST_LOCK, Listener, MAX_RESPONSE, Request, Response, SCHEMA, State,
-        call_with_limits, dispatch, normalized_pane_path, peer_uid, socket_directory, trusted_peer,
+        call_with_limits, connect_with_deadline, dispatch, normalized_pane_path, peer_uid,
+        socket_directory, trusted_peer,
     };
 
     fn state<'a>(
@@ -1364,6 +1498,58 @@ mod tests {
         cap_server.join().unwrap();
         fs::remove_file(&cap_path).unwrap();
     }
+
+    /// #146: the client established its connection before its deadline
+    /// existed, so the 2 s bound covered only write and read. Against a
+    /// listener whose queue is full — an overloaded session — `connect`
+    /// blocked in the kernel with no bound at all. One absolute deadline
+    /// now spans connect, write and read together.
+    #[test]
+    fn client_call_returns_within_its_deadline_against_a_saturated_backlog() {
+        let path = test_path("client-backlog.sock");
+        // Bound and never accepted: every dial below stays in the queue.
+        let listener = UnixListener::bind(&path).unwrap();
+        // Re-listen with a queue of one, so saturation takes a handful of
+        // dials instead of however many this host's `somaxconn` allows.
+        // SAFETY: `listen(2)` on the descriptor the listener owns.
+        assert_eq!(unsafe { libc::listen(listener.as_raw_fd(), 1) }, 0);
+        let mut queued = Vec::new();
+        while queued.len() < SATURATION_ATTEMPTS {
+            let Ok(stream) =
+                connect_with_deadline(&path, Instant::now() + Duration::from_millis(20))
+            else {
+                break;
+            };
+            queued.push(stream);
+        }
+        assert!(
+            !queued.is_empty() && queued.len() < SATURATION_ATTEMPTS,
+            "the listen queue never saturated after {} dials",
+            queued.len()
+        );
+
+        let request = Request {
+            schema: SCHEMA.to_owned(),
+            verb: "version".to_owned(),
+            ..Default::default()
+        };
+        let started = Instant::now();
+        let blocked = call_with_limits(&path, &request, Duration::from_millis(200), 1024);
+        let elapsed = started.elapsed();
+
+        assert!(blocked.is_err(), "a saturated session cannot have answered");
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "the call outlived its advertised bound, took {elapsed:?}"
+        );
+        drop(queued);
+        drop(listener);
+        fs::remove_file(&path).unwrap();
+    }
+
+    /// Comfortably past the one-slot queue set above, so failing to
+    /// saturate is a test failure rather than a silently trivial pass.
+    const SATURATION_ATTEMPTS: usize = 64;
 
     #[test]
     fn oversized_line_returns_bad_request() {
