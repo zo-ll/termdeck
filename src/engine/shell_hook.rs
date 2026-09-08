@@ -59,13 +59,14 @@ __td_preexec() {
 }
 __td_prompt() {
   local code=$? now secs cmd mode=${TERMDECK_NOTIFY-} threshold=${TERMDECK_NOTIFY_LONG_SECS:-10}
-  __td_prompting=1; [ -n "$__td_start" ] || return; __td_now; now=$REPLY; secs=$((now - __td_start)); __td_start=
+  __td_prompting=1; [ -n "$__td_start" ] || return "$code"; __td_now; now=$REPLY; secs=$((now - __td_start)); __td_start=
   case $threshold in ''|*[!0-9]*) threshold=10;; esac
-  case $mode in none) return;; error) [ "$code" -ne 0 ] || return;; long) [ "$secs" -ge "$threshold" ] || return;; all|'') [ "$code" -ne 0 ] || [ "$secs" -ge "$threshold" ] || return;; *) return;; esac
+  case $mode in none) return "$code";; error) [ "$code" -ne 0 ] || return "$code";; long) [ "$secs" -ge "$threshold" ] || return "$code";; all|'') [ "$code" -ne 0 ] || [ "$secs" -ge "$threshold" ] || return "$code";; *) return "$code";; esac
   cmd=${__td_cmd//[$'\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037\177']/}; cmd=${cmd:0:512}
   printf '\033]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\a' "$code" "$secs" "$cmd"
+  return "$code"
 }
-__td_prompt_end() { __td_prompting=; }
+__td_prompt_end() { local code=$?; __td_prompting=; return "$code"; }
 __td_ready() { local code=$?; printf '\033]7777;termdeck;ready\a'; return "$code"; }
 trap '__td_preexec' DEBUG
 case "$(declare -p PROMPT_COMMAND 2>/dev/null)" in
@@ -83,11 +84,12 @@ typeset -g __td_start= __td_cmd=
 __td_preexec() { __td_start=$EPOCHSECONDS; __td_cmd=$1; }
 __td_precmd() {
   local code=$? now=$EPOCHSECONDS secs cmd=$__td_cmd mode=${TERMDECK_NOTIFY-} threshold=${TERMDECK_NOTIFY_LONG_SECS:-10}
-  [[ -n $__td_start ]] || return; secs=$((now - __td_start)); __td_start=
+  [[ -n $__td_start ]] || return $code; secs=$((now - __td_start)); __td_start=
   case $threshold in ''|*[!0-9]*) threshold=10;; esac
-  case $mode in none) return;; error) (( code )) || return;; long) (( secs >= threshold )) || return;; all|'') (( code || secs >= threshold )) || return;; *) return;; esac
+  case $mode in none) return $code;; error) (( code )) || return $code;; long) (( secs >= threshold )) || return $code;; all|'') (( code || secs >= threshold )) || return $code;; *) return $code;; esac
   cmd=${cmd//[$'\001\002\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037\177']/}; cmd=${cmd[1,512]}
   printf '\033]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\a' "$code" "$secs" "$cmd"
+  return $code
 }
 __td_ready() { printf '\033]7777;termdeck;ready\a'; }
 typeset -ga preexec_functions precmd_functions
@@ -119,18 +121,19 @@ const FISH_RC: &str = r#"if status is-interactive; and not set -q TERMDECK_SHELL
     set -g __td_cmd $argv[1]
   end
   function __td_postexec --on-event fish_postexec
-    set -l code $status; set -q __td_cmd CMD_DURATION; or return
+    set -l code $status; set -q __td_cmd CMD_DURATION; or return $code
     set -l secs (math -s0 "$CMD_DURATION / 1000"); set -l mode $TERMDECK_NOTIFY; set -l threshold $TERMDECK_NOTIFY_LONG_SECS
     string match -rq '^[0-9]+$' -- "$threshold"; or set threshold 10
     switch $mode
-      case none; return
-      case error; test $code -ne 0; or return
-      case long; test $secs -ge $threshold; or return
-      case all ''; test $code -ne 0; or test $secs -ge $threshold; or return
-      case '*'; return
+      case none; return $code
+      case error; test $code -ne 0; or return $code
+      case long; test $secs -ge $threshold; or return $code
+      case all ''; test $code -ne 0; or test $secs -ge $threshold; or return $code
+      case '*'; return $code
     end
     set -l cmd (string replace -ra '[\\x00-\\x1f\\x7f]' '' -- "$__td_cmd")
     printf '\\e]7777;termdeck;finished;code=%s;secs=%s;cmd=%s\\a' "$code" "$secs" (string sub -l 512 -- "$cmd")
+    return $code
   end
   function __td_ready --on-event fish_prompt
     printf '\\e]7777;termdeck;ready\\a'
@@ -385,6 +388,84 @@ mod tests {
         );
         assert!(stdout.contains("cmd=badtitle\x07"), "{stdout:?}");
         assert!(stdout.contains("code=0;secs=10;cmd=slow\x07"), "{stdout:?}");
+    }
+
+    /// #147: `__td_prompt` is prepended to PROMPT_COMMAND, so it runs BEFORE
+    /// every element the user already had. It captures `$?` on its first line
+    /// and must hand that same status back on every return path — otherwise
+    /// each later element sees the status of whatever ran last inside the hook
+    /// (the `case`, or the `__td_start=` assignment), i.e. success after a
+    /// failed command. `TERMDECK_NOTIFY=none` was no escape: its early return
+    /// happens after `local code=$?` has already consumed the status.
+    fn user_prompt_statuses(prompt_command: &str, notify: Option<&str>) -> Vec<String> {
+        let home = unique_dir().unwrap();
+        fs::write(
+            home.join(".bashrc"),
+            format!(
+                "__td_user_prompt() {{ printf 'USER_STATUS=%s\\n' \"$?\"; }}\n{prompt_command}\n"
+            ),
+        )
+        .unwrap();
+        let rc = home.join("rc");
+        // The same rc the engine writes for a non-login bash pane.
+        fs::write(&rc, bash_rc()).unwrap();
+        let mut command = Command::new("bash");
+        command
+            .args(["--rcfile", rc.to_str().unwrap(), "-i"])
+            .env("HOME", &home)
+            .env("TERMDECK_SOCK", "test")
+            .env("TERMDECK_PANE", "test")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        match notify {
+            Some(mode) => command.env("TERMDECK_NOTIFY", mode),
+            None => command.env_remove("TERMDECK_NOTIFY"),
+        };
+        let mut child = command.spawn().unwrap();
+        // `false` fails with 1; `(exit 42)` fails with 42 from a subshell, so
+        // the DEBUG trap records no start and the hook takes its earliest
+        // return — the path that must still report 42.
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(b"false\n(exit 42)\nexit 0\n")
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let statuses = stdout
+            .split("USER_STATUS=")
+            .skip(1)
+            .map(|rest| {
+                rest.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>();
+        fs::remove_dir_all(home).unwrap();
+        statuses
+    }
+
+    #[test]
+    fn bash_prompt_hook_hands_the_real_exit_status_to_later_prompt_commands() {
+        // Scalar and array PROMPT_COMMAND: the hook prepends itself to both.
+        for prompt_command in [
+            "PROMPT_COMMAND=\"__td_user_prompt\"",
+            "PROMPT_COMMAND=(__td_user_prompt)",
+        ] {
+            // Every notification mode, `none` included: opting out of
+            // notifications must not cost the user their exit status.
+            for notify in [None, Some("none"), Some("error"), Some("all")] {
+                let statuses = user_prompt_statuses(prompt_command, notify);
+                assert_eq!(
+                    statuses,
+                    ["0", "1", "42"],
+                    "{prompt_command} with TERMDECK_NOTIFY={notify:?}"
+                );
+            }
+        }
     }
 
     #[test]
