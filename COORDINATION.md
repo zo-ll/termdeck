@@ -1669,6 +1669,28 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   opus 5 high); dispatch verified Working (reading ci.yml).
   In flight: critic → #143 review; claude → #134; codex idle (next #139 after
   #143 merges).
+- 2026-09-08: #143 MERGED + CLOSED (no-ff 1b388e6; critic PASS no nits: guard
+  on panicking() stops hook mutation during unwind, subprocess test proves
+  single-panic exit 101 not SIGABRT, non-panic drop restores hook, gate
+  440+5+1). Worktree+branch pruned. AUDIT P1 fix-first done.
+- 2026-09-08: #139 (paste exec via ESC[201~ escape, P1) DISPATCHED to the
+  codex lane — worktree ~/.worktrees/termdeck/139-paste-exec
+  (coord/139-paste-exec off origin/main); brief
+  .scratch/tasks/139-paste-exec.brief.md (refuse/neutralize embedded closer at
+  the shared encode_paste boundary, ATOMIC refusal/no partial PTY write,
+  truthful ctl refusal, real-shell socket regression test proving
+  non-execution, correct the doc-comment premise; out of scope #142/#141).
+  Fresh codex session relaunched at the worktree (gpt-5.6-terra high); one
+  lost-Enter retry; verified Working (reading input.rs + session.rs).
+- 2026-09-08: #134 DONE (claude, 2 commits 2e530f2 + 3e54daf; marker
+  RESULT=pass: weekly scheduled cargo-audit workflow opens/refreshes/closes a
+  marker-deduped GitHub issue; issues:write only; push-time advisories job
+  unchanged comment-only; YAML+bash -n validated, 7 lifecycle cases vs a gh
+  stub). Files: .github/workflows/advisories-scheduled.yml (+239),
+  ci.yml (+8/-3). ROUTED to CRITIC (assignment
+  .scratch/review/134-ci-advisories.critic.md; critic Working, one transient
+  provider retry). IN FLIGHT: critic → #134; codex → #139 (Working).
+  AUDIT status: #143 ✓; remaining P1 #139 #142 #141; P2s #144 #145 #146 #147.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
