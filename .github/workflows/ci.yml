@@ -139,9 +139,14 @@ jobs:
       # still run on every push and its result is still reported, loudly, by
       # the step below; only the blocking is dropped. The install step above
       # keeps failing hard on purpose: a scan that could not run is a broken
-      # CI, not a security finding. (The other shape of this is a scheduled
-      # job that opens an issue; it costs a `schedule:` trigger and a token,
-      # and can replace this once someone wants the notification.)
+      # CI, not a security finding.
+      #
+      # The notification this path deliberately does not provide now lives in
+      # `advisories-scheduled.yml`: once a week the same scan runs on its own
+      # trigger and turns a vulnerability into a deduped GitHub issue (#134).
+      # It does not replace this step and is not allowed to — a weekly job
+      # cannot tell you which push introduced the dependency, and this one
+      # reports on every push. They are the fast signal and the durable one.
       - name: Dependency advisories
         id: audit
         timeout-minutes: 5

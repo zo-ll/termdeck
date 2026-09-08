@@ -1,0 +1,239 @@
+name: Scheduled advisories
+
+# The push-time `advisories` job in `ci.yml` is deliberately annotation-only: a
+# third party publishes an advisory at a time nobody here chooses, and reddening
+# every push until it is dealt with blocks work that has nothing to do with it.
+# The cost of that choice is that a real vulnerability only ever exists as a
+# warning on a run somebody has to go and look at. This workflow is the other
+# half — the notification the comment in `ci.yml` describes: once a week the scan
+# runs on its own, and a finding becomes a GitHub issue that outlives the run.
+#
+# It is a separate file rather than a job in `ci.yml` on purpose. A `schedule:`
+# trigger added there would fire the whole gate weekly, and the `issues: write`
+# token this needs would then be declared next to the job that builds and runs
+# the test suite. Here the permission is scoped to the one job that uses it.
+on:
+  schedule:
+    # Mondays, 07:23 UTC. Off the hour deliberately: GitHub queues scheduled
+    # workflows and drops the ones it cannot service, and the top of the hour is
+    # where every cron in the world piles up.
+    - cron: "23 7 * * 1"
+  # A scheduled workflow only ever runs from the default branch, so this file
+  # proves nothing until it is merged. `workflow_dispatch` is how it gets
+  # exercised on demand — before and after that merge — without waiting a week.
+  workflow_dispatch:
+
+# The whole workflow is one job, and this is everything it is allowed to do:
+# read the tree it scans, and write the issue it reports into. No `contents:
+# write`, no PR scope, no packages.
+permissions:
+  contents: read
+  issues: write
+
+# A dispatch fired while the weekly run is in flight would race it into opening
+# two issues. Serialise instead; nothing here is urgent enough to run twice.
+concurrency:
+  group: scheduled-advisories
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The dedupe key. It lives in the issue *body*, not the title, so that
+      # renaming the issue — which a human triaging it is entitled to do —
+      # does not make the next run open a second one.
+      MARKER: "<!-- termdeck-advisory-bot -->"
+      ISSUE_TITLE: "Dependency advisories: `cargo audit` findings"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same pinning discipline as `ci.yml`: `rust-toolchain.toml` is the only
+      # place a version is written, and a scan built against some other
+      # compiler is a scan of something this repository does not ship.
+      - name: Install the pinned toolchain
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          test -n "$channel"
+          rustup toolchain install "$channel" --profile minimal
+          rustup default "$channel"
+          rustc --version
+
+      - name: Install cargo-audit
+        timeout-minutes: 10
+        run: cargo install cargo-audit --locked
+
+      # `cargo audit` exits non-zero both when it finds a vulnerability and when
+      # it cannot run at all, so the exit code alone cannot tell "your lockfile
+      # is vulnerable" from "the advisory database would not fetch". Only the
+      # first of those is worth an issue; the second is broken CI and has to red
+      # the job. So the verdict is taken from `--json`: a report that parses is
+      # a scan that ran, and `.vulnerabilities` is then the answer. A run that
+      # produces no parseable report fails here, before any issue is written.
+      #
+      # The human table is captured too, from a second `--no-fetch` pass against
+      # the database the first pass already downloaded — same data, seconds, and
+      # it is what a reader actually wants pasted into the issue.
+      - name: Dependency advisories
+        id: audit
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          cargo audit --json > audit.json 2> audit.stderr || true
+          if ! jq -e 'has("vulnerabilities")' audit.json > /dev/null 2>&1; then
+            echo "::error::cargo audit produced no usable report — the scan did not run"
+            cat audit.stderr >&2 || true
+            exit 1
+          fi
+          cargo audit --no-fetch --color never > audit.txt 2>&1 || true
+
+          # Vulnerabilities open the issue; warnings do not. That is the same
+          # threshold the push-time step already uses (default severity: an
+          # advisory fails, an unmaintained or yanked crate does not), and
+          # keeping the two identical means one flip to `--deny warnings` moves
+          # both. `serde_yaml 0.9.34+deprecated` is the live case: it is a real
+          # warning, it already has an owner in #130, and re-filing it as a bot
+          # issue would be noise, not notification. Warnings are still listed in
+          # the body whenever an issue exists for another reason.
+          count="$(jq -r '.vulnerabilities.count // 0' audit.json)"
+          ids="$(jq -r '[.vulnerabilities.list[]?.advisory.id] | sort | unique | join(" ")' audit.json)"
+          warn="$(jq -r '[(.warnings // {}) | to_entries[] | .value[]?] | length' audit.json)"
+          echo "count=$count"    >> "$GITHUB_OUTPUT"
+          echo "ids=$ids"        >> "$GITHUB_OUTPUT"
+          echo "warnings=$warn"  >> "$GITHUB_OUTPUT"
+          echo "vulnerable=$( [ "$count" -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "cargo audit: $count vulnerabilities, $warn warnings"
+          cat audit.txt
+
+      # Rendered from `audit.json` so the issue says exactly what the scan said,
+      # and carrying the raw table underneath it. The second marker line is the
+      # one the next run diffs against: it is how "the same finding, still open"
+      # is told apart from "a new advisory landed on top of it", which is the
+      # difference between silently refreshing the issue and pinging everyone
+      # watching it.
+      - name: Render the issue body
+        if: steps.audit.outputs.vulnerable == 'true'
+        # Step outputs reach the shell as environment variables, never as `${{ }}`
+        # spliced into the script. An advisory id is a string this repository gets
+        # from a third-party database; templating one straight into `run:` is how
+        # that database would get to run commands here.
+        env:
+          COUNT: ${{ steps.audit.outputs.count }}
+          IDS: ${{ steps.audit.outputs.ids }}
+          WARNINGS: ${{ steps.audit.outputs.warnings }}
+        run: |
+          set -euo pipefail
+          {
+            echo "$MARKER"
+            echo "<!-- advisories: ${IDS} -->"
+            echo
+            echo "\`cargo audit\` found **${COUNT}** vulnerability advisories against the committed \`Cargo.lock\`."
+            echo
+            echo "Last confirmed: $(date -u '+%Y-%m-%d %H:%M UTC') by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+            echo
+            echo "## Vulnerabilities"
+            echo
+            jq -r '
+              .vulnerabilities.list[]?
+              | "### \(.advisory.id) — `\(.package.name) \(.package.version)`",
+                "",
+                (.advisory.title // "(no title)"),
+                "",
+                "- Patched: " + (if ((.versions.patched // []) | length) > 0
+                                 then (.versions.patched | join(", "))
+                                 else "**no patched release**" end),
+                "- https://rustsec.org/advisories/\(.advisory.id)",
+                ""
+            ' audit.json
+            if [ "${WARNINGS}" -gt 0 ]; then
+              echo "## Warnings"
+              echo
+              echo "These do not open an issue on their own (see the workflow comment); they are listed because this one is open anyway."
+              echo
+              jq -r '
+                (.warnings // {}) | to_entries[] | .key as $kind | .value[]?
+                | "- **\($kind)** `\(.package.name) \(.package.version)`"
+                  + (if .advisory then " — \(.advisory.title) (\(.advisory.id))" else "" end)
+              ' audit.json
+              echo
+            fi
+            echo "<details><summary><code>cargo audit</code> output</summary>"
+            echo
+            echo '```'
+            cat audit.txt
+            echo '```'
+            echo
+            echo "</details>"
+            echo
+            echo "---"
+            echo
+            echo "Filed by \`.github/workflows/advisories-scheduled.yml\`. The body is rewritten on every"
+            echo "weekly run, so it always reflects the latest scan; edit the title or comment freely, but"
+            echo "leave the marker at the top or the next run will open a duplicate. Closing the issue is"
+            echo "fine — a run that still finds something will open a fresh one."
+          } > body.md
+          cat body.md >> "$GITHUB_STEP_SUMMARY"
+
+      # One open issue at a time, found by marker rather than by title, and
+      # listed rather than searched: the search index is eventually consistent
+      # and a stale miss here is a duplicate issue, which is the one failure
+      # this step exists to prevent. `gh issue list` reads the issues directly.
+      #
+      # Three outcomes, and the noisy one is deliberately the rare one: a new
+      # finding opens an issue, a changed finding set comments on the existing
+      # one, and a finding that is simply still there rewrites the body in place
+      # so a vulnerability nobody has fixed yet does not mail everybody weekly.
+      - name: Open or refresh the advisory issue
+        if: steps.audit.outputs.vulnerable == 'true'
+        env:
+          COUNT: ${{ steps.audit.outputs.count }}
+          IDS: ${{ steps.audit.outputs.ids }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --state open --limit 200 --json number,body \
+            --jq "map(select(.body != null and (.body | contains(\"$MARKER\")))) | .[0].number // empty")"
+
+          if [ -z "$existing" ]; then
+            url="$(gh issue create --title "$ISSUE_TITLE" --body-file body.md)"
+            echo "::warning::opened $url for ${COUNT} vulnerability advisories"
+            exit 0
+          fi
+
+          # What the issue recorded last time, from its own body. An empty
+          # result — a hand-mangled body, or an issue predating this line —
+          # simply reads as "changed", which errs towards notifying.
+          previous="$(gh issue view "$existing" --json body --jq '.body' \
+            | sed -n 's/^<!-- advisories: \(.*\) -->$/\1/p' | head -1)"
+
+          gh issue edit "$existing" --body-file body.md > /dev/null
+          if [ "$previous" != "${IDS}" ]; then
+            gh issue comment "$existing" --body \
+              "The advisory set changed: \`${previous:-(unrecorded)}\` → \`${IDS}\`. Body updated by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+            echo "::warning::advisory set changed on issue #$existing"
+          else
+            echo "issue #$existing already covers ${IDS} — body refreshed, no comment"
+          fi
+
+      # The other end of the lifecycle. Without this an issue stays open long
+      # after the advisory is patched out, and the next real finding lands as a
+      # comment on a stale one instead of arriving as news. The close says why,
+      # and reopening is a click.
+      - name: Close the advisory issue when the scan is clean
+        if: steps.audit.outputs.vulnerable == 'false'
+        env:
+          WARNINGS: ${{ steps.audit.outputs.warnings }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --state open --limit 200 --json number,body \
+            --jq "map(select(.body != null and (.body | contains(\"$MARKER\")))) | .[0].number // empty")"
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --comment \
+              "\`cargo audit\` is clean as of $(date -u '+%Y-%m-%d %H:%M UTC') ([run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})). Closing; a future finding opens a fresh issue."
+            echo "closed #$existing — no vulnerability advisories"
+          else
+            echo "no vulnerability advisories, no open advisory issue — nothing to do"
+          fi
+          echo "\`cargo audit\`: no vulnerability advisories (${WARNINGS} warnings)." >> "$GITHUB_STEP_SUMMARY"
