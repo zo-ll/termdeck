@@ -296,6 +296,7 @@ pub fn discover(root: &Path) -> Result<Vec<Project>, CliError> {
         }
     }
     projects.extend(repositories(root, "")?);
+    allocate_terminal_identities(&mut projects);
     Ok(projects)
 }
 
@@ -334,6 +335,30 @@ fn repositories(root: &Path, prefix: &str) -> Result<Vec<Project>, CliError> {
         .filter(|path| path.is_dir() && is_repository(path))
         .map(|path| project(&path, prefix))
         .collect())
+}
+
+/// Assigns the engine-facing terminal identities after every discovery pass
+/// has contributed its projects. This deliberately follows the picker and
+/// runtime-add convention: keep the base name when available, otherwise use
+/// the first unused `-2`, `-3`, ... suffix in discovery order.
+fn allocate_terminal_identities(projects: &mut [Project]) {
+    let mut taken = Vec::with_capacity(projects.len());
+    for project in projects {
+        let base = project.terminal.to_string();
+        let identity = unique_discovered_identity(&taken, &base);
+        taken.push(identity.clone());
+        project.terminal = TerminalId::new(identity);
+    }
+}
+
+fn unique_discovered_identity(taken: &[String], base: &str) -> String {
+    if !taken.iter().any(|identity| identity == base) {
+        return base.to_owned();
+    }
+    (2..)
+        .map(|instance| format!("{base}-{instance}"))
+        .find(|candidate| !taken.iter().any(|identity| identity == candidate))
+        .expect("an unused discovery suffix exists")
 }
 
 fn is_repository(path: &Path) -> bool {
@@ -447,6 +472,7 @@ mod tests {
         CliCommand, CliEnvironment, CliHelp, CliIntent, discover, discover_workspace, help,
         parse_with_environment, run,
     };
+    use crate::{contracts::ScreenSize, engine::NativeEngine};
 
     fn environment() -> CliEnvironment {
         CliEnvironment {
@@ -839,6 +865,68 @@ mod tests {
                 .all(|project| project.command == ["bash", "-l"])
         );
         assert!(projects.iter().all(|project| project.shell_hook));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovery_disambiguates_grouped_and_direct_terminal_identities() {
+        let root = test_root();
+        repository(&root.join("frontends/web"));
+        repository(&root.join("backends/api"));
+        repository(&root.join("apps/mobile"));
+        repository(&root.join("fe-web"));
+        repository(&root.join("fe-web-2"));
+        repository(&root.join("fe-web-3"));
+        repository(&root.join("be-api"));
+        repository(&root.join("app-mobile"));
+
+        let workspace = discover_workspace(root.clone()).unwrap();
+        let identities = workspace
+            .projects
+            .iter()
+            .map(|project| project.terminal.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            identities,
+            [
+                "fe-web",
+                "be-api",
+                "app-mobile",
+                "app-mobile-2",
+                "be-api-2",
+                "fe-web-2",
+                "fe-web-2-2",
+                "fe-web-3",
+            ],
+            "grouped names keep their prefixes and every later collision gains the first free suffix"
+        );
+
+        let repeated = discover_workspace(root.clone()).unwrap();
+        assert_eq!(
+            repeated
+                .projects
+                .iter()
+                .map(|project| (&project.path, project.terminal.to_string()))
+                .collect::<Vec<_>>(),
+            workspace
+                .projects
+                .iter()
+                .map(|project| (&project.path, project.terminal.to_string()))
+                .collect::<Vec<_>>(),
+            "directory enumeration cannot affect identity allocation"
+        );
+
+        // The actual engine rejects duplicate identities before starting any
+        // terminals. Use short-lived commands to prove this discovered
+        // workspace passes that boundary without making the test interactive.
+        let mut spawnable = workspace.projects.clone();
+        for project in &mut spawnable {
+            project.command = vec!["sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()];
+            project.shell_hook = false;
+        }
+        NativeEngine::spawn(&spawnable, ScreenSize::new(80, 24))
+            .expect("a discovered workspace must satisfy the engine identity invariant");
+
         fs::remove_dir_all(root).unwrap();
     }
 }
