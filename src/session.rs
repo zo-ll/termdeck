@@ -1,7 +1,7 @@
 //! The interactive composition root: terminal mode, event loop, UI, and PTYs.
 
 mod backend;
-mod input;
+pub mod input;
 mod lifecycle;
 mod outer;
 pub mod snapshot;
