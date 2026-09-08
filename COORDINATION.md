@@ -1738,6 +1738,15 @@ inbox empty. Open set: #111 #112 #113 #114 #115 #94 #33.
   #154 is CLI lane → codex queue; claude next UI slice TBD / may idle).
   AUDIT status: #143 ✓ #134 ✓ #139 ✓; #153 at critic; remaining P1 #142 #141;
   P2s #153 #154 #145 #146 #147.
+- 2026-09-08: #153 MERGED + CLOSED (no-ff d5a70ce; critic PASS no nits:
+  origins-mapped match offsets plus guarded renderer slice; all 4 new tests
+  proven to fail pre-fix incl. exact repro panic; gate 444+5+1). Split from
+  #144 (finding 6, P2) — closed. Worktree+branch pruned.
+  Remaining audit queue is ALL engine/CLI → codex lane: P1 #142 (in flight)
+  then #141; P2s #154 #145 #146 #147. Claude UI lane idle (no remaining UI
+  slices). IN FLIGHT: codex → #142; critic idle.
+  AUDIT status: ✓ #143 #134 #139 #153; remaining P1 #142 #141; P2 #154 #145
+  #146 #147.
 
 ## EOD 2026-09-04 (pre-close snapshot)
 - main 75deb3d · 320 lib + 4 integration · binary current ~/.local/bin/termdeck
