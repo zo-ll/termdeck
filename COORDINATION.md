@@ -68,6 +68,14 @@ events in order; only the top dashboard describes current status.
   fidelity). Deliverable
   /tmp/shipwright/termdeck/complement/termdeck-complement-research.md.
   Codex Working (loaded .codex/skills/researcher).
+- 2026-09-08: THREE NEW RESEARCH-FIRST TOPICS queued (user) — performance/
+  battery+resource management, Lua scripting, theming. Studies written at
+  /tmp/shipwright/termdeck/{performance,lua-scripting,theming}/study.md,
+  deliverables matching -research.md. RESEARCH QUEUE on the codex
+  gpt-6-astra researcher (sequential): 1) complement-research (in flight) →
+  2) performance-research → 3) lua-scripting-research → 4) theming-research.
+  Dequeue as the lane frees; each: deliverable + marker + ping, then route
+  the brief to the user.
 - 2026-09-08: USER SCOPE DECISION — add BOTH termctl verbs, FULL
   functionality (not the cut MVP). Surface: `termdeck attach <ws>`/
   `sessions` = launch-time resume; `termctl save [name]` = runtime checkpoint
